@@ -1,0 +1,336 @@
+# 智题库 (TiKu) 接口契约测试文档 (API Contract Specification)
+
+## 1. 契约规范与通用约定
+
+### 1.1 前缀与鉴权
+- **C端接口前缀**：`/api/v1`
+- **B端管理接口前缀**：`/api/v1/admin`
+- **鉴权 Header**：`Authorization: Bearer <jwt_token>`
+  - C端 Token 本地存储 Key：`tiku_toc_token`
+  - B端 Token 本地存储 Key：`tiku_tob_token`
+- **Token 有效期与安全机制**：
+  - JWT Token 有效期统一设为 **7 天 (7 * 24h)**。
+  - 交卷接口支持 5 分钟过期宽限期验证，确保考试中途不会因为 Token 超时导致作答数据丢失。
+
+### 1.2 多账号并发与抢提交机制 (Race-Condition Policy)
+- **多端同时登录**：采用无状态 JWT，允许同一账号多设备/浏览器并发作答，不互相强制下线。
+- **抢先提交原则 (First-Submit-Wins)**：
+  - 每次开始考试生成唯一 `record_id`。
+  - 提交答卷 API 执行数据库原子更新与悲观锁：若记录状态已变为 `submitted` 或 `timeout`，后续提交统一返回 `400 Bad Request`，拒收后续重复提交，确保成绩以最早提交者为准。
+
+### 1.3 统一响应格式与标准分页结构
+- **普通响应结构**：
+  ```json
+  { "code": 200, "message": "success", "data": {} }
+  ```
+- **标准分页响应结构 (Pagination)**：
+  ```json
+  {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "total": 45,
+      "page": 1,
+      "size": 10,
+      "total_pages": 5,
+      "has_next": true,
+      "items": []
+    }
+  }
+  ```
+
+---
+
+## 2. C 端 API 契约 Specification
+
+### 2.1 认证模块 (Auth)
+#### POST `/api/v1/auth/register` — 用户注册
+- **Request Body**:
+  ```json
+  { "username": "student01", "password": "password123" }
+  ```
+- **Response 201**:
+  ```json
+  { "code": 201, "message": "注册成功", "data": { "id": 1, "username": "student01" } }
+  ```
+
+#### POST `/api/v1/auth/login` — 用户登录
+- **Request Body**:
+  ```json
+  { "username": "student01", "password": "password123" }
+  ```
+- **Response 200**:
+  ```json
+  {
+    "code": 200,
+    "message": "登录成功",
+    "data": { "token": "eyJhbGciOi...", "user": { "id": 1, "username": "student01" } }
+  }
+  ```
+
+---
+
+### 2.2 分类与试卷模块 (Categories & Exams)
+#### GET `/api/v1/categories` — 试卷分类列表
+- **Response 200**:
+  ```json
+  {
+    "code": 200,
+    "data": [
+      { "id": 1, "name": "消防安全", "icon": "fire", "sort_order": 1 }
+    ]
+  }
+  ```
+
+#### GET `/api/v1/exams` — 试卷列表 (标准分页)
+- **Query Params**: `category_id` (int, optional), `is_recommended` (bool, optional), `page` (int, default=1), `size` (int, default=10)
+- **Response 200**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "total": 45,
+      "page": 1,
+      "size": 10,
+      "total_pages": 5,
+      "has_next": true,
+      "items": [
+        {
+          "id": 101,
+          "title": "全国消防日科普知识测评 (2026版)",
+          "cover_image": "/uploads/exam_cover_1.jpg",
+          "category_name": "消防安全",
+          "is_timed": true,
+          "time_limit": 15,
+          "question_count": 20,
+          "total_score": 100
+        }
+      ]
+    }
+  }
+  ```
+
+#### GET `/api/v1/exams/{id}` — 试卷详情
+- **Response 200**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "id": 101,
+      "title": "全国消防日科普知识测评 (2026版)",
+      "description": "包含 20 道权威消防安全题目",
+      "cover_image": "/uploads/exam_cover_1.jpg",
+      "is_timed": true,
+      "time_limit": 15,
+      "total_score": 100,
+      "questions": [
+        {
+          "id": 1001,
+          "type": "single",
+          "title": "根据《中华人民共和国消防法》，我国消防工作的方针是？",
+          "options": [
+            { "key": "A", "text": "安全第一，预防为主" },
+            { "key": "B", "text": "预防为主，防消结合" }
+          ],
+          "score": 5
+        }
+      ]
+    }
+  }
+  ```
+
+---
+
+### 2.3 答题流程与提交评分 (Quiz & Submit)
+
+#### POST `/api/v1/records/start` — 开始考试 (含被动超时清理)
+- **Request Body**: `{ "exam_id": 101 }`
+- **说明**：请求时后端会自动校验该用户该试卷未完成的记录。若存在已被超期的 `in_progress` 记录，将其自动触发结算置为 `timeout` 状态，避免幽灵记录积压。
+- **状态隔离**：仅 `status='published'` 可开考，draft/archived 直接 `404`（“试卷不存在或已被下架”）。
+- **Response 200**:
+  ```json
+  {
+    "code": 200,
+    "data": { "record_id": 8801, "start_time": "2026-09-03T17:15:00Z" }
+  }
+  ```
+
+#### POST `/api/v1/records/submit` — 提交答卷 (抢先提交机制，实际落地接口)
+- **说明**：以 `record_id + user_answers + time_spent` 为 Body；零作答直接 `400`（防误入产生 0 分幽灵记录）；`in_progress` 才能结算，否则 `400`（悲观锁 First-Submit-Wins）。
+- **Response 400 (空卷)**：`{ "detail": "您尚未作答任何题目，无需交卷" }`
+
+#### PUT `/api/v1/records/{record_id}/submit` — 提交答卷 (抢先提交机制，历史契约名，实际以后者为准)
+- **Headers**: `Authorization: Bearer <token>`
+- **Request Body**:
+  ```json
+  {
+    "time_spent": 252,
+    "answers": [
+      { "question_id": 1001, "answer": "B", "time_spent": 12 },
+      { "question_id": 1002, "answer": ["A", "B"], "time_spent": 25 }
+    ]
+  }
+  ```
+- **Response 200 (首次成功提交)**:
+  ```json
+  {
+    "code": 200,
+    "message": "交卷成功",
+    "data": {
+      "record_id": 8801,
+      "total_score": 85,
+      "correct_count": 17,
+      "total_count": 20,
+      "time_spent": 252
+    }
+  }
+  ```
+- **Response 400 (已被并发账号抢先提交处理)**:
+  ```json
+  {
+    "code": 400,
+    "message": "该试卷答题记录已被提交结算或已超时，请勿重复提交！"
+  }
+  ```
+
+#### GET `/api/v1/records/{record_id}/analysis` — 考试分析报告
+- **Response 200**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "record_id": 8801,
+      "exam_title": "全国消防日科普知识测评 (2026版)",
+      "total_score": 85,
+      "pass_score": 60,
+      "is_passed": true,
+      "time_spent": 252,
+      "avg_time_per_question": 12.6,
+      "details": [
+        {
+          "question_id": 1001,
+          "title": "我国消防工作的方针是？",
+          "user_answer": "A",
+          "correct_answer": "B",
+          "is_correct": false,
+          "explanation": "《消防法》第二条规定，消防工作贯彻“预防为主，防消结合”的方针。"
+        }
+      ]
+    }
+  }
+  ```
+
+---
+
+### 2.4 个人中心与历史记录 (Profile & Records)
+#### GET `/api/v1/users/me/stats` — 获取个人作答统计
+- **Headers**: `Authorization: Bearer <token>`
+- **Response 200**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "total_exams_taken": 12,
+      "passed_count": 10,
+      "pass_rate": 83.3,
+      "favorite_count": 8,
+      "history_count": 12
+    }
+  }
+  ```
+
+#### GET `/api/v1/records/history` — 获取个人历史答题记录列表
+- **Headers**: `Authorization: Bearer <token>`
+- **Response 200**:
+  ```json
+  {
+    "code": 200,
+    "data": [
+      {
+        "record_id": 8801,
+        "exam_title": "全国消防日科普知识测评",
+        "score": 85,
+        "pass_score": 60,
+        "is_passed": true,
+        "time_spent": 252,
+        "created_at": "2026-09-03T17:15:00Z"
+      }
+    ]
+  }
+  ```
+
+---
+
+## 3. B 端 API 契约 Specification (Admin)
+
+### 3.1 试卷与题目分类管理 (Categories)
+- `GET /api/v1/admin/categories` — 查询分类列表（Query: `target_type`: 'question' | 'exam'；排序 `sort_order,id` 双字段，前端“第一项”与后端默认值以此为准）
+- `POST /api/v1/admin/categories` — 创建分类（Body: `name`, `icon`, `sort_order`, `target_type`）
+- `DELETE /api/v1/admin/categories/{id}` — 删除分类；被题目/试卷引用时 `400`（“该分类正被N道题目/M张试卷使用，不可删除”）
+
+### 3.2 题海管理 (Question Pool)
+- `GET /api/v1/admin/questions` — 题海标准分页列表（Query: `page`, `size`, `type`, `category_id`, `keyword`）
+
+### 3.3 试卷管理与考情看板 (Exam Management & Stats)
+- `PUT /api/v1/admin/exams/{id}/status` — 试卷上下架状态切换（Body: `{ "status": "published" | "draft" }`）
+- `GET /api/v1/admin/exams/{id}/stats` — 已上架试卷考情看板统计与用户作答列表
+  - **Response 200**:
+    ```json
+    {
+      "code": 200,
+      "data": {
+        "exam_id": 101,
+        "title": "消防安全测评",
+        "total_participants": 42,
+        "avg_score": 78.5,
+        "pass_rate": 85.7,
+        "user_records": [
+          { "username": "student01", "score": 90, "is_passed": true, "submit_time": "2026-09-03 20:10:00" }
+        ]
+      }
+    }
+    ```
+
+- `POST /api/v1/admin/questions` — 新建题目（`category_id` 为空时服务端默认第一条题目分类）
+  - **Request Body**:
+    ```json
+    {
+      "category_id": 1,
+      "type": "single",
+      "title": "消防安全常识题",
+      "options": [{ "key": "A", "text": "选项1" }, { "key": "B", "text": "选项2" }],
+      "answer": ["A"],
+      "explanation": "解析内容",
+      "difficulty": "medium",
+      "score": 10
+    }
+    ```
+- `PUT /api/v1/admin/questions/{id}` — 编辑题目（已上架卷引用题目的内容编辑暂不锁定，已知历史口径漂移风险，见 progress §7.5）
+- `DELETE /api/v1/admin/questions/{id}` — 删除题目；被 published/archived 卷引用时 `400`（报卷名）；仅被 draft 卷引用时联动移除并重算总分及格线
+- `POST /api/v1/admin/questions/import` — Excel 批量导入题目（按表头匹配列：题型, 题干, 选项A-D, 答案, 解析, 难度, 分数, **分类**；分类按名匹配、不存则新建、空则取第一项；`short/fill` 预留题型跳过计数）
+  - **Response 200**: `{ "code": 200, "data": { "imported_count": N, "skipped_count": M } }`
+  - 模板：`D:\project\tiku\sample_questions.xlsx`（数据表第一顺位 + “导入说明”工作表）
+
+### 3.3 试卷管理 (Exam Management)
+- `GET /api/v1/admin/exams` — 试卷标准分页列表
+- `POST /api/v1/admin/exams` — 创建试卷
+  - **Request Body**:
+    ```json
+    {
+      "category_id": 1,
+      "title": "2026 消防安全与自救知识全能测评",
+      "description": "描述说明",
+      "cover_image": "/uploads/exam_cover_1.jpg",
+      "is_timed": true,
+      "time_limit": 15,
+      "pass_percent": 60,
+      "is_recommended": true,
+      "question_ids": [101, 102, 103]
+    }
+    ```
+- `GET /api/v1/admin/exams/{id}` — B端试卷详情（含草稿/归档，不受 published 隔离；响应带 `category_name` 快照）
+- `PUT /api/v1/admin/exams/{id}` — 编辑试卷与题目关联（archived 终态冻结一切编辑，400；published 锁题目变更；终态 published 自动刷新分类快照）
+- `PUT /api/v1/admin/exams/{id}/status?status=` — 状态机：`draft→published`（需有效分类并写快照，否则400）、`published→archived`（归档冻结）、`archived→*` 一律 400
+- `DELETE /api/v1/admin/exams/{id}` — 仅 draft 零作答可删；有 submitted/timeout 作答、published、archived 一律 `400`（draft 删时顺带清理 in_progress 幽灵记录）
+- `ExamResponse` 新增 `category_name`（上架快照，分类改名/删除后展示不变）
+

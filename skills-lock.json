@@ -1,0 +1,269 @@
+{
+  "version": 1,
+  "skills": {
+    "banner-design": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/banner-design/SKILL.md",
+      "computedHash": "0645bfc33632c7b332e649e35738ea807e1571436289cdaf86bebe6660c693ec"
+    },
+    "brainstorming": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/brainstorming/SKILL.md",
+      "computedHash": "0eb8e9ba100985eb4da20c46807268cafd72ec1c4ea58132edf9be6c469867fe"
+    },
+    "brand": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/brand/SKILL.md",
+      "computedHash": "0e773774d46ecea78eff2b36f574e41830417fcc618181215611f336930deac2"
+    },
+    "component-refactoring": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/component-refactoring/SKILL.md",
+      "computedHash": "0c393c6d9f1c4354d7a8f32ea9c71f63564f1832422d9084f99ded12d457f818"
+    },
+    "design": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/design/SKILL.md",
+      "computedHash": "2ae6914754061d0905bf063a2ad04d2441f83e9641b1e9e524126d2ec37df040"
+    },
+    "design-system": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/design-system/SKILL.md",
+      "computedHash": "a94cacd6418d37aeb477dce4bd40d3eccffaa252ea96a63aa3e5aa6fd5eb795e"
+    },
+    "dispatching-parallel-agents": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/dispatching-parallel-agents/SKILL.md",
+      "computedHash": "b011107f17188e0b2898bb1856b5bac8b49537cc86e737c82126558a235bd62a"
+    },
+    "e2e-tester": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/e2e-tester/SKILL.md",
+      "computedHash": "c56e2e0916157e21fa83efbbf01577ff76c11400fa4a852f8e95b81b1299677f"
+    },
+    "executing-plans": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/executing-plans/SKILL.md",
+      "computedHash": "78a07800ee99a5861ae10be59d79fad085fdca10444e8aaeb2691597e357cff8"
+    },
+    "finishing-a-development-branch": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/finishing-a-development-branch/SKILL.md",
+      "computedHash": "4f571e7befb8b0946d9d7770232c818812412e9ab1dfb811f847edfba1fc6275"
+    },
+    "fleet-auditor": {
+      "source": "alexgreensh/token-optimizer",
+      "sourceType": "github",
+      "skillPath": "skills/fleet-auditor/SKILL.md",
+      "computedHash": "2e4ed0b1727081457b6c7b5e534dc7541b534fb0561886cb6700dd244b2bf833"
+    },
+    "frontend-code-review": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/frontend-code-review/SKILL.md",
+      "computedHash": "45d8f671ee21d663ffe612441aa0006ae45e9a4c269a8f9ffe377a04ce206938"
+    },
+    "frontend-testing": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/frontend-testing/SKILL.md",
+      "computedHash": "2968562da9a567752c56a5b4dcae9d8799b56eb432dd908cef057560e3e88bec"
+    },
+    "mysql": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/mysql/SKILL.md",
+      "computedHash": "342b22f96883af44aa595b868c222c1ad323b3aef8d8b1001e8924b08670903e"
+    },
+    "pi-planning-with-files": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": ".pi/skills/planning-with-files/SKILL.md",
+      "computedHash": "9826f7b875ca3b0da3abcae18c90669200631d0159072b0a30191d432700a81c"
+    },
+    "planning-with-files": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/planning-with-files/SKILL.md",
+      "computedHash": "1691cb0d0680492f417ab9b6c1894c256a478d9946d09149276a5608d14f7df7"
+    },
+    "planning-with-files-ar": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/i18n/planning-with-files-ar/SKILL.md",
+      "computedHash": "725d02e33804da2ef20162a0283d8ac7694718039712544df2204f343c995ec0"
+    },
+    "planning-with-files-de": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/i18n/planning-with-files-de/SKILL.md",
+      "computedHash": "8a69d1f469196aa60174f629c588d3f18142cb5facfa71b7234584bf378a5a98"
+    },
+    "planning-with-files-es": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/i18n/planning-with-files-es/SKILL.md",
+      "computedHash": "d1239e8e65cdd2ab0cf29cd0a5b750afe64487ddc3a63afd5c469b7667faa014"
+    },
+    "planning-with-files-zh": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/i18n/planning-with-files-zh/SKILL.md",
+      "computedHash": "3d6a5212e3e200a03ba98a883e60878e3cd03a4daa7475b17737554124cc1f16"
+    },
+    "planning-with-files-zht": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/i18n/planning-with-files-zht/SKILL.md",
+      "computedHash": "bd3c6f68f8047596b20316262b8ccb90fad9206aa1aec9445e38709a59ad18d0"
+    },
+    "postgres": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/postgres/SKILL.md",
+      "computedHash": "70754a80b0bccf5a6c6fc332297eaf990dac2b5931d63aab60d16144f7779c2d"
+    },
+    "prd-creator": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/prd-creator/SKILL.md",
+      "computedHash": "7b168f6035f6dfa3be98dab99f15a9bfdaf27c79790066c2c07baf458577e4c0"
+    },
+    "receiving-code-review": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/receiving-code-review/SKILL.md",
+      "computedHash": "59361179fc9225173e0c145ffd9bafbf9fdbf8b43ce3dc308497a0b4f83a6063"
+    },
+    "requesting-code-review": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/requesting-code-review/SKILL.md",
+      "computedHash": "004f340ae65811095d6a9bb0a759c87d0a8085c5e705dbb019b011626293d2e9"
+    },
+    "resume-checkpoint": {
+      "source": "alexgreensh/token-optimizer",
+      "sourceType": "github",
+      "skillPath": "skills/resume-checkpoint/SKILL.md",
+      "computedHash": "81a363a425d481a8d3e7929642ac66ce5de8e8166aa741feaff64cce4b44eef2"
+    },
+    "skill-creator": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/skill-creator/SKILL.md",
+      "computedHash": "a824219f5ab82daf1812ef71682282c39e0758edf8f4f9ea6b40ded633cab461"
+    },
+    "slides": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/slides/SKILL.md",
+      "computedHash": "a2b3559b58afc484548e1eb359e20495d11cf12b90da7c1fbba50efed9a70340"
+    },
+    "subagent-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/subagent-driven-development/SKILL.md",
+      "computedHash": "988e6ae6fa0e6a3ab7cba613662d75e80f193259576f2ede379461bfc40aa7d7"
+    },
+    "systematic-debugging": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/systematic-debugging/SKILL.md",
+      "computedHash": "a2750dfbaed1690da73b120254892c4f926b4576cb82eb16fc877783941fe39b"
+    },
+    "test-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/test-driven-development/SKILL.md",
+      "computedHash": "a4126a9c5f17be3c228aa9e5755898ade283448b86099f56f40852e8c14532be"
+    },
+    "token-coach": {
+      "source": "alexgreensh/token-optimizer",
+      "sourceType": "github",
+      "skillPath": "skills/token-coach/SKILL.md",
+      "computedHash": "ecd4502ebaf8f57de6aba6727330f5defb2f84f36288f176dda47b8acafe8be7"
+    },
+    "token-dashboard": {
+      "source": "alexgreensh/token-optimizer",
+      "sourceType": "github",
+      "skillPath": "skills/token-dashboard/SKILL.md",
+      "computedHash": "2982aac64a0d697df323a99f05d9ebc63cb0da560b8f203f292c41b31ac331d2"
+    },
+    "token-optimizer": {
+      "source": "alexgreensh/token-optimizer",
+      "sourceType": "github",
+      "skillPath": "skills/token-optimizer/SKILL.md",
+      "computedHash": "77555f6031683b0466bb20753229f73cba0c9f9dea685308a6efb23ecca7e718"
+    },
+    "ui-styling": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-styling/SKILL.md",
+      "computedHash": "e10b225db04fdfd893fdda2b9ed893c315f9dee5693494743d57b02066e96a51"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
+      "computedHash": "3fb8d37218e21b29cbc841818bde2e5387d50a09c0decf3bedeb2d4b2f9c3991"
+    },
+    "using-git-worktrees": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/using-git-worktrees/SKILL.md",
+      "computedHash": "48c8a1040e378e0cb7208107294e3afa9067b9370c3f33b49a443eb6b7528b0d"
+    },
+    "using-superpowers": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/using-superpowers/SKILL.md",
+      "computedHash": "c7abe8bdc2099bbe4f245454d32c7563ccd2bb41dcc218b02b461c2acc3c6ae6"
+    },
+    "vercel-react-best-practices": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/vercel-react-best-practices/SKILL.md",
+      "computedHash": "da5dd35a96e0ba9f9789488add4503409abb1ddce919340206e9b10dc6c87c54"
+    },
+    "verification-before-completion": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/verification-before-completion/SKILL.md",
+      "computedHash": "b529822bdac4b197b180fe12225cff86b930b65910435103c10622df7f041651"
+    },
+    "vitest-best-practices": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/vitest-best-practices/SKILL.md",
+      "computedHash": "b0ffda7b905583f22d5cd8b21051dc310a7a48d08711a4b9be0908f3a95fd3b1"
+    },
+    "web-design-guidelines": {
+      "source": "pageai-pro/ralph-loop",
+      "sourceType": "github",
+      "skillPath": ".agent/skills/web-design-guidelines/SKILL.md",
+      "computedHash": "78a53d178bed2090b7133ee1fdccd85bf171f38342e3a5400c935694e0916f35"
+    },
+    "writing-plans": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/writing-plans/SKILL.md",
+      "computedHash": "27c75044e444a4fc68798c3f799dc23eaff3a6bfabff32e6ad75bb20f881c094"
+    },
+    "writing-skills": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/writing-skills/SKILL.md",
+      "computedHash": "5f255b9c0d50d6d7eafa41b245b9308799321c5222bc68b1be2499f50ed82713"
+    }
+  }
+}
