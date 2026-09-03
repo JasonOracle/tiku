@@ -354,7 +354,7 @@ cd d:\project\tiku\tiku\toc && pnpm build
 # 3. MySQL 实库回归（8001 临时服 + 正式模板导入实测）
 cd d:\project\tiku\tiku\backend
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
-# 按本章 7.x 治理矩阵逐项打点；模板用 D:\project\tiku\sample_questions.xlsx 真测导入
+# 按本章 7.x 治理矩阵逐项打点；模板用仓库根 `sample_questions.xlsx` 真测导入
 ```
 
 ---
@@ -386,7 +386,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 ### 7.4 导入与分类默认值
 - 新建单题 / 导入无分类：默认 `(sort_order,id)` 第一条题目分类，前后端一致（分类列表接口已加 `id` 二级排序）。
 - 导入弹窗去掉统一“归入分类”下拉；Excel 按表头“分类”列逐题归入，不存在自动新建，`short/fill` 预留题型跳过计数（`imported_count/skipped_count`）。
-- 模板 `D:\project\tiku\sample_questions.xlsx`：数据表保持第一顺位 + 新增“导入说明”工作表（含 short/fill 预留声明）。
+- 模板 `sample_questions.xlsx`（仓库根目录）：数据表保持第一顺位 + 新增“导入说明”工作表（含 short/fill 预留声明）。
 
 ### 7.5 用户确认过的取舍（勿擅自推翻）
 - 归档可否重上架：**不可**（彻底终态）。

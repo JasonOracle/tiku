@@ -309,7 +309,7 @@
 - `DELETE /api/v1/admin/questions/{id}` — 删除题目；被 published/archived 卷引用时 `400`（报卷名）；仅被 draft 卷引用时联动移除并重算总分及格线
 - `POST /api/v1/admin/questions/import` — Excel 批量导入题目（按表头匹配列：题型, 题干, 选项A-D, 答案, 解析, 难度, 分数, **分类**；分类按名匹配、不存则新建、空则取第一项；`short/fill` 预留题型跳过计数）
   - **Response 200**: `{ "code": 200, "data": { "imported_count": N, "skipped_count": M } }`
-  - 模板：`D:\project\tiku\sample_questions.xlsx`（数据表第一顺位 + “导入说明”工作表）
+  - 模板：`sample_questions.xlsx`（仓库根目录；数据表第一顺位 + “导入说明”工作表）
 
 ### 3.3 试卷管理 (Exam Management)
 - `GET /api/v1/admin/exams` — 试卷标准分页列表
