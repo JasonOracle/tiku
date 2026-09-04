@@ -48,6 +48,13 @@ def auto_patch_db_columns():
             except Exception:
                 pass
 
+            # 补全 exams.is_random
+            try:
+                conn.execute(text("ALTER TABLE exams ADD COLUMN is_random BOOLEAN DEFAULT FALSE"))
+                conn.commit()
+            except Exception:
+                pass
+
             # 补全 questions.score
             try:
                 conn.execute(text("ALTER TABLE questions ADD COLUMN score INT DEFAULT 10"))
@@ -66,6 +73,7 @@ from app.api.v1.banners import router as v1_banners_router
 from app.api.v1.exams import router as v1_exams_router
 from app.api.v1.records import router as v1_records_router
 from app.api.v1.favorites import router as v1_favorites_router
+from app.api.v1.users import router as v1_users_router
 
 # B端路由
 from app.api.admin.banners import router as admin_banners_router
@@ -102,6 +110,7 @@ app.include_router(v1_banners_router, prefix=f"{settings.API_V1_STR}/banners", t
 app.include_router(v1_exams_router, prefix=f"{settings.API_V1_STR}/exams", tags=["C端试卷"])
 app.include_router(v1_records_router, prefix=f"{settings.API_V1_STR}/records", tags=["C端答题与报告"])
 app.include_router(v1_favorites_router, prefix=f"{settings.API_V1_STR}/favorites", tags=["C端收藏"])
+app.include_router(v1_users_router, prefix=f"{settings.API_V1_STR}/users", tags=["C端用户"])
 
 # 挂载 B端 API 路由 (/api/v1/admin/*)
 app.include_router(admin_auth_router, prefix=f"{settings.API_V1_STR}/admin/auth", tags=["B端认证"])

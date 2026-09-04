@@ -1,21 +1,13 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-04
- * AI模型：OpenCode
- * 修改内容：[1. 按 个人中心页.png 还原：大渐变头像/欢迎语/右上退出/双玻璃统计卡/双Cell/浮动TabBar; 2. emoji 换 SVG，去 VIP 徽章]
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 退出登录从右上角移入 cell-group 底部; 2. 删除 logout-btn 样式]
 -->
 <template>
   <div class="profile-container">
     <!-- 顶部用户信息 -->
     <header class="user-header">
-      <button v-if="userStore.token" class="logout-btn" @click="handleLogout">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-          <polyline points="16 17 21 12 16 7"></polyline>
-          <line x1="21" y1="12" x2="9" y2="12"></line>
-        </svg>
-        <span>退出登录</span>
-      </button>
 
       <div class="user-row">
         <div class="avatar-xl">
@@ -78,7 +70,27 @@
         <span class="cell-title">历史答题记录</span>
         <span class="cell-right"><strong>{{ stats.history_count }}</strong> 份答卷 ›</span>
       </div>
+      <div v-if="userStore.token" class="cell-item logout-cell" @click="handleLogout">
+        <span class="cell-icon logout">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+        </span>
+        <span class="cell-title">退出登录</span>
+        <span class="cell-right">›</span>
+      </div>
     </section>
+
+    <AppModal
+      v-model="logoutModalVisible"
+      title="退出登录"
+      message="确定要退出登录吗？退出后作答与收藏记录将需要重新登录。"
+      type="warning"
+      confirmText="退出登录"
+      @confirm="onConfirmLogout"
+    />
 
     <TabBar active="profile" />
   </div>
@@ -90,9 +102,11 @@ import { useRouter } from 'vue-router';
 import { useUserStore } from '../../store/user';
 import http from '../../utils/http';
 import TabBar from '../../components/TabBar.vue';
+import AppModal from '../../components/AppModal.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
+const logoutModalVisible = ref(false);
 
 const stats = ref({
   total_exams_taken: 0,
@@ -106,8 +120,15 @@ const loadStats = async () => {
   if (!userStore.token) return;
   try {
     const res: any = await http.get('/api/v1/users/me/stats');
-    if (res) {
-      stats.value = res;
+    const data = res?.data || res;
+    if (data) {
+      stats.value = {
+        total_exams_taken: data.total_exams_taken || 0,
+        passed_count: data.passed_count || 0,
+        pass_rate: data.pass_rate || 0,
+        favorite_count: data.favorite_count || 0,
+        history_count: data.history_count ?? data.total_exams_taken ?? 0
+      };
     }
   } catch (e) {
     // 忽略未登录错误
@@ -115,8 +136,11 @@ const loadStats = async () => {
 };
 
 const handleLogout = () => {
-  if (!confirm('确定要退出登录吗？')) return;
-  userStore.clearToken();
+  logoutModalVisible.value = true;
+};
+
+const onConfirmLogout = () => {
+  userStore.logout();
   stats.value = { total_exams_taken: 0, passed_count: 0, pass_rate: 0, favorite_count: 0, history_count: 0 };
   router.push('/login');
 };
@@ -139,18 +163,9 @@ onMounted(() => {
 
 .user-header { padding: 16px 20px 0; }
 
-.logout-btn {
-  display: flex;
-  margin-left: auto;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  background: transparent;
-  border: none;
-  color: #64748b;
-  font-size: 12px;
-  cursor: pointer;
-}
+/* 退出登录 cell 样式 */
+.cell-icon.logout { background: #fee2e2; color: #ef4444; }
+.logout-cell .cell-title { color: #ef4444; }
 
 .user-row { display: flex; align-items: center; gap: 18px; margin-top: 6px; }
 

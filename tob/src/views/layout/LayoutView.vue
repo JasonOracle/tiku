@@ -1,8 +1,8 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-03
+ * 修改时间：2026-09-04
  * AI模型：Gemini 底层
- * 修改内容：[1. 实现全局 SaaS 后台导航与毛玻璃 Header 布局框架]
+ * 修改内容：[1. 调整菜单排序：分类配置置于题海管理上方]
 -->
 <template>
   <el-container class="layout-container">
@@ -19,6 +19,10 @@
         text-color="#475569"
         active-text-color="#0284c7"
       >
+        <el-menu-item index="/categories">
+          <el-icon><Folder /></el-icon>
+          <span>分类配置</span>
+        </el-menu-item>
         <el-menu-item index="/questions">
           <el-icon><Document /></el-icon>
           <span>题海管理</span>
@@ -26,10 +30,6 @@
         <el-menu-item index="/exams">
           <el-icon><Reading /></el-icon>
           <span>试卷与组卷</span>
-        </el-menu-item>
-        <el-menu-item index="/categories">
-          <el-icon><Folder /></el-icon>
-          <span>分类配置</span>
         </el-menu-item>
         <el-menu-item index="/users">
           <el-icon><User /></el-icon>

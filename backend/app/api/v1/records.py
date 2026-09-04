@@ -72,6 +72,7 @@ def start_exam(
         )
     )
 
+
 @router.post("/submit", response_model=ResponseModel[ExamReportResponse])
 def submit_exam(
     data: ExamSubmitRequest, 
@@ -97,6 +98,88 @@ def submit_exam(
 
     # 获得报告
     return get_exam_report(record_id=record.id, db=db, current_user=current_user)
+
+
+
+
+
+@router.get("/history", response_model=ResponseModel[PageResponse[ExamReportResponse]])
+def get_exam_history(
+    page: int = Query(1, ge=1),
+    size: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取个人答题历史明细 (标准分页)"""
+    query = db.query(ExamRecord).filter(ExamRecord.user_id == current_user.id, ExamRecord.status == "submitted")
+    total = query.count()
+    total_pages = (total + size - 1) // size if total > 0 else 0
+    has_next = page < total_pages
+
+    records = query.order_by(ExamRecord.id.desc()).offset((page - 1) * size).limit(size).all()
+    
+    items = []
+    for r in records:
+        rep_res = get_exam_report(record_id=r.id, db=db, current_user=current_user)
+        items.append(rep_res.data)
+
+    return ResponseModel(
+        code=200,
+        data=PageResponse(
+            total=total,
+            page=page,
+            size=size,
+            total_pages=total_pages,
+            has_next=has_next,
+            items=items
+        )
+    )
+
+
+@router.get("/{record_id}", response_model=ResponseModel[ExamStartResponse])
+def get_exam_record_detail(
+    record_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取正在进行的答题记录详情及题目列表"""
+    record = db.query(ExamRecord).filter(
+        ExamRecord.id == record_id,
+        ExamRecord.user_id == current_user.id
+    ).first()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="答题记录不存在")
+
+    exam = db.query(Exam).filter(Exam.id == record.exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="关联试卷不存在")
+
+    # 获取题目
+    exam_questions = db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam.id).order_by(ExamQuestion.sort_order).all()
+    questions = []
+    for eq in exam_questions:
+        q = db.query(Question).filter(Question.id == eq.question_id).first()
+        if q:
+            q_res = QuestionResponse.model_validate(q)
+            q_res.answer = []  # 保护标准答案
+            questions.append(q_res)
+
+    return ResponseModel(
+        code=200,
+        data=ExamStartResponse(
+            record_id=record.id,
+            exam_id=exam.id,
+            exam_title=exam.title,
+            is_timed=exam.is_timed,
+            time_limit=exam.time_limit,
+            total_score=exam.total_score,
+            pass_score=exam.pass_score,
+            start_time=record.start_time,
+            questions=questions
+        )
+    )
+
 
 @router.get("/{record_id}/report", response_model=ResponseModel[ExamReportResponse])
 def get_exam_report(
@@ -157,64 +240,6 @@ def get_exam_report(
             start_time=record.start_time,
             submit_time=record.submit_time,
             questions_analysis=questions_analysis
-        )
-    )
-
-@router.get("/users/me/stats", response_model=ResponseModel[dict])
-def get_user_me_stats(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """获取 C 端当前登录用户的仪表盘作答统计 (作答场次、通过率、收藏总数)"""
-    records = db.query(ExamRecord).filter(
-        ExamRecord.user_id == current_user.id,
-        ExamRecord.status == "submitted"
-    ).all()
-
-    total_exams_taken = len(records)
-    passed_count = sum(1 for r in records if r.passed)
-    pass_rate = round((passed_count / total_exams_taken) * 100, 1) if total_exams_taken > 0 else 0.0
-
-    favorite_count = db.query(UserFavorite).filter(UserFavorite.user_id == current_user.id).count()
-
-    return ResponseModel(code=200, data={
-        "total_exams_taken": total_exams_taken,
-        "passed_count": passed_count,
-        "pass_rate": pass_rate,
-        "favorite_count": favorite_count,
-        "history_count": total_exams_taken
-    })
-
-
-@router.get("/history", response_model=ResponseModel[PageResponse[ExamReportResponse]])
-def get_exam_history(
-    page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=100),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """获取个人答题历史明细 (标准分页)"""
-    query = db.query(ExamRecord).filter(ExamRecord.user_id == current_user.id, ExamRecord.status == "submitted")
-    total = query.count()
-    total_pages = (total + size - 1) // size if total > 0 else 0
-    has_next = page < total_pages
-
-    records = query.order_by(ExamRecord.id.desc()).offset((page - 1) * size).limit(size).all()
-    
-    items = []
-    for r in records:
-        rep_res = get_exam_report(record_id=r.id, db=db, current_user=current_user)
-        items.append(rep_res.data)
-
-    return ResponseModel(
-        code=200,
-        data=PageResponse(
-            total=total,
-            page=page,
-            size=size,
-            total_pages=total_pages,
-            has_next=has_next,
-            items=items
         )
     )
 

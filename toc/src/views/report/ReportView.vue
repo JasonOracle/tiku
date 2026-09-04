@@ -1,20 +1,13 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-03
- * AI模型：Gemini 底层
- * 修改内容：[1. 实现 C 端考试分析报告组件 (含 SVG 环形得分圈、答对错统计与错题文字解析)]
+ * 修改时间：2026-09-04
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 替换自定义 header 为统一 NavBar 组件，修复返回跳转至首页的 Bug，改为返回上一页]
 -->
 <template>
   <div class="report-container" v-if="report">
-    <!-- Header 区域 -->
-    <header class="report-header">
-      <button class="home-btn" @click="router.push('/')">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-        </svg>
-      </button>
-      <span class="title">答题报告</span>
-    </header>
+    <!-- Header 区域：使用沉浸式导航栏（向下滚动时动态变白底） -->
+    <NavBar title="答题报告" immersive />
 
     <!-- 得分与合格指示卡片 -->
     <section class="score-card">
@@ -118,6 +111,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import http from '../../utils/http';
+import NavBar from '../../components/NavBar.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -159,41 +153,21 @@ onMounted(async () => {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #eef4ff 0%, #f8fafc 40%);
   padding-bottom: 40px;
-}
-
-.report-header {
-  padding: 16px 20px;
-  background: white;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.home-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: #0284c7;
-}
-
-.title {
-  font-size: 17px;
-  font-weight: 700;
-  color: #0f172a;
+  font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, sans-serif;
 }
 
 .score-card {
-  background: white;
-  margin: 16px 20px;
-  border-radius: 20px;
-  padding: 24px;
+  background: #ffffff;
+  margin: 16px;
+  border-radius: 24px;
+  padding: 24px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 10px 30px -4px rgba(15, 23, 42, 0.05);
 }
 
 .score-circle {
@@ -230,90 +204,98 @@ onMounted(async () => {
   font-size: 13px;
   color: #94a3b8;
   margin-top: 6px;
+  font-weight: 600;
 }
 
 .pass-badge {
-  margin-top: 16px;
-  padding: 8px 20px;
-  border-radius: 16px;
-  font-size: 15px;
+  margin-top: 18px;
+  padding: 7px 20px;
+  border-radius: 20px;
+  font-size: 14px;
   font-weight: 800;
-  background: #fee2e2;
-  color: #ef4444;
+  background: #ffe4e6;
+  color: #e11d48;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.12);
 }
 
 .pass-badge.passed {
-  background: #d1fae5;
-  color: #059669;
+  background: #dcfce7;
+  color: #15803d;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.18);
 }
 
 .stats-grid {
   display: flex;
   gap: 12px;
-  padding: 0 20px;
+  padding: 0 16px;
 }
 
 .stat-box {
   flex: 1;
-  background: white;
-  border-radius: 16px;
-  padding: 14px 8px;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 16px 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.04);
 }
 
 .stat-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
 }
 
-.stat-icon.ok { background: #d1fae5; color: #10b981; }
-.stat-icon.no { background: #fee2e2; color: #ef4444; }
-.stat-icon.time-ic { background: #e0f2fe; color: #0284c7; }
+.stat-icon.ok { background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #166534; }
+.stat-icon.no { background: linear-gradient(135deg, #ffe4e6, #fecdd3); color: #be123c; }
+.stat-icon.time-ic { background: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0369a1; }
 
 .stat-val {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
 }
 
-.stat-val.correct { color: #10b981; }
-.stat-val.wrong { color: #ef4444; }
+.stat-val.correct { color: #15803d; }
+.stat-val.wrong { color: #e11d48; }
 .stat-val.time { color: #0284c7; }
 
 .stat-lbl {
   font-size: 11px;
   color: #64748b;
   margin-top: 4px;
+  font-weight: 600;
 }
 
 .analysis-section {
-  padding: 20px;
+  padding: 20px 16px;
 }
 
 .sec-title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 800;
   color: #0f172a;
   margin: 0 0 14px;
   padding-left: 10px;
-  border-left: 4px solid #10b981;
+  border-left: 4px solid #6366f1;
 }
 
 .analysis-card {
-  background: white;
-  border-radius: 16px;
-  padding: 18px;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 18px 20px;
   margin-bottom: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.04);
 }
 
 .card-head {
@@ -323,66 +305,71 @@ onMounted(async () => {
 }
 
 .q-num {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   color: #0284c7;
+  background: #f0f9ff;
+  padding: 2px 8px;
+  border-radius: 6px;
 }
 
 .status-tag {
   font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
+  font-weight: 800;
+  padding: 2px 9px;
   border-radius: 6px;
-  background: #fee2e2;
-  color: #ef4444;
+  background: #ffe4e6;
+  color: #e11d48;
 }
 
 .status-tag.correct {
-  background: #d1fae5;
-  color: #10b981;
+  background: #dcfce7;
+  color: #15803d;
 }
 
 .q-text {
-  margin: 8px 0 14px;
+  margin: 10px 0 14px;
   font-size: 15px;
-  color: #1e293b;
+  color: #0f172a;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .ans-comparison {
   display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .ans-box {
   flex: 1;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 13px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
-.ans-box .lbl { color: #64748b; flex-shrink: 0; }
-.ans-box .val { font-weight: 800; font-size: 15px; margin-left: auto; }
+.ans-box .lbl { color: #64748b; flex-shrink: 0; font-size: 12px; }
+.ans-box .val { font-weight: 800; font-size: 14px; margin-left: auto; }
 
-.ans-box.user { background: #f1f5f9; color: #475569; }
+.ans-box.user { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
 .ans-box.user .val { color: #334155; }
-.ans-box.user.wrong { background: #fef2f2; }
-.ans-box.user.wrong .val { color: #ef4444; }
-.ans-box.correct { background: #ecfdf5; }
-.ans-box.correct .val { color: #059669; }
+.ans-box.user.wrong { background: #fff1f2; border-color: #fecdd3; }
+.ans-box.user.wrong .val { color: #e11d48; }
+.ans-box.correct { background: #f0fdf4; border: 1px solid #dcfce7; }
+.ans-box.correct .val { color: #15803d; }
 
 .explanation-box {
-  background: linear-gradient(135deg, #eff6ff, #eef2ff);
-  border: 1px solid #dbeafe;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 14px;
   font-size: 13px;
   margin-top: 12px;
 }
 
 .exp-title { font-weight: 800; color: #0284c7; }
-.exp-text { margin: 6px 0 0; color: #475569; line-height: 1.6; }
+.exp-text { margin: 4px 0 0; color: #475569; line-height: 1.55; }
 </style>

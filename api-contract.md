@@ -103,7 +103,8 @@
           "is_timed": true,
           "time_limit": 15,
           "question_count": 20,
-          "total_score": 100
+          "total_score": 100,
+          "is_random": true
         }
       ]
     }
@@ -122,6 +123,7 @@
       "cover_image": "/uploads/exam_cover_1.jpg",
       "is_timed": true,
       "time_limit": 15,
+      "is_random": true,
       "total_score": 100,
       "questions": [
         {
@@ -270,6 +272,7 @@
 
 ### 3.2 题海管理 (Question Pool)
 - `GET /api/v1/admin/questions` — 题海标准分页列表（Query: `page`, `size`, `type`, `category_id`, `keyword`）
+- **注意**：前端新建/导入前必须校验分类列表非空，否则阻断；题目列表中提供批量复选删除（支持多 ID 一并提交）。
 
 ### 3.3 试卷管理与考情看板 (Exam Management & Stats)
 - `PUT /api/v1/admin/exams/{id}/status` — 试卷上下架状态切换（Body: `{ "status": "published" | "draft" }`）
@@ -324,6 +327,7 @@
       "is_timed": true,
       "time_limit": 15,
       "pass_percent": 60,
+      "is_random": true,
       "is_recommended": true,
       "question_ids": [101, 102, 103]
     }
@@ -332,7 +336,7 @@
 - `PUT /api/v1/admin/exams/{id}` — 编辑试卷与题目关联（archived 终态冻结一切编辑，400；published 锁题目变更；终态 published 自动刷新分类快照）
 - `PUT /api/v1/admin/exams/{id}/status?status=` — 状态机：`draft→published`（需有效分类并写快照，否则400）、`published→archived`（归档冻结）、`archived→*` 一律 400
 - `DELETE /api/v1/admin/exams/{id}` — 仅 draft 零作答可删；有 submitted/timeout 作答、published、archived 一律 `400`（draft 删时顺带清理 in_progress 幽灵记录）
-- `ExamResponse` 新增 `category_name`（上架快照，分类改名/删除后展示不变）
+- `ExamResponse` 新增 `category_name`（上架快照，分类改名/删除后展示不变）及 `is_random`（bool, 是否开启 C 端随机题目排列）
 - `Exam.cover_url` 约定 `preset:1..5`（内置 SVG 封面，兼容旧 `/uploads/` 路径）
 - `ExamReportResponse` 新增 `total_score/pass_score`（圆环按真实总分渲染）
 

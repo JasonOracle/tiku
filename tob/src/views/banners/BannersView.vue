@@ -1,4 +1,9 @@
-<!-- B端首页Banner设置：最多启用3张，链接三态，全局轮播秒数 -->
+<!--
+ * [变更日志]
+ * 修改时间：2026-09-04
+ * AI模型：Gemini 底层
+ * 修改内容：[1. 修正 Banner 新建时的 sort_order 默认逻辑为已存在最大排序 + 1]
+-->
 <template>
   <div class="page-card">
     <div class="filter-bar">
@@ -145,7 +150,8 @@ const uploadIfNeeded = async () => {
 
 const openCreate = () => {
   editingId.value = null;
-  Object.assign(form, { image_url: '', link_type: 'none', link_value: '', sort_order: banners.value.length, is_enabled: true });
+  const maxSort = banners.value.reduce((max, item) => Math.max(max, item.sort_order || 0), 0);
+  Object.assign(form, { image_url: '', link_type: 'none', link_value: '', sort_order: maxSort + 1, is_enabled: true });
   previewUrl.value = '';
   pendingFile.value = null;
   dialogVisible.value = true;

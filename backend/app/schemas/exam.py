@@ -23,6 +23,7 @@ class ExamCreate(BaseModel):
     pass_percent: int = Field(60, description="及格百分比 0-100")
     status: Optional[str] = Field("draft", description="状态: draft (待上架), published (已上架)")
     is_recommended: bool = Field(False, description="首页推荐标识")
+    is_random: bool = Field(False, description="是否随机题目顺序")
     question_ids: Optional[List[int]] = Field(default=[], description="包含的题目ID列表")
     questions: Optional[List[ExamQuestionConfig]] = Field(default=[], description="组卷关联题目与分值明细")
 
@@ -35,6 +36,7 @@ class ExamUpdate(BaseModel):
     pass_percent: Optional[int] = None
     status: Optional[str] = None
     is_recommended: Optional[bool] = None
+    is_random: Optional[bool] = None
     question_ids: Optional[List[int]] = None
     questions: Optional[List[ExamQuestionConfig]] = None
 
@@ -59,6 +61,7 @@ class ExamResponse(BaseModel):
     pass_percent: int = 60
     status: str = "draft"
     is_recommended: bool = False
+    is_random: bool = False
     question_count: Optional[int] = 0
     created_at: datetime
 

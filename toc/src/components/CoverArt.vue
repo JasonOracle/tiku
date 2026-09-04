@@ -1,4 +1,9 @@
-<!-- 试卷封面：preset:1..5 渲染内置SVG，其余按图片URL显示 -->
+<!--
+ * [变更日志]
+ * 修改时间：2026-09-04
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 移除额外添加的背景颜色，恢复直接渲染原版矢量 SVG 图片]
+-->
 <template>
   <div class="cover-art" :style="{ width, height }">
     <img v-if="isUrl" :src="cover" alt="封面" />
@@ -21,6 +26,15 @@ const src = computed(() => presetSrc(props.cover));
 </script>
 
 <style scoped>
-.cover-art { overflow: hidden; border-radius: 12px; }
-.cover-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-art {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.cover-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 </style>

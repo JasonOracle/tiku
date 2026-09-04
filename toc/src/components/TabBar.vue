@@ -1,3 +1,9 @@
+/**
+ * [变更日志]
+ * 修改时间：2026-09-04
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 对齐 zbzn 项目 TabBar 毛玻璃规范：使用模糊6px折射、内高光 inset 1px 1px 0 #fff 与渐变透明底色]
+ */
 <!-- C端公共浮动TabBar：首页 / 个人中心 -->
 <template>
   <footer class="tabbar">
@@ -27,20 +33,29 @@ const router = useRouter();
 <style scoped>
 .tabbar {
   position: fixed;
-  bottom: 12px;
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 32px);
   max-width: 448px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 22px;
-  box-shadow: 0 8px 28px rgba(2, 132, 199, 0.12);
+  /* 对齐 zbzn 晶体毛玻璃规范：60% 折射渐变背景 */
+  background: linear-gradient(180deg, rgba(245, 245, 245, 0.65) 0%, rgba(255, 255, 255, 0.65) 100%);
+  /* 核心毛玻璃模糊 + 饱和度 */
+  backdrop-filter: blur(8px) saturate(120%) brightness(100%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%) brightness(100%);
+  border-radius: 60px;
+  /* zbzn 顶级玻璃光影：内高光 + 悬浮阴影 */
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.9),
+    0 -10px 25px 0 rgba(0, 0, 0, 0.06),
+    0 8px 20px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   display: flex;
-  padding: 8px 0 10px;
+  padding: 8px 12px;
   z-index: 100;
+  box-sizing: border-box;
 }
+
 .tab-item {
   flex: 1;
   background: transparent;
@@ -48,11 +63,24 @@ const router = useRouter();
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 3px;
-  color: #94a3b8;
-  font-size: 12px;
+  color: #1a1a1a;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
+  padding: 6px 0;
+  border-radius: 40px;
+  transition: all 0.25s ease;
 }
-.tab-item.active { color: #0284c7; font-weight: 700; }
-.tab-item.active svg { filter: drop-shadow(0 2px 6px rgba(2, 132, 199, 0.4)); }
+
+.tab-item.active {
+  color: #0062ff;
+  font-weight: 700;
+  background: rgba(26, 26, 26, 0.06);
+}
+
+.tab-item.active svg {
+  filter: drop-shadow(0 2px 6px rgba(0, 98, 255, 0.35));
+}
 </style>

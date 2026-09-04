@@ -1,8 +1,8 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-03 23:36:00
+ * 修改时间：2026-09-04
  * AI模型：Gemini 底层
- * 修改内容：[1. 增加题目分类下拉筛选与选择; 2. 增加分值输入(score)与难度选择; 3. 难度改为中文映射显示]
+ * 修改内容：[1. 增加无题目分类时的强引导弹窗拦截; 2. 新建/编辑题目时所属分类设为必选项; 3. 添加 checkbox-group 复选列与批量删除功能]
 -->
 <template>
   <div class="page-card">
@@ -20,17 +20,32 @@
       </div>
 
       <div class="actions">
+        <el-button
+          v-if="selectedQuestionIds.length > 0"
+          type="danger"
+          plain
+          @click="handleBatchDelete"
+        >
+          <el-icon><Delete /></el-icon> 批量删除 ({{ selectedQuestionIds.length }})
+        </el-button>
         <el-button type="primary" class="primary-btn" @click="openCreateDialog">
           <el-icon><Plus /></el-icon> 新建题目
         </el-button>
-        <el-button type="success" plain @click="importDialogVisible = true">
+        <el-button type="success" plain @click="openImportDialog">
           <el-icon><Upload /></el-icon> Excel 导入
         </el-button>
       </div>
     </div>
 
     <!-- 题目数据表格 -->
-    <el-table :data="questions" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
+    <el-table
+      :data="questions"
+      v-loading="loading"
+      stripe
+      style="width: 100%; margin-top: 16px"
+      @selection-change="handleSelectionChange"
+    >
+      <el-table-column type="selection" width="50" />
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="type" label="题型" width="90">
         <template #default="{ row }">
@@ -77,8 +92,8 @@
     <!-- 新建/编辑 Dialog -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
       <el-form :model="form" label-width="90px">
-        <el-form-item label="所属分类">
-          <el-select v-model="form.category_id" placeholder="选择分类" clearable style="width: 100%">
+        <el-form-item label="所属分类" required>
+          <el-select v-model="form.category_id" placeholder="请选择题目分类（必填）" style="width: 100%">
             <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
           </el-select>
         </el-form-item>
@@ -154,15 +169,42 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Upload, Delete, UploadFilled } from '@element-plus/icons-vue';
 import request from '../../utils/request';
 
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 const loading = ref(false);
 const questions = ref<any[]>([]);
 const categories = ref<any[]>([]);
 const filters = reactive({ keyword: '', type: '', category_id: null });
 const pagination = reactive({ page: 1, size: 10, total: 0 });
+const selectedQuestionIds = ref<number[]>([]);
 
 const dialogVisible = ref(false);
 const editingId = ref<number | null>(null);
 const dialogTitle = computed(() => (editingId.value ? '编辑题目' : '新建题目'));
+
+const handleSelectionChange = (val: any[]) => {
+  selectedQuestionIds.value = val.map((item) => item.id);
+};
+
+const checkCategoryPrerequisite = (): boolean => {
+  if (categories.value.length === 0) {
+    ElMessageBox.confirm('当前暂无任何“题目分类”，无法新建或导入题目。请先去新建题目分类。', '无法进行此操作', {
+      confirmButtonText: '去新建题目分类',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }).then(() => {
+      router.push('/categories');
+    }).catch(() => {});
+    return false;
+  }
+  return true;
+};
+
+const openImportDialog = () => {
+  if (!checkCategoryPrerequisite()) return;
+  importDialogVisible.value = true;
+};
 
 const form = reactive({
   type: 'single',
@@ -250,6 +292,7 @@ const removeOption = (idx: number) => {
 };
 
 const openCreateDialog = () => {
+  if (!checkCategoryPrerequisite()) return;
   editingId.value = null;
   form.type = 'single';
   form.title = '';
@@ -276,12 +319,13 @@ const openEditDialog = (row: any) => {
 };
 
 const saveQuestion = async () => {
+  if (!form.category_id) {
+    ElMessage.error('请选择所属分类');
+    return;
+  }
   if (!form.title) {
     ElMessage.error('题干不能为空');
     return;
-  }
-  if (!form.category_id) {
-    form.category_id = firstCategoryId();
   }
   if (editingId.value) {
     await request.put(`/api/v1/admin/questions/${editingId.value}`, form);
@@ -298,6 +342,33 @@ const handleDelete = (id: number) => {
   ElMessageBox.confirm('确定要删除该题目吗？被已上架/已归档试卷引用的题目不可删除。', '提示', { type: 'warning' }).then(async () => {
     await request.delete(`/api/v1/admin/questions/${id}`);
     ElMessage.success('删除成功');
+    loadQuestions();
+  });
+};
+
+const handleBatchDelete = () => {
+  if (selectedQuestionIds.value.length === 0) return;
+  ElMessageBox.confirm(`确定要批量删除已选中的 ${selectedQuestionIds.value.length} 道题目吗？`, '警告', {
+    confirmButtonText: '确定删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    let successCount = 0;
+    let failCount = 0;
+    for (const qId of selectedQuestionIds.value) {
+      try {
+        await request.delete(`/api/v1/admin/questions/${qId}`);
+        successCount++;
+      } catch (e) {
+        failCount++;
+      }
+    }
+    if (failCount > 0) {
+      ElMessage.warning(`成功删除 ${successCount} 道题目，${failCount} 道被试卷关联的题目无法删除`);
+    } else {
+      ElMessage.success(`已成功批量删除 ${successCount} 道题目`);
+    }
+    selectedQuestionIds.value = [];
     loadQuestions();
   });
 };

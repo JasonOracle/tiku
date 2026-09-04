@@ -33,14 +33,22 @@
         </span>
       </div>
     </div>
+    <AppModal
+      v-model="modalVisible"
+      :title="modalTitle"
+      :message="modalMessage"
+      :type="modalType"
+      :showCancel="false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import http from '../../utils/http';
 import { useUserStore } from '../../store/user';
+import http from '../../utils/http';
+import AppModal from '../../components/AppModal.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -50,16 +58,28 @@ const username = ref('');
 const password = ref('');
 const loading = ref(false);
 
+const modalVisible = ref(false);
+const modalTitle = ref('提示');
+const modalMessage = ref('');
+const modalType = ref<'info' | 'warning' | 'success' | 'danger'>('info');
+
+const showAlert = (msg: string, type: 'info' | 'warning' | 'success' | 'danger' = 'warning', title = '提示') => {
+  modalTitle.value = title;
+  modalMessage.value = msg;
+  modalType.value = type;
+  modalVisible.value = true;
+};
+
 const handleSubmit = async () => {
   if (!username.value || !password.value) {
-    alert('请补全用户名和密码');
+    showAlert('请补全用户名和密码', 'warning');
     return;
   }
   loading.value = true;
   try {
     if (isRegister.value) {
       await http.post('/api/v1/auth/register', { username: username.value, password: password.value });
-      alert('注册成功，请点击登录');
+      showAlert('注册成功，请点击登录', 'success', '成功');
       isRegister.value = false;
     } else {
       const res: any = await http.post('/api/v1/auth/login', { username: username.value, password: password.value });
@@ -67,7 +87,7 @@ const handleSubmit = async () => {
       router.push('/');
     }
   } catch (e: any) {
-    alert(e.message || '请求处理失败');
+    showAlert(e.message || '请求处理失败', 'danger', '错误');
   } finally {
     loading.value = false;
   }

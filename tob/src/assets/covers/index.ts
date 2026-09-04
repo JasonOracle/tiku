@@ -16,3 +16,5 @@ export function presetSrc(cover?: string | null): string {
 export function isPreset(cover?: string | null): boolean {
   return !!cover && cover.startsWith('preset:');
 }
+
+// trigger hmr

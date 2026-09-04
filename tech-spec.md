@@ -5,15 +5,14 @@
 ### 1.1 项目三元架构
 ```
 tiku/
-├── toc/                     # C端移动端项目 (UniApp / Vue3)
-│   ├── pages/
-│   │   ├── index/           # 首页 (分类+精选推荐)
-│   │   ├── quiz/            # 答题流 (含定时器/上一题/收藏)
-│   │   ├── report/          # 分析报告页 (成绩图表+错题解析)
-│   │   ├── favorite/        # 收藏夹页
-│   │   └── profile/         # 个人中心与历史记录
-│   ├── store/               # Pinia 状态管理 (Token存储: tiku_toc_token)
-│   └── utils/http.ts        # Axios/Uni.request 统一封装与拦截器
+tiku/
+├── toc/                     # C端移动端 Web 项目 (Vue3 + Vite + Vue Router)
+│   ├── src/
+│   │   ├── views/           # 页面视图 (IndexView, QuizView, ReportView, FavoriteView, ProfileView, HistoryView)
+│   │   ├── components/      # 核心组件 (NavBar 统一导航, CoverArt 矢量封面, BannerCarousel 轮播)
+│   │   ├── router/          # 路由配置
+│   │   └── utils/http.ts    # Axios 统一封装与拦截器
+│   └── public/              # 静态资源与 SVG 插画
 ├── tob/                     # B端 SaaS 管理后台 (Vue3 + Element Plus)
 │   ├── src/
 │   │   ├── views/
@@ -113,14 +112,17 @@ class PageResponse(BaseModel, Generic[T]):
 ```
 
 ### 2.5 数据模型字段扩展与算法调整（2026-09-04 治理版）
-1. **试卷三态生命周期**：`draft → published → archived`，`archived` 为彻底终态（冻结编辑/删除/状态变更）。下架 = `published → archived`；上架经 `ensure_publishable`（`exam_service.py`）校验有效分类并写入 `category_name` 快照。
+1. **试卷生命周期与组卷**：
+   - 增加 `is_random` 布尔值，用于控制 C 端答题乱序引擎。
+   - B 端组卷引入 `checkbox-group` 批量管理（题海多选删除、弹窗备选批量加入、已选题批量移除）及已选题目的拖拽排序。
+   - `draft → published → archived`，`archived` 为彻底终态。下架 = `published → archived`；上架经 `ensure_publishable` 校验有效分类并写入 `category_name` 快照。
 2. **删除守卫矩阵**：分类被引用拦；题目被 published/archived 卷引用拦（报卷名），仅 draft 引用联动移除 + `recalc_exam_totals` 重算；试卷仅 draft 零作答可删。
 3. **空卷拦截**：`submit_exam_record_with_lock` 零作答 400；C端 0 作答离开/超时不提交。
 4. **导入行级分类**：按表头“分类”列逐题归入（不存在自动新建，空取第一项）；`short/fill` 预留题型跳过计数；读首工作表（`sheetnames[0]`）。
 5. **同源部署**：前后端 `baseURL: ''` 走 Nginx `/api/v1/` 代理；`vite server.proxy` 保开发；B端 401 跳 `/admin/login`；backend 重建后必须 `nginx -s reload`。
 6. **第一项口径**：分类列表 `(sort_order,id)` 双排序，前端默认与后端兜底同源。
 7. **Banner 模块**：`banners`（image/link三态/sort/enabled，上限3启用）+ `banner_settings` 单行（interval 2–10s）；C端合一接口 `{interval_seconds, items}`；1张静显、>1自播+手滑、0张回退推荐 Hero；内部跳转仅 `/` 开头。
-8. **C端 UI 改版**（效果图为准，根目录4张png）：抽公共 `TabBar.vue`（首页/个人中心）；封面 `preset:N` 双端同 key 渲染；报告圆环按真实总分。
+8. **C端 UI 改版**（效果图为准）：抽公共 `TabBar.vue`；封面 `CoverArt.vue` 移除所有渐变/底色，纯渲染 raw SVG；报告圆环按真实总分；引入 `AppModal.vue` 实现毛玻璃自定义弹窗全面替换原生 `confirm/alert`。
 
 ### 2.6 原数据模型字段扩展与算法调整（历史）
 1. **ExamCategory 分类模型**：
@@ -130,8 +132,9 @@ class PageResponse(BaseModel, Generic[T]):
    - `score`: 题目默认分值（`int`，默认 10）。
 3. **Exam 试卷模型**：
    - `category_id`: 外键关联 `target_type='exam'` 的试卷分类。
-    - `status`: 三态（`draft` 待上架 / `published` 已上架 / `archived` 已归档冻结，终态不可逆）。
-    - `category_name`: 上架时写入的分类名称快照，展示层优先使用（见 2.5）。
+   - `status`: 三态（`draft` 待上架 / `published` 已上架 / `archived` 已归档冻结，终态不可逆）。
+   - `category_name`: 上架时写入的分类名称快照，展示层优先使用。
+   - `is_random`: 题目是否随机打乱呈现（`bool`，默认 `false`）。
    - `pass_percent`: 及格百分比（`int`，0-100，默认 60）。
    - `total_score` 计算规则：由试卷关联的所有 `Question.score` 动态求和。
    - `pass_score` 计算规则：`Math.ceil(total_score * pass_percent / 100.0)` 向上取整。

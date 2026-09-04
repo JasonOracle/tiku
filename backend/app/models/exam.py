@@ -1,8 +1,8 @@
 """
 [变更日志]
-修改时间：2026-09-04 00:08:00
+修改时间：2026-09-04
 AI模型：Gemini 底层
-修改内容：[1. Exam 模型添加 status 上下架状态字段 (draft, published, archived)]
+修改内容：[1. Exam 模型添加 is_random (随机题目顺序) 字段]
 """
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from datetime import datetime
@@ -24,6 +24,7 @@ class Exam(Base):
     pass_percent = Column(Integer, default=60, comment="及格百分比 0-100")
     status = Column(String(20), default="draft", nullable=False, comment="状态: draft (待上架), published (已上架), archived (已下架)")
     is_recommended = Column(Boolean, default=False, comment="是否在首页推荐推荐")
+    is_random = Column(Boolean, default=False, comment="是否随机题目顺序")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
 
 

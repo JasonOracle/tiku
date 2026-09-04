@@ -1,8 +1,8 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-04 00:08:00
+ * 修改时间：2026-09-04
  * AI模型：Gemini 底层
- * 修改内容：[1. 实现题目分类 (target_type='question') 与试卷分类 (target_type='exam') Tabs 选项卡双重隔离 CRUD]
+ * 修改内容：[1. 移除图标标识/key列与表单项; 2. 优化 sort_order 默认值为已存在最大权重 + 1]
 -->
 <template>
   <div class="page-card">
@@ -27,8 +27,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="icon" label="图标 key" width="120" />
-      <el-table-column prop="sort_order" label="排序权重" width="100" />
+      <el-table-column prop="sort_order" label="排序权重" width="120" />
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" text size="small" @click="openEditDialog(row)">编辑</el-button>
@@ -47,11 +46,8 @@
         <el-form-item label="分类名称" required>
           <el-input v-model="form.name" :placeholder="form.target_type === 'question' ? '如：金融类、消防安全' : '如：模拟试卷、真题'" />
         </el-form-item>
-        <el-form-item label="图标标识">
-          <el-input v-model="form.icon" placeholder="默认 folder" />
-        </el-form-item>
         <el-form-item label="排序权重">
-          <el-input-number v-model="form.sort_order" :min="0" />
+          <el-input-number v-model="form.sort_order" :min="1" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -98,7 +94,9 @@ const openCreateDialog = () => {
   form.name = '';
   form.target_type = activeTab.value;
   form.icon = 'folder';
-  form.sort_order = 1;
+  // 智能计算 max + 1
+  const maxSort = categories.value.reduce((max, item) => Math.max(max, item.sort_order || 0), 0);
+  form.sort_order = maxSort + 1;
   dialogVisible.value = true;
 };
 
@@ -106,7 +104,7 @@ const openEditDialog = (row: any) => {
   editingId.value = row.id;
   form.name = row.name;
   form.target_type = row.target_type;
-  form.icon = row.icon;
+  form.icon = row.icon || 'folder';
   form.sort_order = row.sort_order;
   dialogVisible.value = true;
 };

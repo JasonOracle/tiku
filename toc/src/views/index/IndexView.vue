@@ -1,20 +1,14 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-04
- * AI模型：OpenCode
- * 修改内容：[1. 按 首页.png 还原：头像Header/Hero蓝紫渐变/分类图标Pill/试卷卡三栏+封面/浮动TabBar(首页/个人中心); 2. Hero改绑推荐卷，Banner>0时轮播替代]
--->
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 现代扁平拟物风格重构首页试卷列表：左侧精简封面微框，中间平铺展示模式与轻量指标，右侧蓝紫渐变做题胶囊按钮; 2. 解决原列表高占比挤压、竖向对齐噪音与覆盖错位问题]
+ -->
 <template>
   <div class="mobile-container">
-    <!-- Header：头像圆 -->
-    <header class="top-bar">
-      <div class="avatar-circle" @click="handleUserClick">
-        <span v-if="username">{{ username.substring(0, 1).toUpperCase() }}</span>
-        <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-          <circle cx="12" cy="7" r="4"></circle>
-        </svg>
-      </div>
+    <!-- Header：居中程序名 -->
+    <header class="top-bar centered">
+      <h1 class="app-title">题库</h1>
     </header>
 
     <!-- Banner 轮播（有配置时替代 Hero） -->
@@ -58,30 +52,41 @@
 
     <!-- 试卷列表 -->
     <main class="exam-list">
-      <div v-for="exam in exams" :key="exam.id" class="exam-card">
-        <div class="card-body">
-          <span class="mode-badge" :class="exam.is_timed ? 'timed' : 'practice'">
-            {{ exam.is_timed ? `${exam.time_limit}分钟限时` : '练习模式' }}
-          </span>
+      <div v-for="exam in exams" :key="exam.id" class="exam-card" @click="startExam(exam.id)">
+        <div class="card-thumb">
+          <CoverArt :cover="exam.cover_url || 'preset:1'" width="56px" height="56px" />
+        </div>
+        <div class="card-info">
+          <div class="card-badge-row">
+            <span class="mode-tag" :class="exam.is_timed ? 'timed' : 'practice'">
+              <svg v-if="exam.is_timed" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              {{ exam.is_timed ? `${exam.time_limit}分钟限时` : '练习模式' }}
+            </span>
+          </div>
           <h3 class="exam-title">{{ exam.title }}</h3>
-          <div class="meta-row">
-            <span class="meta-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span class="meta-lbl">题目</span><strong>{{ exam.question_count }} 题</strong>
+          <div class="meta-chips">
+            <span class="chip">
+              <span class="chip-label">题目</span>
+              <span class="chip-val">{{ exam.question_count }}题</span>
             </span>
-            <span class="meta-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0V4z"/></svg>
-              <span class="meta-lbl">总分</span><strong>{{ exam.total_score }} 分</strong>
+            <span class="chip-dot">•</span>
+            <span class="chip">
+              <span class="chip-label">总分</span>
+              <span class="chip-val">{{ exam.total_score }}分</span>
             </span>
-            <span class="meta-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>
-              <span class="meta-lbl">及格</span><strong>{{ exam.pass_score }} 分</strong>
+            <span class="chip-dot">•</span>
+            <span class="chip">
+              <span class="chip-label">及格</span>
+              <span class="chip-val">{{ exam.pass_score }}分</span>
             </span>
           </div>
         </div>
-        <div class="card-side">
-          <CoverArt :cover="exam.cover_url || 'preset:1'" width="86px" height="104px" />
-          <button class="start-btn" @click="startExam(exam.id)">开始做题 ›</button>
+        <div class="card-action">
+          <button class="action-btn" @click.stop="startExam(exam.id)">
+            <span>做题</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
       </div>
     </main>
@@ -158,7 +163,7 @@ const handleUserClick = () => {
   router.push(userStore.token ? '/profile' : '/login');
 };
 
-const startExam = (examId?: number) => {
+const startExam = async (examId?: number) => {
   if (!examId) return;
   if (!userStore.token) {
     router.push('/login');
@@ -180,28 +185,16 @@ onMounted(() => {
   margin: 0 auto;
   min-height: 100vh;
   background: linear-gradient(180deg, #eef4ff 0%, #f8fafc 40%);
-  padding-bottom: 100px;
+  padding-bottom: 140px; /* 增加底部安全区防止导航遮挡 */
   box-sizing: border-box;
   font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, sans-serif;
 }
 
 .top-bar { padding: 14px 20px 4px; display: flex; align-items: center; }
 
-.avatar-circle {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #38bdf8, #6366f1);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 18px;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
-  border: 2px solid white;
-}
+.app-title { font-size: 20px; font-weight: 800; color: #0f172a; margin: 0; }
+
+.top-bar.centered { justify-content: center; }
 
 .hero-section { padding: 10px 20px 0; }
 
@@ -302,56 +295,141 @@ onMounted(() => {
   box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
 }
 
-.exam-list { padding: 0 20px; display: flex; flex-direction: column; gap: 14px; }
+.exam-list {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
 .exam-card {
-  background: white;
-  border-radius: 22px;
-  padding: 16px;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 14px 16px;
   display: flex;
-  gap: 12px;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
 }
 
-.card-body { flex: 1; min-width: 0; }
+.exam-card:active {
+  transform: scale(0.985);
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+}
 
-.mode-badge {
+.card-thumb {
+  width: 62px;
+  height: 62px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9), 0 4px 10px rgba(99, 102, 241, 0.06);
+}
+
+.card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.card-badge-row {
+  display: flex;
+  align-items: center;
+}
+
+.mode-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 8px;
-  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
 }
 
-.mode-badge.timed { background: #fee2e2; color: #ef4444; }
-.mode-badge.practice { background: #e0f2fe; color: #0284c7; }
+.mode-tag.timed {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.mode-tag.practice {
+  background: #f0f9ff;
+  color: #0284c7;
+}
 
 .exam-title {
-  margin: 8px 0 10px;
-  font-size: 17px;
+  margin: 3px 0 2px;
+  font-size: 15px;
   color: #0f172a;
   font-weight: 800;
   line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.meta-row { display: flex; gap: 14px; }
+.meta-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
 
-.meta-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748b; }
-.meta-item svg { color: #0284c7; }
-.meta-lbl { color: #94a3b8; }
-.meta-item strong { color: #334155; font-weight: 700; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
 
-.card-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex-shrink: 0; }
+.chip-label {
+  color: #94a3b8;
+  font-size: 11px;
+}
 
-.start-btn {
-  background: linear-gradient(135deg, #0284c7, #6366f1);
-  color: white;
-  border: none;
-  padding: 9px 16px;
-  border-radius: 13px;
+.chip-val {
+  color: #334155;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
+}
+
+.chip-dot {
+  color: #cbd5e1;
+  font-size: 10px;
+}
+
+.card-action {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.action-btn {
+  background: linear-gradient(135deg, #0284c7 0%, #6366f1 100%);
+  color: #ffffff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.28);
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.action-btn:active {
+  transform: scale(0.95);
 }
 </style>

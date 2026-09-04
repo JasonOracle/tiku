@@ -1,8 +1,8 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-04 00:08:00
+ * 修改时间：2026-09-04
  * AI模型：Gemini 底层
- * 修改内容：[1. 试卷分类仅绑定 target_type='exam'; 2. 新增上架/下架切换(带 Confirm 警示确认); 3. 已上架试卷锁定编辑，可查看“考情数据”看板(展示参与人数、平均分、及格率及作答记录)]
+ * 修改内容：[1. 增加已发布试卷“查看详情”只读弹窗; 2. 候选题库独立为 ElDialog 弹窗引入并支持勾选批量添加; 3. 已加入题目支持复选批量移除与拖动排序; 4. 增加“随机题目顺序”开关]
 -->
 <template>
   <div class="page-card">
@@ -52,21 +52,23 @@
           <span style="font-weight: 700">{{ row.total_score || 0 }} 分</span>
         </template>
       </el-table-column>
-      <el-table-column prop="pass_score" label="及格线" width="120">
+      <el-table-column prop="is_random" label="随机排列" width="90">
         <template #default="{ row }">
-          <el-tag type="success" effect="light">
-            {{ row.pass_score }}分 ({{ row.pass_percent || 60 }}%)
+          <el-tag :type="row.is_random ? 'warning' : 'info'" size="small">
+            {{ row.is_random ? '是' : '否' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right">
+      <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
           <el-button v-if="row.status !== 'draft'" type="success" text size="small" @click="openStatsDialog(row)">
-            <el-icon><DataAnalysis /></el-icon> 考情数据
+            <el-icon><DataAnalysis /></el-icon> 考情
+          </el-button>
+          <el-button v-if="row.status !== 'draft'" type="info" text size="small" @click="openViewDialog(row)">
+            <el-icon><View /></el-icon> 查看详情
           </el-button>
           <el-button v-if="row.status === 'draft'" type="primary" text size="small" @click="openEditDialog(row)">编辑/组卷</el-button>
           <el-button v-if="row.status === 'draft'" type="danger" text size="small" @click="handleDelete(row.id)">删除</el-button>
-          <el-tag v-if="row.status === 'archived'" type="info" size="small">已归档冻结</el-tag>
         </template>
       </el-table-column>
     </el-table>
@@ -126,8 +128,99 @@
       </div>
     </el-dialog>
 
+    <!-- 查看详情（只读模态框） Dialog -->
+    <el-dialog v-model="viewDialogVisible" title="试卷与组卷详情 (只读模式)" width="850px" top="40px">
+      <el-form :model="viewData" label-width="100px" disabled>
+        <el-row :gutter="16">
+          <el-col :span="14">
+            <el-form-item label="试卷名称">
+              <el-input :model-value="viewData?.title" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="10">
+            <el-form-item label="试卷分类">
+              <el-input :model-value="getCategoryName(viewData?.category_id)" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <el-form-item label="限时作答">
+              <el-tag :type="viewData?.is_timed ? 'success' : 'info'">
+                {{ viewData?.is_timed ? `${viewData?.time_limit} 分钟` : '不限时' }}
+              </el-tag>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="随机排列">
+              <el-tag :type="viewData?.is_random ? 'warning' : 'info'">
+                {{ viewData?.is_random ? '随机题目顺序' : '固定顺序' }}
+              </el-tag>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="首页推荐">
+              <el-tag :type="viewData?.is_recommended ? 'danger' : 'info'">
+                {{ viewData?.is_recommended ? '已推荐' : '普通' }}
+              </el-tag>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="试卷封面">
+          <CoverArt :cover="viewData?.cover_url || 'preset:1'" width="140px" height="84px" />
+        </el-form-item>
+        <el-form-item label="试卷得分线">
+          <div style="font-size: 14px; font-weight: 600; color: #0f172a">
+            总分：{{ viewData?.total_score }} 分 | 及格分：{{ viewData?.pass_score }} 分 ({{ viewData?.pass_percent }}%)
+          </div>
+        </el-form-item>
+        <el-divider content-position="left"><strong>包含了 {{ viewQuestions.length }} 道题目 (点击展开查看选项、答案与解析)</strong></el-divider>
+        <el-table :data="viewQuestions" size="small" stripe style="width: 100%" max-height="380">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="q-detail-expand">
+                <div class="expand-item" v-if="row.options && row.options.length">
+                  <span class="expand-label">选项配置：</span>
+                  <div class="opts-list">
+                    <span v-for="opt in row.options" :key="opt.key" class="opt-chip">
+                      <strong>{{ opt.key }}.</strong> {{ opt.text }}
+                    </span>
+                  </div>
+                </div>
+                <div class="expand-item">
+                  <span class="expand-label">正确答案：</span>
+                  <el-tag type="success" size="small" effect="dark">
+                    {{ Array.isArray(row.answer) ? row.answer.join(', ') : row.answer }}
+                  </el-tag>
+                </div>
+                <div class="expand-item" v-if="row.explanation">
+                  <span class="expand-label">题目解析：</span>
+                  <span class="exp-content">{{ row.explanation }}</span>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column type="index" label="序号" width="60" align="center" />
+          <el-table-column prop="type" label="题型" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="题干描述" show-overflow-tooltip />
+          <el-table-column prop="score" label="分值" width="90">
+            <template #default="{ row }">
+              <span style="font-weight: 700; color: #0284c7">{{ row.score || 10 }} 分</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-form>
+      <template #footer>
+        <el-button type="primary" @click="viewDialogVisible = false">确认关闭</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 新建/编辑 试卷 Dialog -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="850px" top="40px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="880px" top="30px" destroy-on-close>
       <el-form :model="form" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="14">
@@ -145,16 +238,21 @@
         </el-row>
 
         <el-row :gutter="16">
-          <el-col :span="10">
+          <el-col :span="8">
             <el-form-item label="限时作答">
               <el-switch v-model="form.is_timed" />
-              <el-input-number v-if="form.is_timed" v-model="form.time_limit" :min="1" :max="300" style="width: 120px; margin-left: 12px" />
-              <span v-if="form.is_timed" style="margin-left: 4px; color: #64748b">分钟</span>
+              <el-input-number v-if="form.is_timed" v-model="form.time_limit" :min="1" :max="300" style="width: 100px; margin-left: 8px" />
+              <span v-if="form.is_timed" style="margin-left: 4px; color: #64748b">分</span>
             </el-form-item>
           </el-col>
-          <el-col :span="14">
+          <el-col :span="8">
+            <el-form-item label="随机排列">
+              <el-switch v-model="form.is_random" active-text="C端答题随机打乱题序" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
             <el-form-item label="首页推荐">
-              <el-switch v-model="form.is_recommended" active-text="推荐至移动端精选Hero卡片" />
+              <el-switch v-model="form.is_recommended" active-text="推荐至首页Hero" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -171,10 +269,6 @@
                   @click="form.cover_url = p"
                 >
                   <CoverArt :cover="p" width="120px" height="72px" />
-                </div>
-                <div v-if="form.cover_url && !form.cover_url.startsWith('preset:')" class="cover-opt selected">
-                  <CoverArt :cover="form.cover_url" width="120px" height="72px" />
-                  <span class="custom-tag">历史上传图</span>
                 </div>
               </div>
             </el-form-item>
@@ -197,17 +291,44 @@
           </el-col>
         </el-row>
 
-        <el-divider content-position="left"><strong>组卷配置 (双层结构隔离)</strong></el-divider>
+        <el-divider content-position="left"><strong>试卷已加入题目（支持拖拽上下排序与多选批量删除）</strong></el-divider>
 
-        <!-- 上方：当前已选题目列表 -->
         <div class="selected-box">
           <div class="box-header">
-            <span>当前已加入试卷的题目 (共 <strong style="color: #0284c7">{{ selectedQuestions.length }}</strong> 题)</span>
-            <el-button v-if="selectedQuestions.length > 0" type="danger" text size="small" @click="selectedQuestions = []">清空已选</el-button>
+            <span>已加入题目 (共 <strong style="color: #0284c7">{{ selectedQuestions.length }}</strong> 题)</span>
+            <div style="display: flex; gap: 10px; align-items: center">
+              <el-button
+                v-if="batchRemoveSelectedIds.length > 0"
+                type="danger"
+                plain
+                size="small"
+                @click="batchRemoveSelectedQuestions"
+              >
+                批量移除所选 ({{ batchRemoveSelectedIds.length }})
+              </el-button>
+              <el-button type="primary" size="small" @click="openPoolModal">
+                <el-icon><Plus /></el-icon> 导入 / 添加题目
+              </el-button>
+            </div>
           </div>
 
-          <el-table :data="selectedQuestions" size="small" border style="width: 100%; margin-top: 8px" max-height="220">
-            <el-table-column type="index" label="序号" width="50" align="center" />
+          <el-table
+            :data="selectedQuestions"
+            size="small"
+            border
+            style="width: 100%; margin-top: 8px"
+            max-height="300"
+            @selection-change="handleSelectedSelectionChange"
+          >
+            <el-table-column type="selection" width="45" align="center" />
+            <el-table-column label="排序" width="85" align="center">
+              <template #default="{ $index }">
+                <div class="sort-actions">
+                  <el-button :disabled="$index === 0" text circle size="small" @click="moveQuestion($index, -1)">▲</el-button>
+                  <el-button :disabled="$index === selectedQuestions.length - 1" text circle size="small" @click="moveQuestion($index, 1)">▼</el-button>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column prop="type" label="题型" width="80">
               <template #default="{ row }">
                 <el-tag size="small" :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
@@ -228,59 +349,74 @@
             </el-table-column>
           </el-table>
         </div>
-
-        <!-- 下方：备选题库区 -->
-        <div class="pool-box">
-          <div class="pool-filter-header">
-            <span><strong>题库备选选择区</strong></span>
-            <div class="pool-filters">
-              <el-radio-group v-model="poolFilter.type" size="small" @change="handlePoolFilterChange">
-                <el-radio-button label="">全部题型</el-radio-button>
-                <el-radio-button label="single">单选</el-radio-button>
-                <el-radio-button label="multiple">多选</el-radio-button>
-                <el-radio-button label="judge">判断</el-radio-button>
-              </el-radio-group>
-              <el-input v-model="poolFilter.keyword" placeholder="搜索题目..." size="small" clearable style="width: 180px" @change="handlePoolFilterChange" />
-            </div>
-          </div>
-
-          <el-table :data="questionPool" size="small" v-loading="poolLoading" stripe style="width: 100%; margin-top: 8px" max-height="240">
-            <el-table-column prop="id" label="ID" width="60" />
-            <el-table-column prop="type" label="题型" width="80">
-              <template #default="{ row }">
-                <el-tag size="small" :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="title" label="题干描述" show-overflow-tooltip />
-            <el-table-column prop="score" label="分值" width="70">
-              <template #default="{ row }">
-                <span>{{ row.score || 10 }}分</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="90" align="center">
-              <template #default="{ row }">
-                <el-button v-if="isQuestionSelected(row.id)" disabled size="small" text type="info">已加入</el-button>
-                <el-button v-else type="primary" size="small" text @click="addQuestionToExam(row)">+ 添加</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-
-          <div style="display: flex; justify-content: flex-end; margin-top: 8px">
-            <el-pagination
-              size="small"
-              v-model:current-page="poolFilter.page"
-              :page-size="poolFilter.size"
-              :total="poolFilter.total"
-              layout="total, prev, pager, next"
-              @current-change="handlePoolPageChange"
-            />
-          </div>
-        </div>
       </el-form>
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveExam">保存试卷</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 题库备选选择区 独立弹窗 Dialog -->
+    <el-dialog v-model="poolModalVisible" title="选择备选题库加入当前试卷" width="800px" destroy-on-close>
+      <div class="pool-modal-content">
+        <div class="pool-filter-bar">
+          <el-radio-group v-model="poolFilter.type" size="small" @change="handlePoolFilterChange">
+            <el-radio-button label="">全部题型</el-radio-button>
+            <el-radio-button label="single">单选</el-radio-button>
+            <el-radio-button label="multiple">多选</el-radio-button>
+            <el-radio-button label="judge">判断</el-radio-button>
+          </el-radio-group>
+          <el-input v-model="poolFilter.keyword" placeholder="搜索题干关键词..." size="small" clearable style="width: 200px" @change="handlePoolFilterChange" />
+        </div>
+
+        <el-table
+          :data="questionPool"
+          size="small"
+          v-loading="poolLoading"
+          stripe
+          style="width: 100%; margin-top: 12px"
+          max-height="360"
+          @selection-change="handlePoolSelectionChange"
+        >
+          <el-table-column type="selection" width="45" align="center" :selectable="selectablePoolRow" />
+          <el-table-column prop="id" label="ID" width="60" />
+          <el-table-column prop="type" label="题型" width="85">
+            <template #default="{ row }">
+              <el-tag size="small" :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="题干描述" show-overflow-tooltip />
+          <el-table-column prop="score" label="分值" width="75">
+            <template #default="{ row }">
+              <span>{{ row.score || 10 }}分</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="90" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="isQuestionSelected(row.id)" type="info" size="small">已在试卷中</el-tag>
+              <el-tag v-else type="success" size="small">可选加入</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px">
+          <span style="font-size: 13px; color: #64748b">勾选可多选添加，已勾选 {{ pendingPoolSelection.length }} 项</span>
+          <el-pagination
+            size="small"
+            v-model:current-page="poolFilter.page"
+            :page-size="poolFilter.size"
+            :total="poolFilter.total"
+            layout="total, prev, pager, next"
+            @current-change="handlePoolPageChange"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="poolModalVisible = false">完成选择</el-button>
+        <el-button type="primary" :disabled="pendingPoolSelection.length === 0" @click="confirmAddBatchFromPool">
+          确认加入已选 ({{ pendingPoolSelection.length }})
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -289,12 +425,21 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Delete, DataAnalysis } from '@element-plus/icons-vue';
+import { Plus, Delete, DataAnalysis, View } from '@element-plus/icons-vue';
 import request from '../../utils/request';
 import CoverArt from '../../components/CoverArt.vue';
-import { COVER_PRESETS } from '../../assets/covers/index';
+import { COVER_PRESETS, presetSrc } from '../../assets/covers/index';
 
 const loading = ref(false);
+
+onMounted(() => {
+  console.log("=== Debug: COVER_PRESETS ===", COVER_PRESETS);
+  console.log("=== Debug: Resolved SVGs ===");
+  COVER_PRESETS.forEach(p => {
+    console.log(p, presetSrc(p));
+  });
+});
+
 const exams = ref<any[]>([]);
 const categories = ref<any[]>([]);
 const filters = reactive({ keyword: '', category_id: null });
@@ -309,6 +454,12 @@ const statsDialogVisible = ref(false);
 const statsLoading = ref(false);
 const statsData = ref<any>(null);
 
+// 只读弹窗
+const viewDialogVisible = ref(false);
+const viewData = ref<any>(null);
+const viewQuestions = ref<any[]>([]);
+
+// 表单对象
 const form = reactive({
   title: '',
   category_id: null as number | null,
@@ -317,13 +468,19 @@ const form = reactive({
   time_limit: 30,
   pass_percent: 60,
   status: 'draft',
-  is_recommended: false
+  is_recommended: false,
+  is_random: false
 });
 
 const selectedQuestions = ref<any[]>([]);
+const batchRemoveSelectedIds = ref<number[]>([]);
+
+// 题库选择 Dialog 独立弹窗
+const poolModalVisible = ref(false);
 const questionPool = ref<any[]>([]);
 const poolLoading = ref(false);
 const poolFilter = reactive({ type: '', keyword: '', page: 1, size: 10, total: 0 });
+const pendingPoolSelection = ref<any[]>([]);
 
 const computedTotalScore = computed(() => {
   return selectedQuestions.value.reduce((sum, item) => sum + (item.score || 10), 0);
@@ -396,6 +553,23 @@ const openStatsDialog = async (row: any) => {
   }
 };
 
+const openViewDialog = async (row: any) => {
+  viewData.value = row;
+  viewDialogVisible.value = true;
+  try {
+    const detail: any = await request.get(`/api/v1/admin/exams/${row.id}`);
+    viewQuestions.value = detail.questions || [];
+  } catch (e) {
+    viewQuestions.value = [];
+  }
+};
+
+const openPoolModal = () => {
+  poolModalVisible.value = true;
+  pendingPoolSelection.value = [];
+  loadQuestionPool();
+};
+
 const loadQuestionPool = async () => {
   poolLoading.value = true;
   try {
@@ -428,14 +602,47 @@ const isQuestionSelected = (qId: number) => {
   return selectedQuestions.value.some((q) => q.id === qId);
 };
 
-const addQuestionToExam = (q: any) => {
-  if (!isQuestionSelected(q.id)) {
-    selectedQuestions.value.push(q);
+const selectablePoolRow = (row: any) => {
+  return !isQuestionSelected(row.id);
+};
+
+const handlePoolSelectionChange = (val: any[]) => {
+  pendingPoolSelection.value = val;
+};
+
+const confirmAddBatchFromPool = () => {
+  let count = 0;
+  for (const q of pendingPoolSelection.value) {
+    if (!isQuestionSelected(q.id)) {
+      selectedQuestions.value.push(q);
+      count++;
+    }
   }
+  ElMessage.success(`成功加入 ${count} 道题目`);
+  poolModalVisible.value = false;
+};
+
+const handleSelectedSelectionChange = (val: any[]) => {
+  batchRemoveSelectedIds.value = val.map((q) => q.id);
+};
+
+const batchRemoveSelectedQuestions = () => {
+  if (batchRemoveSelectedIds.value.length === 0) return;
+  selectedQuestions.value = selectedQuestions.value.filter((q) => !batchRemoveSelectedIds.value.includes(q.id));
+  batchRemoveSelectedIds.value = [];
+  ElMessage.success('已从当前组卷中移除选中题目');
 };
 
 const removeSelectedQuestion = (idx: number) => {
   selectedQuestions.value.splice(idx, 1);
+};
+
+const moveQuestion = (index: number, direction: number) => {
+  const targetIndex = index + direction;
+  if (targetIndex < 0 || targetIndex >= selectedQuestions.value.length) return;
+  const temp = selectedQuestions.value[index];
+  selectedQuestions.value[index] = selectedQuestions.value[targetIndex];
+  selectedQuestions.value[targetIndex] = temp;
 };
 
 const getTypeTag = (type: string) => {
@@ -460,11 +667,12 @@ const openCreateDialog = () => {
   form.status = 'draft';
   form.cover_url = 'preset:1';
   form.is_recommended = false;
+  form.is_random = false;
   selectedQuestions.value = [];
+  batchRemoveSelectedIds.value = [];
   poolFilter.type = '';
   poolFilter.keyword = '';
   dialogVisible.value = true;
-  loadQuestionPool();
 };
 
 const openEditDialog = async (row: any) => {
@@ -478,7 +686,6 @@ const openEditDialog = async (row: any) => {
   }
   editingId.value = row.id;
   form.title = row.title;
-  // 分类被删后悬空则置空，强制重选
   form.category_id = categories.value.some((c) => c.id === row.category_id) ? row.category_id : null;
   form.is_timed = row.is_timed;
   form.time_limit = row.time_limit;
@@ -486,7 +693,9 @@ const openEditDialog = async (row: any) => {
   form.status = row.status || 'draft';
   form.cover_url = row.cover_url || 'preset:1';
   form.is_recommended = row.is_recommended;
+  form.is_random = row.is_random || false;
   selectedQuestions.value = [];
+  batchRemoveSelectedIds.value = [];
   poolFilter.type = '';
   poolFilter.keyword = '';
   dialogVisible.value = true;
@@ -497,8 +706,6 @@ const openEditDialog = async (row: any) => {
   } catch (e) {
     selectedQuestions.value = [];
   }
-
-  loadQuestionPool();
 };
 
 const saveExam = async () => {
@@ -525,6 +732,7 @@ const saveExam = async () => {
     pass_percent: form.pass_percent,
     status: form.status,
     is_recommended: form.is_recommended,
+    is_random: form.is_random,
     question_ids: selectedQuestions.value.map((q) => q.id)
   };
 
@@ -688,5 +896,48 @@ onMounted(() => {
   font-size: 12px;
   color: #64748b;
   margin-top: 4px;
+}
+
+.q-detail-expand {
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.expand-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.expand-label {
+  font-weight: 700;
+  color: #475569;
+  width: 75px;
+  flex-shrink: 0;
+}
+
+.opts-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.opt-chip {
+  background: white;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+}
+
+.exp-content {
+  color: #64748b;
+  line-height: 1.5;
 }
 </style>

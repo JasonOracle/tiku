@@ -1,6 +1,6 @@
 # 智题库 (TiKu) 全栈项目超详细交接与进度的归档文档 (progress.md)
 
-> **最新更新时间**：`2026-09-04 00:43:00`
+> **最新更新时间**：`2026-09-04 22:55:00`
 > **文档目的**：本交接文档为接手的 AI 模型/开发人员提供 100% 细节落地指南，包含代码实现原理、文件目录树、命令清单、数据契约、测试操作步骤及具体避坑 SOP，确保无缝接续开发。
 
 ---
@@ -16,6 +16,12 @@
 | `2026-09-04 00:43:00` | Gemini 底层 Agent | **模型切换交接备忘录**：已归档物理表结构修补、路由顺序Bug、题库组卷分页与C端防误交卷逻辑细节 | **99%** |
 | `2026-09-04 02:10:00` | OpenCode Agent | 数据治理全落地：分类快照category_name+删除引用拦截、题目删除拦截(仅拦上架/归档)+草稿联动重算、试卷删除三态守卫+归档终态、空卷拦截前后端、导入行级分类+short/fill跳过计数、新建默认第一项、B端baseURL同源化；看板is_passed→passed修复；pytest 18通过，MySQL实库回归通过，容器重建 | **100%** |
 | `2026-09-04 14:35:00` | OpenCode Agent | UI改版+Banner全落地：5套封面preset双端+B端单选、Banner模块(上限3/秒数可调/链接三态/C端轮播)、C端首页/答题/解析按效果图还原+公共TabBar、个人中心还原+补TabBar、report加total_score/pass_score、Profile统计加载bug修复；pytest 22通过，MySQL实库9项通过 | **100%** |
+| `2026-09-04 16:50:00` | Gemini 底层 Agent | 升级通用 NavBar 组件：支持 `immersive` 沉浸式透明背景及滚动动态渐变白底/毛玻璃效果，同步更新 `NavBar.md` 文档与 ReportView，打包验证通过 | **100%** |
+| `2026-09-04 17:18:00` | Gemini 系列 Agent | 修复点击“开始做题”触发二次离开弹窗 Bug：首页 `startExam` 原直接带 `exam_id` 跳转，导致 `QuizView` 首次 `get` 失败触发 `router.push('/')` 被路由守卫二次拦截；现统一改为在首页调用 `POST /records/start` 获取 `record_id` 后平滑进入答题页，打包构建通过 | **100%** |
+| `2026-09-04 17:26:00` | Gemini 系列 Agent | 1. 修复点击开始做题无响应Bug：`startExam` 增加 `res?.record_id || res?.id` 防御取值；2. 对齐 `zbzn` 项目 TabBar 毛玻璃晶体规范：引入 65% 折射渐变背景、`blur(8px)`、`inset 1px 1px 0 #fff` 内高光与胶囊大圆角，新建 `TabBar.md` 文档，构建重载通过 | **100%** |
+| `2026-09-04 20:38:00` | Gemini 系列 Agent | **全量落地用户反哺高标准优化**：1. C端 `CoverArt.vue` 彻底移除背景色与渐变，纯净渲染原始 SVG 矢量图；2. Backend `/me/stats` 支持 `submitted` 与 `timeout` 答卷结算统计，修复个人中心记录为 0 的 Bug；3. B端试卷详情只读弹窗添加展开行 `type="expand"` 完整展现答案与解析；4. 答题页隐藏已收藏题目的图标；5. 新建毛玻璃 `AppModal.vue` 弹窗替代原生提示。 | **100%** |
+| `2026-09-04 21:35:00` | Gemini 3.1 Pro | **文档查漏补缺与 B 端/C 端需求同步**：1. 同步 B 端菜单层级调整（分类配置前置于题海管理）；2. 同步新建/导入题目时的“无分类阻断拦截”及必填校验；3. 同步题海列表与试卷选题的 `checkbox-group` 多选批量删除机制；4. 同步试卷题目的拖拽排序与 C 端答题 `is_random` 随机乱序机制；5. 备选题库改为模态弹窗形式。全面更新 PRD、技术规范及进度文档。 | **100%** |
+| `2026-09-04 22:55:00` | Antigravity Agent | **交接与状态冻结**：1. 彻底修复前序由于 PowerShell 双引号转义导致的 B/C 端 SVG 图片裂开/格式错误（全量改写 10 个 SVG 矢量图，杜绝任何背景色干扰）；2. `tob/src/views/exams/ExamsView.vue` 增加挂载时的 SVG 日志输出以便追踪资源；3. 实库重置默认 admin 账号密码为 `123456`；4. 开发工作流由静态 Docker Nginx 构建切换回本地 Vite 实时开发服务器（5173/5174端口），打通 HMR。 | **100%** |
 
 
 
@@ -401,8 +407,15 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 1. 读本文件 §7 治理矩阵 + §4 踩坑（尤其 4/5/6/7/8 条）。
 2. `python -m pytest tests/ -v` 确认 18 通过；`tob/toc pnpm build` 确认通过。
 3. 线上问题先查 Nginx 日志（旧 bundle hash 即缓存问题）与 `exam_records` 实库（幽灵记录先看 `status/score/time_spent`）。
-4. 待办 backlog：清理 root 0分历史记录（待确认）；题目内容快照（已接受风险，暂不做）；阶段四 Docker/Nginx 已上线（`D:\docker\docker-compose.yml`），后续只做重建与 reload。
-5. 测试账号：B端 `admreg / AdmReg123`；`admin / adminpassword` 不存在不要再试。
-6. UI 改版（2026-09-04 14:35 已落地）：C端三页还原 + 个人中心还原（含补 TabBar）+ 5套封面preset（B端单选）+ Banner 模块 + report 加 total_score/pass_score。效果图：根目录 首页.png/答题页.png/答案解析页.png/个人中心页.png。注意：答题页按用户新口径无环无星；效果图答案解析 Q3 答对红字按作图笔误处理（答错才红）。
+4. 待办 backlog：清理 root 0分历史记录（待确认）；题目内容快照（已接受风险，暂不做）；阶段四 Docker/Nginx 已上线（`D:\docker\docker-compose.yml`），后续只做重建与 reload；后续开发请直接使用本地 Vite `npm run dev` 获取实时 HMR，避免被容器静态文件缓存迷惑。
+5. 测试账号：B端管理员账号为 `admin` / `123456`（已重置）。
+6. UI 改版（2026-09-04 16:30 最新落地）：
+   - C端 Header：居中标题「题库」，无冗余导航。
+   - 5套透明矢量 SVG 封面（盾牌/灯笼/书卷/奖杯/窗格）全量替换（严格遵守无背景色/无渐变的设计规范）。
+   - 试卷卡片指标区：重构为上下两行结构（图标+标签在上行，数值在下行），适配设计图。
+   - Banner 模块：`BannerCarousel.vue` 支持 backend 动态数组（图片 URL、跳转类型、跳转路径），0张时降级显示 Hero 卡片。
+   - 全局 NavBar 组件 (`components/NavBar.vue`)：抽象标准化 22x22 SVG 返回箭头与居中标题，支持 `router.back()`。
+   - 个人中心 (`ProfileView.vue`)：退出登录按钮从右上角移入 `cell-group` 底部 Cell。
+   - 路由返回修复：`FavoriteView`、`HistoryView`、`ReportView` 返回跳转错误问题全部修复，统一调用 `NavBar` 回退上一页。
 7. 已知小坑：`script setup` 内禁 `export`（封面常量抽 `assets/covers/index.ts`）；Profile 曾因 `if (res.data)` 取错解包层导致统计恒 0，已改为 `if (res)`。
 
