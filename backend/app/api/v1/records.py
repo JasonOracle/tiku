@@ -147,6 +147,8 @@ def get_exam_report(
             user_id=current_user.id,
             status=record.status,
             score=record.score,
+            total_score=exam.total_score if exam else 0,
+            pass_score=exam.pass_score if exam else 0,
             passed=record.passed,
             time_spent=record.time_spent,
             total_questions=len(questions_analysis),

@@ -42,6 +42,12 @@ const routes: Array<RouteRecordRaw> = [
         name: 'Users',
         component: () => import('../views/users/UsersView.vue'),
         meta: { title: '用户与答题明细' }
+      },
+      {
+        path: 'banners',
+        name: 'Banners',
+        component: () => import('../views/banners/BannersView.vue'),
+        meta: { title: '首页Banner设置' }
       }
     ]
   }

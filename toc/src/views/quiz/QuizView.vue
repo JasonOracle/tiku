@@ -6,37 +6,26 @@
 -->
 <template>
   <div class="quiz-container" v-if="record">
-    <!-- 顶部进度与计时栏 -->
+    <!-- 顶栏：返回 + 标题省略 + 进度 + 倒计时 -->
     <header class="quiz-header">
       <button class="back-btn" @click="confirmExit">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
 
-      <div class="progress-pill">
-        <span>第 {{ currentIndex + 1 }} / {{ questions.length }} 题</span>
-      </div>
+      <span class="quiz-title">{{ record.exam_title || '在线测评' }}</span>
+      <span class="quiz-progress">{{ currentIndex + 1 }}/{{ questions.length }}</span>
 
       <div v-if="record.is_timed" class="timer-pill" :class="{ warning: remainingSeconds < 180 }">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <circle cx="12" cy="12" r="10"></circle>
           <polyline points="12 6 12 12 16 14"></polyline>
         </svg>
         <span>{{ formattedTime }}</span>
       </div>
-
-      <button class="fav-btn" :class="{ active: isCurrentFavorited }" @click="toggleFavorite">
-        <svg width="20" height="20" viewBox="0 0 24 24" :fill="isCurrentFavorited ? '#0284c7' : 'none'" stroke="currentColor" stroke-width="2">
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-        </svg>
-      </button>
+      <span v-else class="practice-tag">练习模式</span>
     </header>
-
-    <!-- 进度条 -->
-    <div class="progress-bar-bg">
-      <div class="progress-bar-fill" :style="{ width: `${((currentIndex + 1) / questions.length) * 100}%` }"></div>
-    </div>
 
     <!-- 题目正文卡片 -->
     <main class="question-card" v-if="currentQuestion">
@@ -44,15 +33,20 @@
       <h3 class="q-title">{{ currentQuestion.title }}</h3>
 
       <div class="options-list">
-        <div 
-          v-for="opt in currentQuestion.options" 
-          :key="opt.key" 
+        <div
+          v-for="opt in currentQuestion.options"
+          :key="opt.key"
           class="option-item"
-          :class="{ selected: isOptionSelected(opt.key) }"
+          :class="{ selected: isOptionSelected(opt.key), multiple: currentQuestion.type === 'multiple' }"
           @click="selectOption(opt.key)"
         >
           <span class="opt-key">{{ opt.key }}</span>
           <span class="opt-text">{{ opt.text }}</span>
+          <span class="opt-check">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </span>
         </div>
       </div>
     </main>
@@ -86,7 +80,6 @@ const record = ref<any>(null);
 const questions = ref<any[]>([]);
 const currentIndex = ref(0);
 const userAnswers = reactive<Record<string, string[]>>({});
-const favoritedQids = ref<Set<number>>(new Set());
 
 const remainingSeconds = ref(0);
 let timerId: any = null;
@@ -94,9 +87,6 @@ const submitting = ref(false);
 const isFinished = ref(false); // 标记是否已完成交卷逻辑
 
 const currentQuestion = computed(() => questions.value[currentIndex.value]);
-const isCurrentFavorited = computed(() => {
-  return currentQuestion.value ? favoritedQids.value.has(currentQuestion.value.id) : false;
-});
 
 const formattedTime = computed(() => {
   const m = Math.floor(remainingSeconds.value / 60);
@@ -138,18 +128,6 @@ const prevQuestion = () => {
 
 const nextQuestion = () => {
   if (currentIndex.value < questions.value.length - 1) currentIndex.value++;
-};
-
-const toggleFavorite = async () => {
-  if (!currentQuestion.value) return;
-  const qId = currentQuestion.value.id;
-  if (favoritedQids.value.has(qId)) {
-    await http.delete(`/api/v1/favorites/${qId}`);
-    favoritedQids.value.delete(qId);
-  } else {
-    await http.post('/api/v1/favorites', { question_id: qId });
-    favoritedQids.value.add(qId);
-  }
 };
 
 const startTimer = () => {
@@ -321,42 +299,57 @@ onUnmounted(() => {
 }
 
 .quiz-header {
-  padding: 16px 20px;
+  padding: 14px 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   background: white;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.back-btn, .fav-btn {
+.back-btn {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #64748b;
+  color: #0f172a;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
-.fav-btn.active {
-  color: #0284c7;
-}
-
-.progress-pill {
-  font-size: 13px;
+.quiz-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
   font-weight: 700;
   color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quiz-progress {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0284c7;
+  background: #f0f9ff;
+  padding: 4px 10px;
+  border-radius: 12px;
+  flex-shrink: 0;
 }
 
 .timer-pill {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   background: #e0f2fe;
   color: #0284c7;
-  padding: 4px 10px;
+  padding: 5px 10px;
   border-radius: 12px;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .timer-pill.warning {
@@ -364,16 +357,11 @@ onUnmounted(() => {
   color: #ef4444;
 }
 
-.progress-bar-bg {
-  height: 4px;
-  background: #e2e8f0;
-  width: 100%;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: #0284c7;
-  transition: width 0.3s ease;
+.practice-tag {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .question-card {
@@ -385,19 +373,19 @@ onUnmounted(() => {
   display: inline-block;
   background: #e0f2fe;
   color: #0284c7;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 6px;
-  margin-bottom: 12px;
+  padding: 5px 14px;
+  border-radius: 14px;
+  margin-bottom: 14px;
 }
 
 .q-title {
   margin: 0 0 24px;
-  font-size: 18px;
+  font-size: 21px;
   color: #0f172a;
-  line-height: 1.4;
-  font-weight: 700;
+  line-height: 1.5;
+  font-weight: 800;
 }
 
 .options-list {
@@ -408,33 +396,38 @@ onUnmounted(() => {
 
 .option-item {
   background: white;
-  border: 2px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 16px;
+  border: 2px solid #edf1f7;
+  border-radius: 20px;
+  padding: 18px 16px;
   display: flex;
   align-items: center;
   gap: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
 }
 
 .option-item.selected {
   border-color: #0284c7;
   background: #f0f9ff;
+  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.18);
 }
 
 .opt-key {
-  width: 28px;
-  height: 28px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: #f1f5f9;
+  background: #eef2f7;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 13px;
-  color: #475569;
+  font-weight: 800;
+  font-size: 16px;
+  color: #334155;
+  flex-shrink: 0;
 }
+
+.option-item.multiple .opt-key { border-radius: 12px; }
 
 .option-item.selected .opt-key {
   background: #0284c7;
@@ -442,40 +435,65 @@ onUnmounted(() => {
 }
 
 .opt-text {
-  font-size: 15px;
+  flex: 1;
+  font-size: 16px;
   color: #334155;
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.opt-check {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  flex-shrink: 0;
+}
+
+.option-item.multiple .opt-check { border-radius: 10px; }
+
+.option-item.selected .opt-check {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: white;
 }
 
 .quiz-footer {
-  padding: 16px 20px;
+  padding: 14px 20px 20px;
   background: white;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #f1f5f9;
   display: flex;
   gap: 12px;
 }
 
 .nav-btn {
   flex: 1;
-  height: 48px;
-  border-radius: 14px;
-  border: 1px solid #cbd5e1;
+  height: 54px;
+  border-radius: 18px;
+  border: 1.5px solid #e2e8f0;
   background: white;
   font-weight: 700;
-  font-size: 14px;
-  color: #475569;
+  font-size: 16px;
+  color: #334155;
   cursor: pointer;
 }
 
+.nav-btn:disabled { opacity: 0.4; }
+
 .nav-btn.primary {
-  background: #0284c7;
+  background: linear-gradient(135deg, #0284c7, #6366f1);
   color: white;
   border: none;
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.35);
 }
 
 .nav-btn.submit {
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: linear-gradient(135deg, #10b981, #14b8a6);
   color: white;
   border: none;
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.35);
 }
 </style>

@@ -333,4 +333,11 @@
 - `PUT /api/v1/admin/exams/{id}/status?status=` — 状态机：`draft→published`（需有效分类并写快照，否则400）、`published→archived`（归档冻结）、`archived→*` 一律 400
 - `DELETE /api/v1/admin/exams/{id}` — 仅 draft 零作答可删；有 submitted/timeout 作答、published、archived 一律 `400`（draft 删时顺带清理 in_progress 幽灵记录）
 - `ExamResponse` 新增 `category_name`（上架快照，分类改名/删除后展示不变）
+- `Exam.cover_url` 约定 `preset:1..5`（内置 SVG 封面，兼容旧 `/uploads/` 路径）
+- `ExamReportResponse` 新增 `total_score/pass_score`（圆环按真实总分渲染）
+
+### 3.4 首页 Banner（新增模块）
+- `GET /api/v1/admin/banners`、`POST /api/v1/admin/banners`、`PUT/DELETE /api/v1/admin/banners/{id}` — 字段 `image_url/link_type(none|external|internal)/link_value/sort_order/is_enabled`；启用超 3 张 400
+- `PUT /api/v1/admin/banners/settings` — 全局轮播秒数（2–10，默认 4）
+- `GET /api/v1/banners`（C端）— `{ interval_seconds, items[启用有序] }`
 

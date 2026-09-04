@@ -62,11 +62,13 @@ auto_patch_db_columns()
 # C端路由
 from app.api.v1.auth import router as v1_auth_router
 from app.api.v1.categories import router as v1_categories_router
+from app.api.v1.banners import router as v1_banners_router
 from app.api.v1.exams import router as v1_exams_router
 from app.api.v1.records import router as v1_records_router
 from app.api.v1.favorites import router as v1_favorites_router
 
 # B端路由
+from app.api.admin.banners import router as admin_banners_router
 from app.api.admin.admin_auth import router as admin_auth_router
 from app.api.admin.questions import router as admin_questions_router
 from app.api.admin.admin_exams import router as admin_exams_router
@@ -96,12 +98,14 @@ app.add_middleware(
 # 挂载 C端 API 路由 (/api/v1/*)
 app.include_router(v1_auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["C端认证"])
 app.include_router(v1_categories_router, prefix=f"{settings.API_V1_STR}/categories", tags=["C端分类"])
+app.include_router(v1_banners_router, prefix=f"{settings.API_V1_STR}/banners", tags=["C端Banner"])
 app.include_router(v1_exams_router, prefix=f"{settings.API_V1_STR}/exams", tags=["C端试卷"])
 app.include_router(v1_records_router, prefix=f"{settings.API_V1_STR}/records", tags=["C端答题与报告"])
 app.include_router(v1_favorites_router, prefix=f"{settings.API_V1_STR}/favorites", tags=["C端收藏"])
 
 # 挂载 B端 API 路由 (/api/v1/admin/*)
 app.include_router(admin_auth_router, prefix=f"{settings.API_V1_STR}/admin/auth", tags=["B端认证"])
+app.include_router(admin_banners_router, prefix=f"{settings.API_V1_STR}/admin/banners", tags=["B端Banner"])
 app.include_router(admin_questions_router, prefix=f"{settings.API_V1_STR}/admin/questions", tags=["B端题海管理"])
 app.include_router(admin_exams_router, prefix=f"{settings.API_V1_STR}/admin/exams", tags=["B端试卷管理"])
 app.include_router(admin_categories_router, prefix=f"{settings.API_V1_STR}/admin/categories", tags=["B端分类管理"])

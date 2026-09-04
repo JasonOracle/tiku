@@ -119,6 +119,8 @@ class PageResponse(BaseModel, Generic[T]):
 4. **导入行级分类**：按表头“分类”列逐题归入（不存在自动新建，空取第一项）；`short/fill` 预留题型跳过计数；读首工作表（`sheetnames[0]`）。
 5. **同源部署**：前后端 `baseURL: ''` 走 Nginx `/api/v1/` 代理；`vite server.proxy` 保开发；B端 401 跳 `/admin/login`；backend 重建后必须 `nginx -s reload`。
 6. **第一项口径**：分类列表 `(sort_order,id)` 双排序，前端默认与后端兜底同源。
+7. **Banner 模块**：`banners`（image/link三态/sort/enabled，上限3启用）+ `banner_settings` 单行（interval 2–10s）；C端合一接口 `{interval_seconds, items}`；1张静显、>1自播+手滑、0张回退推荐 Hero；内部跳转仅 `/` 开头。
+8. **C端 UI 改版**（效果图为准，根目录4张png）：抽公共 `TabBar.vue`（首页/个人中心）；封面 `preset:N` 双端同 key 渲染；报告圆环按真实总分。
 
 ### 2.6 原数据模型字段扩展与算法调整（历史）
 1. **ExamCategory 分类模型**：

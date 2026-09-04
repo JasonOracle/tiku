@@ -161,6 +161,28 @@
 
         <el-row :gutter="16">
           <el-col :span="24">
+            <el-form-item label="试卷封面">
+              <div class="cover-picker">
+                <div
+                  v-for="p in COVER_PRESETS"
+                  :key="p"
+                  class="cover-opt"
+                  :class="{ selected: form.cover_url === p }"
+                  @click="form.cover_url = p"
+                >
+                  <CoverArt :cover="p" width="120px" height="72px" />
+                </div>
+                <div v-if="form.cover_url && !form.cover_url.startsWith('preset:')" class="cover-opt selected">
+                  <CoverArt :cover="form.cover_url" width="120px" height="72px" />
+                  <span class="custom-tag">历史上传图</span>
+                </div>
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="24">
             <el-form-item label="及格比例">
               <div style="display: flex; align-items: center; width: 100%; gap: 16px">
                 <el-slider v-model="form.pass_percent" :min="10" :max="100" :step="5" style="flex: 1" />
@@ -269,6 +291,8 @@ import { ref, reactive, onMounted, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Delete, DataAnalysis } from '@element-plus/icons-vue';
 import request from '../../utils/request';
+import CoverArt from '../../components/CoverArt.vue';
+import { COVER_PRESETS } from '../../assets/covers/index';
 
 const loading = ref(false);
 const exams = ref<any[]>([]);
@@ -288,6 +312,7 @@ const statsData = ref<any>(null);
 const form = reactive({
   title: '',
   category_id: null as number | null,
+  cover_url: 'preset:1',
   is_timed: true,
   time_limit: 30,
   pass_percent: 60,
@@ -433,6 +458,7 @@ const openCreateDialog = () => {
   form.time_limit = 30;
   form.pass_percent = 60;
   form.status = 'draft';
+  form.cover_url = 'preset:1';
   form.is_recommended = false;
   selectedQuestions.value = [];
   poolFilter.type = '';
@@ -458,6 +484,7 @@ const openEditDialog = async (row: any) => {
   form.time_limit = row.time_limit;
   form.pass_percent = row.pass_percent || 60;
   form.status = row.status || 'draft';
+  form.cover_url = row.cover_url || 'preset:1';
   form.is_recommended = row.is_recommended;
   selectedQuestions.value = [];
   poolFilter.type = '';
@@ -492,6 +519,7 @@ const saveExam = async () => {
   const payload = {
     title: form.title,
     category_id: form.category_id,
+    cover_url: form.cover_url,
     is_timed: form.is_timed,
     time_limit: form.time_limit,
     pass_percent: form.pass_percent,
@@ -590,6 +618,36 @@ onMounted(() => {
   padding: 12px;
   border-radius: 12px;
   border: 1px dashed #cbd5e1;
+}
+
+.cover-picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cover-opt {
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 2px;
+  position: relative;
+}
+
+.cover-opt.selected {
+  border-color: #0284c7;
+  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.3);
+}
+
+.custom-tag {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  background: rgba(2, 132, 199, 0.85);
+  color: white;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 6px;
 }
 
 .pool-filter-header {

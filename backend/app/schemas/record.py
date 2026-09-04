@@ -36,6 +36,8 @@ class ExamReportResponse(BaseModel):
     user_id: int
     status: str
     score: int
+    total_score: int = 0
+    pass_score: int = 0
     passed: bool
     time_spent: int
     total_questions: int

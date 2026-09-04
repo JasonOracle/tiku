@@ -15,6 +15,7 @@
 | `2026-09-04 00:12:00` | Gemini 底层 Agent | 题目/试卷双分类 Tabs 隔离、试卷上/下架(确认框+已上架锁定+考情看板)、C端 ProfileView(SVG头像/仪表盘/Cell跳转/HistoryView)全链路闭环，后端测试 100% 通过 | **98%** |
 | `2026-09-04 00:43:00` | Gemini 底层 Agent | **模型切换交接备忘录**：已归档物理表结构修补、路由顺序Bug、题库组卷分页与C端防误交卷逻辑细节 | **99%** |
 | `2026-09-04 02:10:00` | OpenCode Agent | 数据治理全落地：分类快照category_name+删除引用拦截、题目删除拦截(仅拦上架/归档)+草稿联动重算、试卷删除三态守卫+归档终态、空卷拦截前后端、导入行级分类+short/fill跳过计数、新建默认第一项、B端baseURL同源化；看板is_passed→passed修复；pytest 18通过，MySQL实库回归通过，容器重建 | **100%** |
+| `2026-09-04 14:35:00` | OpenCode Agent | UI改版+Banner全落地：5套封面preset双端+B端单选、Banner模块(上限3/秒数可调/链接三态/C端轮播)、C端首页/答题/解析按效果图还原+公共TabBar、个人中心还原+补TabBar、report加total_score/pass_score、Profile统计加载bug修复；pytest 22通过，MySQL实库9项通过 | **100%** |
 
 
 
@@ -402,4 +403,6 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 3. 线上问题先查 Nginx 日志（旧 bundle hash 即缓存问题）与 `exam_records` 实库（幽灵记录先看 `status/score/time_spent`）。
 4. 待办 backlog：清理 root 0分历史记录（待确认）；题目内容快照（已接受风险，暂不做）；阶段四 Docker/Nginx 已上线（`D:\docker\docker-compose.yml`），后续只做重建与 reload。
 5. 测试账号：B端 `admreg / AdmReg123`；`admin / adminpassword` 不存在不要再试。
+6. UI 改版（2026-09-04 14:35 已落地）：C端三页还原 + 个人中心还原（含补 TabBar）+ 5套封面preset（B端单选）+ Banner 模块 + report 加 total_score/pass_score。效果图：根目录 首页.png/答题页.png/答案解析页.png/个人中心页.png。注意：答题页按用户新口径无环无星；效果图答案解析 Q3 答对红字按作图笔误处理（答错才红）。
+7. 已知小坑：`script setup` 内禁 `export`（封面常量抽 `assets/covers/index.ts`）；Profile 曾因 `if (res.data)` 取错解包层导致统计恒 0，已改为 `if (res)`。
 

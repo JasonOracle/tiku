@@ -35,6 +35,10 @@
           <el-icon><User /></el-icon>
           <span>用户与明细</span>
         </el-menu-item>
+        <el-menu-item index="/banners">
+          <el-icon><Picture /></el-icon>
+          <span>首页Banner</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -65,7 +69,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Document, Reading, Folder, User, SwitchButton } from '@element-plus/icons-vue';
+import { Document, Reading, Folder, User, Picture, SwitchButton } from '@element-plus/icons-vue';
 import { useUserStore } from '../../store/user';
 
 const route = useRoute();
