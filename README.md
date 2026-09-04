@@ -10,6 +10,20 @@
 
 英文版：[README.en.md](./README.en.md)
 
+## 项目展示
+
+| C端 - 首页 & 答题页 | C端 - 解析页 & 个人中心 | B端 - 题海管理 & 组卷页面 |
+| :---: | :---: | :---: |
+| <img src="./assets/img/首页截图v1.0.png" width="300" /> <br/> <img src="./assets/img/答题页截图v1.0.png" width="300" /> | <img src="./assets/img/试卷解析截图v1.0.png" width="300" /> <br/> <img src="./assets/img/个人中心截图v1.0.png" width="300" /> | <img src="./assets/img/后台题海页截图v1.0.png" width="400" /> <br/> <img src="./assets/img/后台试卷页截图v1.0.png" width="400" /> |
+
+<details>
+<summary>点击查看更多页面截图</summary>
+
+- [C端 - 历史答题页](./assets/img/历史答题页截图v1.0.png)
+- [C端 - 题目收藏页](./assets/img/题目收藏页截图v1.0.png)
+
+</details>
+
 ## 目录
 
 ```
