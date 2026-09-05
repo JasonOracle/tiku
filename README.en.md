@@ -2,6 +2,9 @@
 
 Lightweight assessment platform: mobile H5 for examinees (quiz/exam/report/favorites) + SaaS admin console (question bank, exam assembly, publish workflow, analytics) + FastAPI backend.
 
+- **GitHub**: [https://github.com/JasonOracle/tiku](https://github.com/JasonOracle/tiku)
+- **Gitee**: [https://gitee.com/jason-oracle/tiku](https://gitee.com/jason-oracle/tiku)
+
 - Backend: `backend/` — Python 3.12 + FastAPI + SQLAlchemy 2.0 + MySQL 8.0, JWT (7d, 5-min submit grace), pessimistic-lock submit, passive timeout settlement
 - Admin: `tob/` — Vue 3 + Element Plus + Pinia, built with `base: /admin/`
 - Client: `toc/` — Vue 3 H5, served at `/`

@@ -2,6 +2,9 @@
 
 轻量在线测评平台：C 端移动 H5（刷题/考试/分析报告/收藏）+ B 端 SaaS 管理后台（题库/组卷/上下架/考情看板）+ FastAPI 后端。
 
+- **GitHub**: [https://github.com/JasonOracle/tiku](https://github.com/JasonOracle/tiku)
+- **Gitee**: [https://gitee.com/jason-oracle/tiku](https://gitee.com/jason-oracle/tiku)
+
 - 后端：`backend/` — Python 3.12 + FastAPI + SQLAlchemy 2.0 + MySQL 8.0，JWT（7 天，交卷 5 分钟宽限），悲观锁防重复交卷，被动超时结算
 - B 端：`tob/` — Vue3 + Element Plus + Pinia，构建 `base: /admin/`
 - C 端：`toc/` — Vue3 H5，构建挂 `/`
