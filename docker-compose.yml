@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # ─────────── MySQL 8.0 数据库 ───────────
+  mysql8:
+    image: mysql:8.0
+    container_name: tiku_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: tiku_db
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./tiku_init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────── FastAPI 后端 ───────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tiku_backend
+    restart: always
+    environment:
+      DATABASE_URL: "mysql+pymysql://root:rootpassword@tiku_mysql:3306/tiku_db?charset=utf8mb4"
+      SECRET_KEY: "tiku_super_secret_key_2026_change_in_production"
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql8:
+        condition: service_healthy
+    volumes:
+      - ./backend/app/uploads:/app/app/uploads
+
+  # ─────────── Nginx 反向代理 + 静态托管 ───────────
+  nginx:
+    image: nginx:alpine
+    container_name: tiku_nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      # Nginx 配置文件
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # tob B端管理后台静态产物 → /usr/share/nginx/html/admin/
+      - ./tob/dist:/usr/share/nginx/html/admin:ro
+      # toc C端 H5 静态产物 → /usr/share/nginx/html/toc
+      - ./toc/dist:/usr/share/nginx/html/toc:ro
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
