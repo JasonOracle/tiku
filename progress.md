@@ -20,8 +20,9 @@
 | `2026-09-04 17:18:00` | Gemini 系列 Agent | 修复点击“开始做题”触发二次离开弹窗 Bug：首页 `startExam` 原直接带 `exam_id` 跳转，导致 `QuizView` 首次 `get` 失败触发 `router.push('/')` 被路由守卫二次拦截；现统一改为在首页调用 `POST /records/start` 获取 `record_id` 后平滑进入答题页，打包构建通过 | **100%** |
 | `2026-09-04 17:26:00` | Gemini 系列 Agent | 1. 修复点击开始做题无响应Bug：`startExam` 增加 `res?.record_id || res?.id` 防御取值；2. 对齐 `zbzn` 项目 TabBar 毛玻璃晶体规范：引入 65% 折射渐变背景、`blur(8px)`、`inset 1px 1px 0 #fff` 内高光与胶囊大圆角，新建 `TabBar.md` 文档，构建重载通过 | **100%** |
 | `2026-09-04 20:38:00` | Gemini 系列 Agent | **全量落地用户反哺高标准优化**：1. C端 `CoverArt.vue` 彻底移除背景色与渐变，纯净渲染原始 SVG 矢量图；2. Backend `/me/stats` 支持 `submitted` 与 `timeout` 答卷结算统计，修复个人中心记录为 0 的 Bug；3. B端试卷详情只读弹窗添加展开行 `type="expand"` 完整展现答案与解析；4. 答题页隐藏已收藏题目的图标；5. 新建毛玻璃 `AppModal.vue` 弹窗替代原生提示。 | **100%** |
-| `2026-09-04 21:35:00` | Gemini 3.1 Pro | **文档查漏补缺与 B 端/C 端需求同步**：1. 同步 B 端菜单层级调整（分类配置前置于题海管理）；2. 同步新建/导入题目时的“无分类阻断拦截”及必填校验；3. 同步题海列表与试卷选题的 `checkbox-group` 多选批量删除机制；4. 同步试卷题目的拖拽排序与 C 端答题 `is_random` 随机乱序机制；5. 备选题库改为模态弹窗形式。全面更新 PRD、技术规范及进度文档。 | **100%** |
-| `2026-09-04 22:55:00` | Antigravity Agent | **交接与状态冻结**：1. 彻底修复前序由于 PowerShell 双引号转义导致的 B/C 端 SVG 图片裂开/格式错误（全量改写 10 个 SVG 矢量图，杜绝任何背景色干扰）；2. `tob/src/views/exams/ExamsView.vue` 增加挂载时的 SVG 日志输出以便追踪资源；3. 实库重置默认 admin 账号密码为 `123456`；4. 开发工作流由静态 Docker Nginx 构建切换回本地 Vite 实时开发服务器（5173/5174端口），打通 HMR。 | **100%** |
+| `2026-09-04 21:35:00` | Gemini 3.1 Pro | **文档查漏补缺与 B 端/C 端需求同步**：1. 同步 B 端菜单层级调整（分类配置前置于题海管理）；2. 同步新建/导入题目时的“无分类阻断拦截”及必填校验；3. 同步题海列表与试卷选题的 `checkbox-group` 多选批量删除机制；4. 同步试卷题目的拖拽排序与 C 端答题 `is_random` 随机乱序机制；5. 备选题库改为模态弹窗形式。全面更新 PRD、技术规范及进度文档。 | **100% (v1.1)** |
+| `2026-09-04 22:55:00` | Antigravity Agent | **交接与状态冻结**：1. 彻底修复前序由于 PowerShell 双引号转义导致的 B/C 端 SVG 图片裂开/格式错误（全量改写 10 个 SVG 矢量图，杜绝任何背景色干扰）；2. `tob/src/views/exams/ExamsView.vue` 增加挂载时的 SVG 日志输出以便追踪资源；3. 实库重置默认 admin 账号密码为 `123456`；4. 开发工作流由静态 Docker Nginx 构建切换回本地 Vite 实时开发服务器（5173/5174端口），打通 HMR。 | **100% (v1.1)** |
+| `2026-09-06 16:00:00` | Antigravity Agent | **v1.2 架构规划与技术说明书定稿**：完成 v1.2 MVP 的全量产品需求与底层技术拆解。涉及：AI 平权架构、角色分离、填空/主观题引擎、AI 全权阅卷(BackgroundTasks)、前端状态注入 Copilot、防刷/防逃逸懒计算机制等。同步产出定稿的 `product.md`、`tech-spec.md` (新增实现指北)、`api-contract.md`。 | **v1.2 规划完成 100% / 开发进度 0%** |
 
 
 
@@ -311,7 +312,9 @@ volumes:
 
 ## 6. 🚨 模型无缝无死角接手指南 (Incoming Agent Protocol & Immediate Action Items)
 
-> **给新模型的提示**：请在接手后立即阅读本章节，当前项目已完成 **99%**，只剩 3 个细节 Bug / UI 优化待完成。
+> **给新模型的提示 (v1.2 接手必读)**：
+> v1.1 的基础建设已在 2026-09-04 完美收官 100%。目前项目正处于 **v1.2 AI-Native 升级阶段**（当前代码开发进度为 0%）。
+> 您接手后，**务必、绝对、必须**先通读一遍项目根目录的 `tech-spec.md` 末尾的 `4. v1.2 版本实现指北`，以及 `api-contract.md` 末尾的接口规范。所有的落地细节、防呆兜底方案都已为您准备完毕，请严格按图纸施工。
 
 ### 6.1 已修复与完成的底层改动 (Empirical Groundwork Done)
 
@@ -326,24 +329,28 @@ volumes:
 
 ---
 
-### 6.2 接手后需**立即落地**的 3 个具体任务 (Immediate Tasks)
+### 6.2 接手后需**立即落地**的任务 (v1.2 启动任务)
 
-#### 📌 任务 1: B 端试卷编辑中的备选题库区增加分页 (`tob/src/views/exams/ExamsView.vue`)
-- **现状**：组卷弹窗下方“题库备选选择区”当前一次性请求 `size: 100`。
-- **需要做**：
-  1. 在 `ExamsView.vue` 中为 `poolFilter` 添加 `page: 1, size: 10, total: 0` 分页状态。
-  2. 在 `<div class="pool-box">` 的 `<el-table>` 下方添加 `<el-pagination>` 组件。
-  3. `loadQuestionPool()` 函数改为调用 `params: { type: poolFilter.type, keyword: poolFilter.keyword, page: poolFilter.page, size: poolFilter.size }`，并将返回的 `res.total` 赋给 `poolFilter.total`。
+#### 📌 任务 1: v1.2 数据库 Schema 拓展
+- **执行目标**：根据 `tech-spec.md` 中的要求，在 `backend/app/models/` 目录中修改 ORM。
+- **动作细节**：
+  1. 给 Admin 增加 `role` 和 `daily_ai_quota`。
+  2. 给 Question 增加 `is_deleted`（支持软删）。
+  3. 给 Exam 增加 `start_time`、`end_time`、`is_ai_auto_grade`。
+  4. 给 ExamRecord 增加 `ai_grading_result`。
+  5. 增加全新的 `AuditLog` 模型。
 
-#### 📌 任务 2: C 端试卷未上架隔离 & 上架状态更新 404 修复
-- **现状 A（C 端视效隔离）**：`backend/app/api/v1/exams.py` 中的 `list_exams` 路由需要确保强制只筛选 `status == 'published'` 的试卷（除非显式传入 `status` 过滤）。
-- **现状 B（B 端上架 404）**：在 `backend/app/api/admin/admin_exams.py` 中，PUT 路由声明顺序可能导致 `/exams/{exam_id}/status` 被匹配到通用 `/exams/{exam_id}` 路由或响应 404。
-  - **解决方案**：检查 `admin_exams.py` 路由声明顺序，将 `@router.put("/{exam_id}/status")` 声明放在 `@router.put("/{exam_id}")` **之前**，或者统一后端路由路径。
+#### 📌 任务 2: 后端核心业务引擎改造
+- **执行目标**：完成填空题校验、客观题多选半对算分，以及僵尸考卷的懒计算拦截。
+- **动作细节**：参考 `tech-spec.md` Step 2 & 3，优先修改 `questions.py` 和 `exam_service.py`。
 
-#### 📌 任务 3: C 端答题拦截与未答确认警示 (`toc/src/views/quiz/QuizView.vue`)
-- **需求**：
-  1. **提交按钮**：点“提交试卷”时，统计未作答题目数（`total_questions - answered_count`）。若有未作答题目，弹窗提示：`"您还有 X 道题未作答，确定要直接交卷吗？"`。
-  2. **中途离开拦截**：使用 Vue Router 的 `onBeforeRouteLeave` 钩子，以及 `window.onbeforeunload` 监听器。若中途点返回/切换路由，弹窗警告：`"离开页面将自动提交试卷，确定要离开吗？"`。点击“确定”调用 `submitExam()` 提交并放行，点击“取消”取消跳转。
+#### 📌 任务 3: 构建后台 FastAPI 协程阅卷入口与 AI 联调
+- **执行目标**：完成 AI 全托管阅卷的 `BackgroundTasks` 分发逻辑，打通大模型 API 请求链路，但保留格式错乱的回退机制（退回至 `pending_grading`）。
+- **【极其重要】大模型接入指定**：
+  - 开发期间**必须**使用 **商汤日日新大模型 (SenseNova)**。
+  - **切勿**要求用户在 `.env` 里配置密钥。API Key 已经配置在宿主机电脑的 **用户系统环境变量** 中，在 Python 代码中直接使用 `os.getenv()` 提取即可。
+  - 接口对接文档请参阅：`https://platform.sensenova.cn/docs`
+  - *备注：等开发完了跑通了，后期再去写配置页做多模型适配。*
 
 ---
 

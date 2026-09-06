@@ -345,3 +345,40 @@
 - `PUT /api/v1/admin/banners/settings` — 全局轮播秒数（2–10，默认 4）
 - `GET /api/v1/banners`（C端）— `{ interval_seconds, items[启用有序] }`
 
+---
+
+## 4. v1.2 新增与变更 API 契约 (V1.2 Updates)
+
+### 4.1 B 端 AI 协同与出题组卷模块
+#### POST `/api/v1/admin/ai/chat` — AI Copilot 对话
+- **Request Body**:
+  ```json
+  {
+    "prompt": "[System: 待批阅10份, 余量15] 帮我总结下任务",
+    "history": []
+  }
+  ```
+- **Response 200**: 流式或完整文本返回。**后端注意**：需扣减该 Admin 的 `daily_ai_quota`，不足则返回 `403`。
+
+#### POST `/api/v1/admin/ai/generate-questions` — AI 智能出题
+- **Request Body**: `{ "topic": "消防安全", "count": 5, "type": "single" }`
+- **Response 200**: 返回生成的题目 JSON 列表，供前端弹窗二次确认。此接口需扣减个人 Token。
+
+### 4.2 阅卷大厅与主观题流转
+#### GET `/api/v1/admin/records/pending` — 阅卷大厅列表
+- **Response 200**: 获取 `status == 'pending_grading'` 的所有答卷记录。
+
+#### PUT `/api/v1/admin/records/{record_id}/grade` — 人工/AI 最终复核批改
+- **Request Body**:
+  ```json
+  {
+    "final_score": 85,
+    "teacher_comments": "回答得很棒",
+    "question_scores": [{ "question_id": 1005, "score": 15 }]
+  }
+  ```
+- **Response 200**: 将记录状态流转为 `submitted`（或 `passed`/`failed`），成绩正式对外发布。
+
+### 4.3 基础数据结构变更
+- **Exams 表单扩展**：`POST / PUT /api/v1/admin/exams` 需增加 `start_time`, `end_time` 和 `is_ai_auto_grade` (bool) 参数。时间校验逻辑（`time_limit <= end_time - start_time`）在前端和后端均需拦截。
+- **Records 交卷逻辑扩展**：交卷接口如遇主观题，则返回 `status: "pending_grading"`，而非原先的即刻结算总分。

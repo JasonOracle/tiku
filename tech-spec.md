@@ -165,4 +165,51 @@ class PageResponse(BaseModel, Generic[T]):
                      │  FastAPI 容器 (Port 8000)                 │
                      │    └── MySQL 容器 (Port 3306)              │
                      └───────────────────────────────────────────┘
+
+---
+
+## 4. v1.2 版本实现指北 (Implementation Guide for AI Developer)
+
+> **⚠️ 致接手此项目的 AI 或人类开发者**：
+> 下方是严格按照 MVP（最小可行性产品）和“AI平权”原则拆解的技术落地步骤。若遇技术瓶颈，请严格参考下方的**【平替方案/兜底逻辑】**，切勿自行增加过度复杂的设计。
+
+### Step 1: 数据库核心表结构扩展 (MySQL / SQLAlchemy)
+- **`admins` 表**：新增 `role` (enum: 'super_admin', 'admin', 'ai') 和 `daily_ai_quota` (int, default: 0)。
+  - *兜底方案*：如果不写定时任务恢复每天的额度，可直接改存 `quota_reset_date`，每次扣减前校验日期并重置。
+- **`questions` 表**：
+  - 新增 `is_deleted` (bool, default: false) 实现软删除。
+  - 修改 `answer` 字段：必须兼容 JSON 数组（供填空题使用）。
+- **`exams` 表**：新增 `start_time` (datetime), `end_time` (datetime), `is_ai_auto_grade` (bool, default: false)。
+- **`exam_records` 表**：
+  - 修改 `status` 枚举，新增 `pending_grading`（待批阅）。
+  - 新增字段 `ai_grading_result` (JSON, 存储 AI 预批改的详情与建议分数)。
+- **新增 `audit_logs` 表**：记录双域留痕（id, admin_id, action_type, before_data, after_data, created_at）。
+
+### Step 2: 题库重构与客观题/填空题引擎升级
+- **填空题多空校验**：
+  - 在 `POST /api/v1/admin/questions` 中，如果 `type == 'fill'`，后端强制执行：`question.title.count('___') == len(json.loads(question.answer))`，不等则抛 `HTTP 400`。
+- **多选题半对机制**：
+  - 修改原交卷接口 `/api/v1/records/submit` 的评分引擎。多选题的判断逻辑变为：`如果 user_answer 是 correct_answer 的真子集，得 50% 分；只要存在交集以外的元素，得 0 分`。
+
+### Step 3: 僵尸卷子“懒惰求值” (Lazy Evaluation)
+- **技术实现**：在获取 C 端试卷列表 (`GET /api/v1/exams`) 和 B 端阅卷大厅时，拦截查询前置动作。
+  - `UPDATE exam_records SET status = 'submitted' WHERE status = 'in_progress' AND now() > start_time + time_limit`。
+  - *平替方案*：绝不能用 Celery/Redis。哪怕只在 `POST /api/v1/records/submit` 被别的接口碰巧触发时清理，也比部署定时任务强。必须保持 0 运维基建。
+
+### Step 4: AI 全托管阅卷底层调度 (FastAPI BackgroundTasks)
+- **开发期指定大模型 (SenseNova)**：
+  - **重要约束**：开发期间统一使用**商汤日日新大模型 (SenseNova)**，因其免费。
+  - **凭证获取**：API Key **已配置在宿主机电脑的用户系统环境变量中**，无需在 `.env` 中强行写死，代码中直接 `os.getenv('XXX')` 读取即可。
+  - **接口文档参考**：[商汤大模型开发文档](https://platform.sensenova.cn/docs)
+- **原子化 Prompt 阅卷**：学生交卷且包含主观题时，主线程立刻返回 `200 交卷成功，批阅中`。
+- **后台协程**：使用 `fastapi.BackgroundTasks` 传入一个 `grade_exam_async` 函数。
+  - 提取该卷所有简答题和考生答案，拼凑成单次 JSON Prompt。
+  - 请求商汤日日新 API 进行阅卷。
+  - 成功则写库。如果抛出超时或解析异常，则回滚并将记录置为 `pending_grading` 抛给人工大厅。
+  - *平替方案*：如果大模型 JSON 返回一直格式错乱，可要求大模型使用最简单的 Markdown 代码块输出，后端用正则提取。
+
+### Step 5: B 端 AI Copilot 的“前端状态注入” (Preamble Injection)
+- **前端工作**：在发出 `/api/v1/admin/ai/chat` 请求时，Vue/Pinia 取出当前 Dashboard 的 `pending_count` 等数据，硬拼在用户输入的 text 前面：`[System: 待批阅10份, 余量15] 用户说: xxxx`。
+- **后端工作**：纯透传给大模型大模型接口，不涉及任何 RAG 或数据库查表。
+  - *兜底方案*：若前端状态难以抓取，就发送一个空的 `[System: 您是题库助手]`，让模型纯做泛知识问答。坚决不写复杂的 Text-to-SQL。
 ```
