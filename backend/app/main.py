@@ -1,8 +1,8 @@
 """
 [变更日志]
-修改时间：2026-09-04 00:15:00
-AI模型：Gemini 底层
-修改内容：[1. main.py 增加数据库补列防护，确保 target_type, status, pass_percent 等物理列始终存在]
+修改时间：2026-09-06 17:00:00
+AI模型：ZCode (GLM)
+修改内容：[v1.2: auto_patch 扩展 (考试时间窗/AI全托管/软删除/额度列 + audit_logs/notifications/ai_usage_logs 新表) 并挂载 v1.2 新路由]
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,50 +18,41 @@ from app.models import *  # 导入所有模型以触发自动建表
 Base.metadata.create_all(bind=engine)
 
 def auto_patch_db_columns():
-    """安全补全已有表中可能缺失的新物理列"""
+    """安全补全已有表中可能缺失的新物理列 (幂等: 列已存在时静默跳过)"""
+    patches = [
+        # ---- v1.1 历史补列 ----
+        "ALTER TABLE exam_categories ADD COLUMN target_type VARCHAR(20) NOT NULL DEFAULT 'exam'",
+        "ALTER TABLE exams ADD COLUMN pass_percent INT DEFAULT 60",
+        "ALTER TABLE exams ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE exams ADD COLUMN category_name VARCHAR(100) DEFAULT ''",
+        "ALTER TABLE exams ADD COLUMN is_random BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE questions ADD COLUMN score INT DEFAULT 10",
+        # ---- v1.2 RBAC / 题库治理 ----
+        "ALTER TABLE admins ADD COLUMN status BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE admins ADD COLUMN ai_quota_limit INT DEFAULT 0",
+        "ALTER TABLE admins ADD COLUMN daily_ai_quota INT DEFAULT 0",
+        "ALTER TABLE admins ADD COLUMN quota_reset_date DATE NULL",
+        "ALTER TABLE questions ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE questions ADD COLUMN source VARCHAR(20) DEFAULT 'manual'",
+        "ALTER TABLE questions ADD COLUMN grading_points JSON NULL",
+        # ---- v1.2 考试时间窗 / AI 全托管 / 试卷隔离 ----
+        "ALTER TABLE exams ADD COLUMN start_time DATETIME NULL",
+        "ALTER TABLE exams ADD COLUMN end_time DATETIME NULL",
+        "ALTER TABLE exams ADD COLUMN is_ai_auto_grade BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE exams ADD COLUMN creator_id INT NULL",
+        # ---- v1.2 主观题阅卷 ----
+        "ALTER TABLE exam_records ADD COLUMN ai_grading_result JSON NULL",
+        "ALTER TABLE exam_records ADD COLUMN short_scores JSON NULL",
+    ]
     try:
         with engine.connect() as conn:
-            # 补全 exam_categories.target_type
-            try:
-                conn.execute(text("ALTER TABLE exam_categories ADD COLUMN target_type VARCHAR(20) NOT NULL DEFAULT 'exam'"))
-                conn.commit()
-            except Exception:
-                pass
-
-            # 补全 exams.pass_percent 与 status
-            try:
-                conn.execute(text("ALTER TABLE exams ADD COLUMN pass_percent INT DEFAULT 60"))
-                conn.commit()
-            except Exception:
-                pass
-
-            try:
-                conn.execute(text("ALTER TABLE exams ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'draft'"))
-                conn.commit()
-            except Exception:
-                pass
-
-            # 补全 exams.category_name 快照列
-            try:
-                conn.execute(text("ALTER TABLE exams ADD COLUMN category_name VARCHAR(100) DEFAULT ''"))
-                conn.commit()
-            except Exception:
-                pass
-
-            # 补全 exams.is_random
-            try:
-                conn.execute(text("ALTER TABLE exams ADD COLUMN is_random BOOLEAN DEFAULT FALSE"))
-                conn.commit()
-            except Exception:
-                pass
-
-            # 补全 questions.score
-            try:
-                conn.execute(text("ALTER TABLE questions ADD COLUMN score INT DEFAULT 10"))
-                conn.commit()
-            except Exception:
-                pass
-    except Exception as e:
+            for ddl in patches:
+                try:
+                    conn.execute(text(ddl))
+                    conn.commit()
+                except Exception:
+                    pass  # 列已存在或 SQLite 等环境差异，静默跳过
+    except Exception:
         pass
 
 auto_patch_db_columns()
@@ -83,6 +74,11 @@ from app.api.admin.admin_exams import router as admin_exams_router
 from app.api.admin.admin_categories import router as admin_categories_router
 from app.api.admin.users import router as admin_users_router
 from app.api.admin.upload import router as admin_upload_router
+from app.api.admin.admin_grading import router as admin_grading_router
+from app.api.admin.admin_ai import router as admin_ai_router
+from app.api.admin.admin_members import router as admin_members_router
+from app.api.admin.admin_notifications import router as admin_notifications_router
+from app.api.admin.admin_audit import router as admin_audit_router
 
 
 
@@ -120,6 +116,11 @@ app.include_router(admin_exams_router, prefix=f"{settings.API_V1_STR}/admin/exam
 app.include_router(admin_categories_router, prefix=f"{settings.API_V1_STR}/admin/categories", tags=["B端分类管理"])
 app.include_router(admin_users_router, prefix=f"{settings.API_V1_STR}/admin/users", tags=["B端用户与明细"])
 app.include_router(admin_upload_router, prefix=f"{settings.API_V1_STR}/admin/upload", tags=["B端文件上传"])
+app.include_router(admin_grading_router, prefix=f"{settings.API_V1_STR}/admin/grading", tags=["B端阅卷大厅"])
+app.include_router(admin_ai_router, prefix=f"{settings.API_V1_STR}/admin/ai", tags=["B端AI员工"])
+app.include_router(admin_members_router, prefix=f"{settings.API_V1_STR}/admin/members", tags=["B端成员与额度管理"])
+app.include_router(admin_notifications_router, prefix=f"{settings.API_V1_STR}/admin/notifications", tags=["B端消息中心"])
+app.include_router(admin_audit_router, prefix=f"{settings.API_V1_STR}/admin/audit", tags=["B端审计日志"])
 
 # 挂载静态文件目录
 uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")

@@ -2,9 +2,9 @@
  * [变更日志]
  * 修改时间：2026-09-04
  * AI模型：Gemini 系列
- * 修改内容：[1. 对齐 zbzn 项目 TabBar 毛玻璃规范：使用模糊6px折射、内高光 inset 1px 1px 0 #fff 与渐变透明底色]
+ * 修改内容：[v1.2: TabBar 新增「我的测试」项 (三态过滤: 进行中/未开始/已考试)]
  */
-<!-- C端公共浮动TabBar：首页 / 个人中心 -->
+<!-- C端公共浮动TabBar：首页 / 我的测试 / 个人中心 -->
 <template>
   <footer class="tabbar">
     <button class="tab-item" :class="{ active: active === 'home' }" @click="router.push('/')">
@@ -12,6 +12,13 @@
         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
       </svg>
       <span>首页</span>
+    </button>
+    <button class="tab-item" :class="{ active: active === 'mytests' }" @click="router.push('/my-tests')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 11l3 3L22 4"></path>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+      </svg>
+      <span>我的测试</span>
     </button>
     <button class="tab-item" :class="{ active: active === 'profile' }" @click="router.push('/profile')">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -26,7 +33,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
 
-withDefaults(defineProps<{ active?: 'home' | 'profile' }>(), { active: 'home' });
+withDefaults(defineProps<{ active?: 'home' | 'mytests' | 'profile' }>(), { active: 'home' });
 const router = useRouter();
 </script>
 

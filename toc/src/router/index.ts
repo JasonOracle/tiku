@@ -48,6 +48,12 @@ const routes: Array<RouteRecordRaw> = [
     name: 'History',
     component: () => import('../views/history/HistoryView.vue'),
     meta: { title: '历史答题记录' }
+  },
+  {
+    path: '/my-tests',
+    name: 'MyTests',
+    component: () => import('../views/mytests/MyTestsView.vue'),
+    meta: { title: '我的测试' }
   }
 ];
 

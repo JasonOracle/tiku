@@ -1,8 +1,9 @@
 /**
  * [变更日志]
- * 修改时间：2026-09-04
- * AI模型：Gemini 系列
- * 修改内容：[1. 完全对齐 MBTI UI 规范：修复顶部饰条重叠Bug，选项采用纯色/刷色无边框设计; 2. 上一题/下一题移入卡片内或悬浮操作流]
+ * 修改时间：2026-09-06 22:30:00
+ * AI模型：ZCode (GLM)
+ * 修改内容：[v1.2: 新增填空题(题干___占位与输入框交替渲染)/简答题(多行文本)作答 UI;
+ *          倒计时压缩——考试限时与 end_time 硬边界取最小值, 时间到自动强制收卷]
  */
 <template>
   <div class="quiz-container" v-if="record">
@@ -17,7 +18,7 @@
       <span class="quiz-title">{{ record.exam_title || '在线测评' }}</span>
 
       <div class="header-right">
-        <div v-if="record.is_timed" class="timer-pill" :class="{ warning: remainingSeconds < 180 }">
+        <div v-if="record.is_timed || record.end_time" class="timer-pill" :class="{ warning: remainingSeconds < 180 }">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 12 16 14"></polyline>
@@ -59,8 +60,8 @@
           <p class="q-text">{{ currentQuestion.title }}</p>
         </div>
 
-        <!-- 选项列表 (无外边框，选中刷色填充) -->
-        <div class="options">
+        <!-- 客观题选项 (无外边框，选中刷色填充) -->
+        <div v-if="isObjective" class="options">
           <div
             v-for="opt in currentQuestion.options"
             :key="opt.key"
@@ -76,6 +77,33 @@
               </svg>
             </span>
           </div>
+        </div>
+
+        <!-- 填空题: 题干 ___ 占位与输入框交替渲染 -->
+        <div v-else-if="isFill" class="fill-block">
+          <div class="fill-line">
+            <template v-for="(seg, idx) in fillSegments" :key="idx">
+              <span v-if="seg" class="fill-seg">{{ seg }}</span>
+              <input
+                v-if="idx < fillSegments.length - 1"
+                v-model="fillAnswers[currentQuestion.id][idx]"
+                class="fill-input"
+                type="text"
+                placeholder="填空"
+                @input="markFillAnswered"
+              />
+            </template>
+          </div>
+        </div>
+
+        <!-- 简答题: 多行文本 -->
+        <div v-else-if="isShort" class="short-block">
+          <textarea
+            v-model="shortAnswers[currentQuestion.id]"
+            class="short-input"
+            rows="6"
+            placeholder="在此输入你的答案（主观题将由老师/AI 批阅，交卷后暂不出分）"
+          ></textarea>
         </div>
 
         <!-- 底部操作流 (包含上一题 / 下一题 / 交卷) -->
@@ -129,6 +157,9 @@ const record = ref<any>(null);
 const questions = ref<any[]>([]);
 const currentIndex = ref(0);
 const userAnswers = reactive<Record<string, string[]>>({});
+// v1.2 填空/简答作答态
+const fillAnswers = reactive<Record<string, string[]>>({});
+const shortAnswers = reactive<Record<string, string>>({});
 const remainingSeconds = ref(0);
 let timerId: any = null;
 const submitting = ref(false);
@@ -196,7 +227,23 @@ const formattedTime = computed(() => {
 const getTypeLabel = (type: string) => {
   if (type === 'single') return '单选题';
   if (type === 'multiple') return '多选题';
+  if (type === 'fill') return '填空题';
+  if (type === 'short') return '简答题';
   return '判断题';
+};
+
+const isObjective = computed(() => ['single', 'multiple', 'judge'].includes(currentQuestion.value?.type));
+const isFill = computed(() => currentQuestion.value?.type === 'fill');
+const isShort = computed(() => currentQuestion.value?.type === 'short');
+
+// 填空题: 按 ___ 切分题干, 输入框与文字段交替渲染
+const fillSegments = computed(() => {
+  if (!currentQuestion.value) return [];
+  return String(currentQuestion.value.title || '').split('___');
+});
+
+const markFillAnswered = () => {
+  // v-model 已双向绑定 fillAnswers; 此钩子预留响应式触发
 };
 
 const isOptionSelected = (key: string) => {
@@ -319,13 +366,23 @@ const executeSubmit = async () => {
   if (submitting.value || isFinished.value) return;
   submitting.value = true;
   try {
+    // 合并三类作答: 客观选项 / 填空逐空 / 简答文本
     const formattedUserAnswers: Record<string, string[]> = {};
     questions.value.forEach((q) => {
-      formattedUserAnswers[String(q.id)] = userAnswers[q.id] || [];
+      const qid = String(q.id);
+      if (q.type === 'fill') {
+        const blanks = fillAnswers[qid] || [];
+        formattedUserAnswers[qid] = blanks.map((v) => (v == null ? '' : String(v)));
+      } else if (q.type === 'short') {
+        const text = (shortAnswers[qid] || '').trim();
+        formattedUserAnswers[qid] = text ? [text] : [];
+      } else {
+        formattedUserAnswers[qid] = userAnswers[q.id] || [];
+      }
     });
 
-    const startTimeMs = startTimeForTimer.value 
-      ? new Date(startTimeForTimer.value.replace(' ', 'T')).getTime() 
+    const startTimeMs = startTimeForTimer.value
+      ? new Date(startTimeForTimer.value.replace(' ', 'T')).getTime()
       : Date.now();
     const timeSpent = Math.max(1, Math.floor((Date.now() - (isNaN(startTimeMs) ? Date.now() : startTimeMs)) / 1000));
 
@@ -336,6 +393,7 @@ const executeSubmit = async () => {
     });
 
     isFinished.value = true;
+    // 含简答题交卷 → pending 状态, 报告页呈现"批阅中"降级视图
     router.replace(`/report?record_id=${res.record_id || recordIdForSubmit.value}`);
   } catch (err: any) {
     submitting.value = false;
@@ -355,22 +413,35 @@ const executeSubmit = async () => {
 };
 
 const startTimer = () => {
-  if (!record.value || !record.value.is_timed) return;
-  const limitSeconds = (record.value.time_limit || 30) * 60;
-  
-  let elapsed = 0;
-  if (startTimeForTimer.value) {
-    const parsedStart = new Date(startTimeForTimer.value.replace(' ', 'T')).getTime();
-    if (!isNaN(parsedStart)) {
-      elapsed = Math.max(0, Math.floor((Date.now() - parsedStart) / 1000));
+  if (!record.value || (!record.value.is_timed && !record.value.end_time)) return;
+
+  // 常规限时: time_limit - 已耗时
+  let byLimit = Infinity;
+  if (record.value.is_timed) {
+    const limitSeconds = (record.value.time_limit || 30) * 60;
+    let elapsed = 0;
+    if (startTimeForTimer.value) {
+      const parsedStart = new Date(startTimeForTimer.value.replace(' ', 'T')).getTime();
+      if (!isNaN(parsedStart)) {
+        elapsed = Math.max(0, Math.floor((Date.now() - parsedStart) / 1000));
+      }
     }
+    if (elapsed >= limitSeconds) elapsed = 0;
+    byLimit = Math.max(1, limitSeconds - elapsed);
   }
 
-  if (elapsed >= limitSeconds) {
-    elapsed = 0;
+  // v1.2 时间硬边界: 距 end_time 的剩余时长 (用 server_now 校正本机时钟偏差), 取两者较小值
+  let byWindow = Infinity;
+  if (record.value.end_time) {
+    const endMs = new Date(String(record.value.end_time).replace(' ', 'T')).getTime();
+    const serverMs = record.value.server_now
+      ? new Date(String(record.value.server_now).replace(' ', 'T')).getTime()
+      : Date.now();
+    const offset = Date.now() - (isNaN(serverMs) ? Date.now() : serverMs);
+    byWindow = Math.floor((endMs - (Date.now() - offset)) / 1000);
   }
 
-  remainingSeconds.value = Math.max(1, limitSeconds - elapsed);
+  remainingSeconds.value = Math.max(1, Math.min(byLimit, byWindow));
 
   if (timerId) clearInterval(timerId);
   timerId = setInterval(() => {
@@ -379,6 +450,7 @@ const startTimer = () => {
     } else {
       clearInterval(timerId);
       timerId = null;
+      // 考试时间到: 自动强制收卷
       executeSubmit();
     }
   }, 1000);
@@ -408,6 +480,17 @@ onMounted(async () => {
     questions.value = loadedQuestions;
     recordIdForSubmit.value = startRes.record_id;
     startTimeForTimer.value = startRes.start_time;
+
+    // 初始化填空题逐空作答数组 (按题干 ___ 数量)
+    loadedQuestions.forEach((q: any) => {
+      if (q.type === 'fill') {
+        const blanks = (String(q.title || '').match(/___/g) || []).length;
+        fillAnswers[String(q.id)] = Array.from({ length: Math.max(1, blanks) }, () => '');
+      }
+      if (q.type === 'short') {
+        shortAnswers[String(q.id)] = '';
+      }
+    });
 
     loadUserFavorites();
     startTimer();
@@ -690,6 +773,69 @@ onBeforeRouteLeave((to, from, next) => {
   align-items: center;
   justify-content: center;
   color: #111111;
+}
+
+/* 填空题: 文字与输入框交替一行流式渲染 */
+.fill-block {
+  margin-bottom: 30px;
+}
+
+.fill-line {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111111;
+  line-height: 2.4;
+  word-break: break-all;
+}
+
+.fill-seg {
+  white-space: pre-wrap;
+}
+
+.fill-input {
+  display: inline-block;
+  width: 110px;
+  margin: 0 4px;
+  padding: 6px 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: center;
+  border: none;
+  border-bottom: 2.5px solid #ffce09;
+  background: #fffdf2;
+  outline: none;
+  border-radius: 6px 6px 0 0;
+}
+
+.fill-input:focus {
+  background: #fff8d6;
+}
+
+/* 简答题: 多行文本 */
+.short-block {
+  margin-bottom: 30px;
+}
+
+.short-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #0f172a;
+  line-height: 1.7;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+
+.short-input:focus {
+  border-color: #ffce09;
+  background: #fffdf2;
 }
 
 /* 底部操作区（对齐 MBTI 的左右轻量级按钮布局） */

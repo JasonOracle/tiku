@@ -48,6 +48,30 @@ const routes: Array<RouteRecordRaw> = [
         name: 'Banners',
         component: () => import('../views/banners/BannersView.vue'),
         meta: { title: '首页Banner设置' }
+      },
+      {
+        path: 'grading',
+        name: 'Grading',
+        component: () => import('../views/grading/GradingView.vue'),
+        meta: { title: '阅卷大厅' }
+      },
+      {
+        path: 'messages',
+        name: 'Messages',
+        component: () => import('../views/messages/MessagesView.vue'),
+        meta: { title: '消息中心' }
+      },
+      {
+        path: 'members',
+        name: 'Members',
+        component: () => import('../views/members/MembersView.vue'),
+        meta: { title: '成员与AI额度' }
+      },
+      {
+        path: 'audit',
+        name: 'Audit',
+        component: () => import('../views/audit/AuditView.vue'),
+        meta: { title: '审计日志' }
       }
     ]
   }

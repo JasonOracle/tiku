@@ -20,6 +20,9 @@ class AdminResponse(BaseModel):
     id: int
     username: str
     role: str
+    status: bool = True
+    ai_quota_limit: int = 0
+    daily_ai_quota: int = 0
     created_at: datetime
 
     class Config:

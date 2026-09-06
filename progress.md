@@ -23,6 +23,7 @@
 | `2026-09-04 21:35:00` | Gemini 3.1 Pro | **文档查漏补缺与 B 端/C 端需求同步**：1. 同步 B 端菜单层级调整（分类配置前置于题海管理）；2. 同步新建/导入题目时的“无分类阻断拦截”及必填校验；3. 同步题海列表与试卷选题的 `checkbox-group` 多选批量删除机制；4. 同步试卷题目的拖拽排序与 C 端答题 `is_random` 随机乱序机制；5. 备选题库改为模态弹窗形式。全面更新 PRD、技术规范及进度文档。 | **100% (v1.1)** |
 | `2026-09-04 22:55:00` | Antigravity Agent | **交接与状态冻结**：1. 彻底修复前序由于 PowerShell 双引号转义导致的 B/C 端 SVG 图片裂开/格式错误（全量改写 10 个 SVG 矢量图，杜绝任何背景色干扰）；2. `tob/src/views/exams/ExamsView.vue` 增加挂载时的 SVG 日志输出以便追踪资源；3. 实库重置默认 admin 账号密码为 `123456`；4. 开发工作流由静态 Docker Nginx 构建切换回本地 Vite 实时开发服务器（5173/5174端口），打通 HMR。 | **100% (v1.1)** |
 | `2026-09-06 16:00:00` | Antigravity Agent | **v1.2 架构规划与技术说明书定稿**：完成 v1.2 MVP 的全量产品需求与底层技术拆解。涉及：AI 平权架构、角色分离、填空/主观题引擎、AI 全权阅卷(BackgroundTasks)、前端状态注入 Copilot、防刷/防逃逸懒计算机制等。同步产出定稿的 `product.md`、`tech-spec.md` (新增实现指北)、`api-contract.md`。 | **v1.2 规划完成 100% / 开发进度 0%** |
+| `2026-09-06 18:30:00` | ZCode (GLM) | **v1.2 全栈开发 100% 落地并实库验证通过**：①数据层：admins(role/status/额度三列)/questions(is_deleted软删/source/grading_points)/exams(start_time/end_time/is_ai_auto_grade/creator_id)/exam_records(pending_grading/ai_grading_result/short_scores)+audit_logs/notifications/ai_usage_logs 三新表，auto_patch 幂等补列+tiku_init.sql 重生成(13表)；②引擎：填空题二维数组强匹配(切空格+统一大写)/多选漏选半对错选0分/简答题 pending_grading→finalize_record 终算/时间窗 ensure_exam_started+validate_exam_window(time_limit≤区间)/close_expired_window_records 惰性收卷/题目锁定防篡改(get_locked_exam_titles)+复制新题；③AI链路：SenseNova 客户端(**实测可用配置: token.sensenova.cn/v1 + sensenova-6.8-flash-lite，宿主机用户环境变量 SENSENOVA_API_KEY**)、原子Prompt单次批阅、全托管/预批改双模式、失败降级人工、AI出题(预览+batch二次确认入库)、AI组卷(强制Draft)、Copilot前端状态注入、额度资产化(主动扣个人/被动记系统/跨天惰性重置)；④RBAC：试卷按 creator_id 隔离(超管全览)、成员管理仅超管、审计双域留痕；⑤B端：阅卷大厅/消息中心(未读红点轮询)/成员与AI额度/审计日志四新页+组卷时间锁/双维状态badge/待批阅红点/AI组卷对话框/Copilot抽屉；⑥C端：TabBar新增我的测试/MyTestsView三态聚合(进行中/未开始/已考试+最新作答聚合+解析锁)/答题页填空输入框+简答文本域+end_time倒计时压缩(server_now校正)/报告页批阅中Hero+降级查看+部分得分+AI评语；⑦pytest 39项全绿(22旧口径适配+17项v1.2新用例test_v12.py)，tob/toc build通过，实库端到端真AI阅卷冒烟通过(简答按踩分点给20/40+自动发布80分及格)；⑧部署：D:\docker\docker-compose.yml backend 注入 SENSENOVA_API_KEY 透传，容器已重建，nginx 已 reload，sample_questions.xlsx 模板新增填空/简答示例与说明 | **100% (v1.2)** |
 
 
 
@@ -164,7 +165,7 @@ python -m pytest tests/ -v
 # 2. 本地启动 FastAPI 开发服务器 (Port 8000)
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
-*验证成功标准：全量 18 项集成测试全部 PASSED（`test_auth` 3 + `test_quiz_engine` 1 + `test_status_isolation` 3 + `test_governance` 10 + 健康检查）。*
+*验证成功标准：全量 39 项集成测试全部 PASSED（v1.1 存量 22 项已适配 v1.2 口径 + `test_v12.py` v1.2 新增 17 项）。*
 
 ### 3.3 B 端 SaaS 管理后台 (`tob`)
 ```bash
@@ -312,9 +313,18 @@ volumes:
 
 ## 6. 🚨 模型无缝无死角接手指南 (Incoming Agent Protocol & Immediate Action Items)
 
-> **给新模型的提示 (v1.2 接手必读)**：
-> v1.1 的基础建设已在 2026-09-04 完美收官 100%。目前项目正处于 **v1.2 AI-Native 升级阶段**（当前代码开发进度为 0%）。
-> 您接手后，**务必、绝对、必须**先通读一遍项目根目录的 `tech-spec.md` 末尾的 `4. v1.2 版本实现指北`，以及 `api-contract.md` 末尾的接口规范。所有的落地细节、防呆兜底方案都已为您准备完毕，请严格按图纸施工。
+> **给新模型的提示 (v1.2 已全量交付)**：
+> v1.2 已于 **2026-09-06 18:30 由 ZCode (GLM) 全栈开发完成并通过实库真 AI 验证**（39 项 pytest 全绿 + 实库端到端 AI 阅卷冒烟通过 + Docker 容器已重建上线）。
+> 接手后请阅读本节与 §7 治理规范，v1.2 新增业务规则见 §7.6。后续迭代请基于现状增量开发，**勿回退 v1.1 治理口径**。
+
+### 6.0 v1.2 交付清单 (2026-09-06)
+- **后端新增/改动**：
+  - 模型：`Admin`(role/status/ai_quota_limit/daily_ai_quota/quota_reset_date)、`Question`(is_deleted/source/grading_points，answer 兼容二维数组)、`Exam`(start_time/end_time/is_ai_auto_grade/creator_id)、`ExamRecord`(pending_grading 状态/ai_grading_result/short_scores)、新表 `AuditLog`/`Notification`/`AiUsageLog`。
+  - 服务：`ai_service.py`(SenseNova 客户端+JSON鲁棒提取)、`ai_grading.py`(原子Prompt批阅调度)、`quota_service.py`(额度惰性重置/扣减/系统账单)、`audit_service.py`(审计+站内信)、`exam_service.py` 重构(evaluate_submission 统一评分/最终分 finalize_record/时间窗/惰性收卷/题目锁定/填空校验)。
+  - 路由：`admin_grading.py`(阅卷大厅)、`admin_ai.py`(出题/组卷/聊天/状态)、`admin_members.py`(成员与额度，仅超管)、`admin_notifications.py`(消息中心)、`admin_audit.py`(审计，仅超管)、`admin_auth.py` 新增 GET /me、records 重构(my-tests 三桶聚合/报告降级/解析锁/续答)、admin_exams(RBAC隔离/时间锁/红点)、questions(锁定/软删/复制/batch/import支持fill与short)。
+- **B端新增页面**：`grading/GradingView.vue`(阅卷大厅)、`messages/MessagesView.vue`、`members/MembersView.vue`、`audit/AuditView.vue`、`components/AiCopilot.vue`(前端状态注入抽屉)；`ExamsView`/`QuestionsView`/`LayoutView` 大改。
+- **C端**：`mytests/MyTestsView.vue` 新页 + TabBar 三项化 + QuizView 填空/简答/倒计时压缩 + ReportView 批阅中态。
+- **大模型实测定案**：`SENSENOVA_API_KEY` 放宿主机用户环境变量；网关 `https://token.sensenova.cn/v1/chat/completions`；**模型用 `sensenova-6.8-flash-lite`**（6.7-flash-lite 无路由、deepseek-v4-flash/glm-5.2 该账号配额不足、deepseek-v4-pro 思考型不返回 content 勿用）；可用模型清单 GET /v1/models。`D:\docker\docker-compose.yml` 已透传 SENSENOVA_* 环境变量，容器重建后自动生效。
 
 ### 6.1 已修复与完成的底层改动 (Empirical Groundwork Done)
 
@@ -329,28 +339,17 @@ volumes:
 
 ---
 
-### 6.2 接手后需**立即落地**的任务 (v1.2 启动任务)
+### 6.2 v1.2 启动任务完成状态 (已于 2026-09-06 全部落地)
 
-#### 📌 任务 1: v1.2 数据库 Schema 拓展
-- **执行目标**：根据 `tech-spec.md` 中的要求，在 `backend/app/models/` 目录中修改 ORM。
-- **动作细节**：
-  1. 给 Admin 增加 `role` 和 `daily_ai_quota`。
-  2. 给 Question 增加 `is_deleted`（支持软删）。
-  3. 给 Exam 增加 `start_time`、`end_time`、`is_ai_auto_grade`。
-  4. 给 ExamRecord 增加 `ai_grading_result`。
-  5. 增加全新的 `AuditLog` 模型。
+#### ✅ 任务 1: v1.2 数据库 Schema 拓展
+- Admin 增加 `role/status/ai_quota_limit/daily_ai_quota/quota_reset_date`；Question 增加 `is_deleted/source/grading_points`；Exam 增加 `start_time/end_time/is_ai_auto_grade/creator_id`；ExamRecord 增加 `pending_grading/ai_grading_result/short_scores`；新增 `AuditLog/Notification/AiUsageLog`。`tiku_init.sql` 已重生成（13 表）。
 
-#### 📌 任务 2: 后端核心业务引擎改造
-- **执行目标**：完成填空题校验、客观题多选半对算分，以及僵尸考卷的懒计算拦截。
-- **动作细节**：参考 `tech-spec.md` Step 2 & 3，优先修改 `questions.py` 和 `exam_service.py`。
+#### ✅ 任务 2: 后端核心业务引擎改造
+- 填空题校验 `validate_fill_question`（___ 数量 == answer 二维数组长度，不合法 400）；多选半对（真子集得 `int(score/2)`）；僵尸考卷惰性收卷 `close_expired_window_records`（无 Celery/Redis，0 运维基建）。
 
-#### 📌 任务 3: 构建后台 FastAPI 协程阅卷入口与 AI 联调
-- **执行目标**：完成 AI 全托管阅卷的 `BackgroundTasks` 分发逻辑，打通大模型 API 请求链路，但保留格式错乱的回退机制（退回至 `pending_grading`）。
-- **【极其重要】大模型接入指定**：
-  - 开发期间**必须**使用 **商汤日日新大模型 (SenseNova)**。
-  - **切勿**要求用户在 `.env` 里配置密钥。API Key 已经配置在宿主机电脑的 **用户系统环境变量** 中，在 Python 代码中直接使用 `os.getenv()` 提取即可。
-  - 接口对接文档请参阅：`https://platform.sensenova.cn/docs`
-  - *备注：等开发完了跑通了，后期再去写配置页做多模型适配。*
+#### ✅ 任务 3: AI 阅卷入口与大模型联调
+- `ai_grading.run_ai_grading` 经 FastAPI `BackgroundTasks` 后台执行；单卷简答题合并单个 JSON Prompt 原子批阅；格式错乱/超时回滚置 `pending_grading` 交人工大厅（`ai_grading_result.error` 落库 + 站内信告警）。
+- **大模型接入定案（重要）**：开发期使用商汤日日新 (SenseNova)。API Key 在宿主机**用户系统环境变量** `SENSENOVA_API_KEY`，代码 `os.getenv()` 读取；`D:\docker\docker-compose.yml` 已透传至容器。实测网关与模型：`https://token.sensenova.cn/v1` + `sensenova-6.8-flash-lite`（老网关 api.sensenova.cn 返回 Forbidden 勿用）。文档：`https://platform.sensenova.cn/docs`。
 
 ---
 
@@ -405,14 +404,25 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 ### 7.5 用户确认过的取舍（勿擅自推翻）
 - 归档可否重上架：**不可**（彻底终态）。
 - 零作答归档卷可否删：**不可**。
-- 已上架卷引用的题目内容（题干/答案/分值）：**不锁定编辑**（已知历史口径漂移风险，暂接受）。
-- 题目删除口径：**B方案**（仅拦上架/归档引用）。
+- ~~已上架卷引用的题目内容（题干/答案/分值）：**不锁定编辑**~~ → **v1.2 已升级为锁定**（见 7.6）。
+- 题目删除口径：**B方案**（仅拦上架/归档引用）→ **v1.2 已升级为软删除**（见 7.6）。
+
+### 7.6 v1.2 数据治理新增规范（2026-09-06 落地，pytest 覆盖）
+1. **题目锁定防篡改**：题目被 `published/archived` 试卷引用 → 全局只读（PUT 400"只读"），唯一修改路径是 `POST /admin/questions/{id}/copy` 复制新题。**取代 v1.1 的"不锁定编辑"取舍。**
+2. **防牵连软删除**：删除题目一律 `is_deleted=1`（绝不物理删除），B端题库默认隐藏，已引用试卷仍正常拉取原题。**取代 v1.1 的"仅 draft 引用联动移除"逻辑。**
+3. **试卷创建者隔离 (RBAC)**：`exams.creator_id` 记录创建老师；普通老师只能查/改/批自己创建的试卷（403 拦截他人试卷），超管全览；`creator_id=NULL` 的历史试卷仅超管可管。题库仍全局共享。
+4. **考试时间窗**：组卷可选填 `start_time/end_time`；后端强校验 `time_limit ≤ (end-start)` 分钟；C端开考前置拦截"未开始/已结束"；倒计时 = min(限时-已耗时, 距end_time)；end_time 已过的 in_progress 记录由查询路径惰性强制收卷（无简答→submitted 计分，含简答→pending_grading）。
+5. **主观题状态机**：`in_progress → pending_grading → submitted`（含简答题交卷）；`submit` 即返回 200 不阻塞，AI 批阅走 BackgroundTasks；`is_ai_auto_grade=true` AI 批完直接 `finalize_record` 发布成绩，否则仅写 `ai_grading_result.suggestions` 供阅卷大厅"一键采信"；AI 失败写 `error` 并站内信告警，可在阅卷大厅"重新触发AI"或人工定分 `confirm` 发布。
+6. **解析锁（防泄题）**：报告接口在 `pending_grading` 或 `now ≤ end_time` 时置 `analysis_locked=true`，抹除标准答案/解析/评语；C端"查看解析"按钮同步置灰。
+7. **AI 额度资产化**：老师主动调用（出题/组卷/聊天）扣 `daily_ai_quota`（跨天首次使用惰性回满为 `ai_quota_limit`，超管可即时 refill）；学生交卷触发的被动阅卷记系统账单不扣个人额度；余额不足 400 拦截。
+8. **双域审计**：题目/试卷/成员/批阅等写操作全量落 `audit_logs`（前后快照），AI 操作 `operator_type='ai'`；审计查询仅超管。
+9. **Excel 导入 v1.2 口径**：fill 答案 `北京,北京市|京`（逗号=一空多答，竖线=分空）；short 答案列=标准答案全文，可选"踩分点"列分号分隔；无法解析行跳过计数不中断。
 
 ---
 
 ## 8. 接手检查清单（新模型第一时间执行）
 1. 读本文件 §7 治理矩阵 + §4 踩坑（尤其 4/5/6/7/8 条）。
-2. `python -m pytest tests/ -v` 确认 18 通过；`tob/toc pnpm build` 确认通过。
+2. `python -m pytest tests/ -v` 确认 39 通过；`tob/toc pnpm build` 确认通过。
 3. 线上问题先查 Nginx 日志（旧 bundle hash 即缓存问题）与 `exam_records` 实库（幽灵记录先看 `status/score/time_spent`）。
 4. 待办 backlog：清理 root 0分历史记录（待确认）；题目内容快照（已接受风险，暂不做）；阶段四 Docker/Nginx 已上线（`D:\docker\docker-compose.yml`），后续只做重建与 reload；后续开发请直接使用本地 Vite `npm run dev` 获取实时 HMR，避免被容器静态文件缓存迷惑。
 5. 测试账号：B端管理员账号为 `admin` / `123456`（已重置）。

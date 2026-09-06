@@ -382,3 +382,44 @@
 ### 4.3 基础数据结构变更
 - **Exams 表单扩展**：`POST / PUT /api/v1/admin/exams` 需增加 `start_time`, `end_time` 和 `is_ai_auto_grade` (bool) 参数。时间校验逻辑（`time_limit <= end_time - start_time`）在前端和后端均需拦截。
 - **Records 交卷逻辑扩展**：交卷接口如遇主观题，则返回 `status: "pending_grading"`，而非原先的即刻结算总分。
+
+
+---
+
+## 5. v1.2 接口契约实现定案 (2026-09-06 落地，以此为准)
+
+> 本节为 v1.2 最终实现口径。若与上文 §4 草案路径不一致，**一律以本节为准**（progress.md 同步记录）。所有响应均走统一 `ResponseModel{code, message, data}` 包装；写操作全部落 `audit_logs` 双域留痕。
+
+### 5.1 阅卷大厅 (Grading Hall)
+- **GET** `/api/v1/admin/grading/records?exam_id=&page=&size=` — 待批阅列表（进入时惰性收卷已过 end_time 的僵尸卷）。条目含 `objective_score / short_count / has_ai_suggestion / ai_error / is_ai_auto`。
+- **GET** `/api/v1/admin/grading/records/{record_id}` — 批阅详情：全卷题目 + 简答题的 `reference_answer / grading_points / ai_suggested_score / ai_comment / final_score`。
+- **POST** `/api/v1/admin/grading/records/{record_id}/confirm` — 定分发布。Body `{ "accept_ai": true }`（一键采信）或 `{ "accept_ai": false, "scores": {"<question_id>": score} }`（人工定分，需覆盖全部简答题）。终算后 `status → submitted`，`short_scores` 落库。
+- **POST** `/api/v1/admin/grading/records/{record_id}/retry-ai` — AI 失败兜底重试（重置 ai_grading_result 并重新调度 BackgroundTasks）。
+- **RBAC**：老师仅能批改自己创建（creator_id）的试卷，超管全览，越权 403。
+
+### 5.2 AI 员工 (AI Employee)
+- **GET** `/api/v1/admin/ai/status` — `{available, model, quota_remaining, quota_limit}`。
+- **POST** `/api/v1/admin/ai/questions/generate` — Body `{material, count(1-20), q_type, difficulty, category_id?}`。返回**不入库**的预览题目列表（`source: "ai"`）；扣 1 次个人额度。
+- **POST** `/api/v1/admin/questions/batch` — AI 出题二次确认入库（≤50 题，逐题校验）。
+- **POST** `/api/v1/admin/ai/exams/generate` — Body `{title?, description, specs:[{q_type,count}], category_id?, time_limit, pass_percent, start_time?, end_time?}`。优先检索共享题库，不足自动生成新题（source=ai）；**试卷强制 draft** + 站内信通知；扣额度。
+- **POST** `/api/v1/admin/ai/chat` — Copilot 透传；前端负责把状态快照拼进 message 前导；扣额度。
+
+### 5.3 成员与额度 (Super Admin only)
+- **GET/POST** `/api/v1/admin/members`，**PUT** `/api/v1/admin/members/{id}`（password/ai_quota_limit/status），**POST** `/api/v1/admin/members/{id}/refill` `{amount}`。
+- 额度规则：`daily_ai_quota`(今日余额) 跨天首次使用惰性回满为 `ai_quota_limit`；调整配置即重置今日余额；被动 AI 阅卷记系统账单不扣个人额度。
+
+### 5.4 消息中心 / 审计
+- **GET** `/api/v1/admin/notifications?unread_only=`、**GET** `.../unread-count`（侧边栏 30s 轮询红点）、**POST** `.../read` `{ids: [..]|null}`（null=全部已读）。通知类型：`grading / exam_draft / ai_error / system`。
+- **GET** `/api/v1/admin/audit?action_type=&target_type=&operator_type=&keyword=` — 审计日志（仅超管）。
+- **GET** `/api/v1/admin/auth/me` — 当前管理员信息（RBAC 菜单与额度展示依赖）。
+
+### 5.5 C 端答题流 v1.2 变更
+- **POST** `/api/v1/records/start` — 新增时间窗拦截（未开始/已结束 400）；同卷 `in_progress` 记录自动**续答**；响应新增 `end_time / server_now`（前端倒计时 = min(限时-已耗时, 距 end_time)，用 server_now 校正时钟偏差）。
+- **POST** `/api/v1/records/submit` — 含简答题时返回 `status: "pending_grading"`（`pending=true, score=0`），后台异步 AI 批阅；客观题照旧即时出分。
+- **GET** `/api/v1/records/my-tests` — "我的测试"三桶聚合 `{ongoing, upcoming, completed, server_now}`；卡片按试卷聚合 `attempts / latest_status / latest_score / my_record_id / analysis_unlocked`。
+- **GET** `/api/v1/records/{id}/report` — 新增 `pending / analysis_locked / partial_count / pending_count`；题目明细新增 `is_pending / is_partial / gained / eq_score / comment`。**解析锁**：pending 或 now≤end_time 时抹除标准答案/解析/评语（防泄题）。
+
+### 5.6 题海 v1.2 变更
+- 题型扩展 `fill / short`：fill 的 `answer` 为二维数组 `[["北京","北京市"],["京"]]`，保存强校验 `title.count("___") == len(answer)`；short 的 `answer=["标准答案全文"]` + `grading_points=["踩分点"]`。
+- **PUT** 编辑被 published/archived 卷引用的题目 → 400（全局只读）；**POST** `/{id}/copy` 复制新题；**DELETE** 改为软删除 `is_deleted=1`（已引用试卷不受影响）。
+- Excel 导入支持 fill（`a,b|c` 格式）与 short（可选"踩分点"列）。

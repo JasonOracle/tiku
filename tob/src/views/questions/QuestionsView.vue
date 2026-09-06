@@ -1,8 +1,9 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-04
- * AI模型：Gemini 底层
- * 修改内容：[1. 增加无题目分类时的强引导弹窗拦截; 2. 新建/编辑题目时所属分类设为必选项; 3. 添加 checkbox-group 复选列与批量删除功能]
+ * 修改时间：2026-09-06 21:50:00
+ * AI模型：ZCode (GLM)
+ * 修改内容：[v1.2 题海管理: 新增填空题(一空多答+___校验)/简答题(标准答案+踩分点) / ✨AI出题(预览+二次确认入库) /
+ *          题目锁定防篡改(只读+复制新题) / 防牵连软删除文案 / 来源标签(AI生成)]
 -->
 <template>
   <div class="page-card">
@@ -16,6 +17,8 @@
           <el-option label="单选题" value="single" />
           <el-option label="多选题" value="multiple" />
           <el-option label="判断题" value="judge" />
+          <el-option label="填空题" value="fill" />
+          <el-option label="简答题" value="short" />
         </el-select>
       </div>
 
@@ -28,6 +31,7 @@
         >
           <el-icon><Delete /></el-icon> 批量删除 ({{ selectedQuestionIds.length }})
         </el-button>
+        <el-button type="warning" plain class="ai-btn" @click="openAiDialog">✨ AI 出题</el-button>
         <el-button type="primary" class="primary-btn" @click="openCreateDialog">
           <el-icon><Plus /></el-icon> 新建题目
         </el-button>
@@ -52,27 +56,35 @@
           <el-tag :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="category_id" label="所属分类" width="120">
+      <el-table-column label="来源" width="90">
+        <template #default="{ row }">
+          <el-tag v-if="row.source === 'ai'" type="warning" size="small" effect="dark">AI生成</el-tag>
+          <el-tag v-else type="info" size="small" effect="plain">人工</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="category_id" label="所属分类" width="110">
         <template #default="{ row }">
           <el-tag type="info" effect="plain">{{ getCategoryName(row.category_id) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="title" label="题干" min-width="240" show-overflow-tooltip />
+      <el-table-column prop="title" label="题干" min-width="220" show-overflow-tooltip />
       <el-table-column prop="score" label="默认分值" width="90">
         <template #default="{ row }">
           <span style="font-weight: 700; color: #0284c7">{{ row.score || 10 }} 分</span>
         </template>
       </el-table-column>
-      <el-table-column prop="difficulty" label="难度" width="90">
+      <el-table-column label="锁定" width="70">
         <template #default="{ row }">
-          <el-tag effect="plain" :type="row.difficulty === 'easy' ? 'success' : row.difficulty === 'hard' ? 'danger' : 'warning'">
-            {{ getDifficultyLabel(row.difficulty) }}
-          </el-tag>
+          <el-tooltip v-if="row.locked" content="已被上架/归档试卷引用，全局只读（可复制新题）">
+            <span class="lock-icon">🔒</span>
+          </el-tooltip>
+          <span v-else style="color: #cbd5e1">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="140" fixed="right">
+      <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" text size="small" @click="openEditDialog(row)">编辑</el-button>
+          <el-button v-if="row.locked" type="warning" text size="small" @click="handleCopy(row)">复制新题</el-button>
+          <el-button v-else type="primary" text size="small" @click="openEditDialog(row)">编辑</el-button>
           <el-button type="danger" text size="small" @click="handleDelete(row.id)">删除</el-button>
         </template>
       </el-table-column>
@@ -90,7 +102,7 @@
     </div>
 
     <!-- 新建/编辑 Dialog -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="640px" destroy-on-close>
       <el-form :model="form" label-width="90px">
         <el-form-item label="所属分类" required>
           <el-select v-model="form.category_id" placeholder="请选择题目分类（必填）" style="width: 100%">
@@ -102,10 +114,14 @@
             <el-option label="单选题" value="single" />
             <el-option label="多选题" value="multiple" />
             <el-option label="判断题" value="judge" />
+            <el-option label="填空题" value="fill" />
+            <el-option label="简答题" value="short" />
           </el-select>
         </el-form-item>
         <el-form-item label="题干" required>
-          <el-input v-model="form.title" type="textarea" :rows="3" placeholder="请输入题目详细描述..." />
+          <el-input v-if="form.type === 'fill'" v-model="form.title" type="textarea" :rows="3"
+                    placeholder="题干中用三个下划线 ___ 表示空位，如：中国的首都是___，简称___" />
+          <el-input v-else v-model="form.title" type="textarea" :rows="3" placeholder="请输入题目详细描述..." />
         </el-form-item>
         <el-form-item label="默认分数" required>
           <el-input-number v-model="form.score" :min="1" :max="100" style="width: 160px" />
@@ -118,7 +134,9 @@
             <el-radio-button label="hard">困难</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="选项">
+
+        <!-- 客观题: 选项 -->
+        <el-form-item v-if="isObjective" label="选项">
           <div v-for="(opt, idx) in form.options" :key="idx" class="option-row">
             <span class="opt-key">{{ opt.key }}.</span>
             <el-input v-model="opt.text" placeholder="选项描述" />
@@ -126,9 +144,46 @@
           </div>
           <el-button type="primary" text @click="addOption">+ 添加选项</el-button>
         </el-form-item>
-        <el-form-item label="标准答案" required>
-          <el-input v-model="answerStr" placeholder="如 A 或 A,B" />
+
+        <!-- 客观题: 选项答案 -->
+        <el-form-item v-if="isObjective" label="标准答案" required>
+          <el-input v-model="answerStr" :placeholder="form.type === 'multiple' ? '多个答案用逗号分隔，如 A,B' : '如 A'" />
         </el-form-item>
+
+        <!-- 填空题: 一空多答 -->
+        <template v-if="form.type === 'fill'">
+          <el-form-item label="空位校验">
+            <el-tag :type="fillBlankCount === fillAnswers.length ? 'success' : 'danger'" size="small">
+              题干 ___ 数量：{{ fillBlankCount }} 个 / 答案空数：{{ fillAnswers.length }} 个
+              {{ fillBlankCount === fillAnswers.length && fillBlankCount > 0 ? '✓' : '（必须一致且大于0）' }}
+            </el-tag>
+          </el-form-item>
+          <el-form-item v-for="(blank, bi) in fillAnswers" :key="bi" :label="`第${bi + 1}空答案`" required>
+            <div style="width: 100%">
+              <div v-for="(ans, ai) in blank" :key="ai" class="fill-answer-row">
+                <el-input v-model="blank[ai]" placeholder="可接受答案（判卷忽略大小写与首尾空格）">
+                  <template #append>
+                    <el-button :disabled="blank.length <= 1" @click="blank.splice(ai, 1)">删</el-button>
+                  </template>
+                </el-input>
+              </div>
+              <el-button type="primary" text size="small" @click="blank.push('')">+ 该空的可接受答案</el-button>
+              <el-button type="danger" text size="small" :disabled="fillAnswers.length <= 1" @click="fillAnswers.splice(bi, 1)">删除此空</el-button>
+            </div>
+          </el-form-item>
+        </template>
+
+        <!-- 简答题: 标准答案 + 踩分点 -->
+        <template v-if="form.type === 'short'">
+          <el-form-item label="标准答案" required>
+            <el-input v-model="shortAnswer" type="textarea" :rows="3" placeholder="参考答案全文（供老师与 AI 批阅对照）" />
+          </el-form-item>
+          <el-form-item label="踩分点">
+            <el-input v-model="gradingPointsStr" type="textarea" :rows="3"
+                      placeholder="每行一个踩分点，AI 阅卷时按点给分。如：&#10;无状态协议&#10;基于TCP" />
+          </el-form-item>
+        </template>
+
         <el-form-item label="文字解析">
           <el-input v-model="form.explanation" type="textarea" :rows="2" placeholder="解析说明..." />
         </el-form-item>
@@ -139,10 +194,81 @@
       </template>
     </el-dialog>
 
+    <!-- ✨ AI 出题 Dialog -->
+    <el-dialog v-model="aiDialogVisible" title="✨ AI 出题" width="760px" top="30px" destroy-on-close>
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px"
+                title="AI 生成带「AI生成」标签的题目，必须勾选预览确认后才会入库。" />
+      <el-form label-width="90px">
+        <el-form-item label="出题材料" required>
+          <el-input v-model="aiForm.material" type="textarea" :rows="4"
+                    placeholder="粘贴一段材料文本，或直接描述需求。例如：生成5道关于Python并发编程的单选题，带详细解析，难度中等" />
+        </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="6">
+            <el-form-item label="题型">
+              <el-select v-model="aiForm.q_type" style="width: 100%">
+                <el-option label="单选" value="single" />
+                <el-option label="多选" value="multiple" />
+                <el-option label="判断" value="judge" />
+                <el-option label="填空" value="fill" />
+                <el-option label="简答" value="short" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="数量">
+              <el-input-number v-model="aiForm.count" :min="1" :max="20" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="难度">
+              <el-select v-model="aiForm.difficulty" style="width: 100%">
+                <el-option label="简单" value="easy" />
+                <el-option label="中等" value="medium" />
+                <el-option label="困难" value="hard" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <!-- 预览区 -->
+      <div v-if="aiPreview.length" class="ai-preview">
+        <el-divider content-position="left"><strong>生成结果预览（勾选后入库）</strong></el-divider>
+        <el-table :data="aiPreview" size="small" @selection-change="aiSelected = $event" max-height="320">
+          <el-table-column type="selection" width="45" />
+          <el-table-column prop="type" label="题型" width="80">
+            <template #default="{ row }">
+              <el-tag size="small" :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="题干" min-width="200" show-overflow-tooltip />
+          <el-table-column label="答案" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ formatAnswer(row) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="explanation" label="解析" min-width="140" show-overflow-tooltip />
+        </el-table>
+      </div>
+
+      <template #footer>
+        <el-button @click="aiDialogVisible = false">关闭</el-button>
+        <el-button v-if="!aiPreview.length" type="warning" :loading="aiGenerating" @click="generateQuestions">
+          {{ aiGenerating ? 'AI 生成中...' : '生成题目' }}
+        </el-button>
+        <el-button v-else type="primary" :loading="aiImporting" :disabled="aiSelected.length === 0"
+                   @click="confirmImport">
+          确认入库 ({{ aiSelected.length }})
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- Excel 批量导入 Dialog -->
-      <el-dialog v-model="importDialogVisible" title="批量导入题目" width="480px">
+      <el-dialog v-model="importDialogVisible" title="批量导入题目" width="520px">
       <div style="margin-bottom: 12px; color: #64748b; font-size: 13px">
-        分类按 Excel “分类”列逐题归入（不存在自动新建，留空归第一个分类）；short / fill 为预留题型，导入时跳过计数。
+        分类按 Excel “分类”列逐题归入（不存在自动新建，留空归第一个分类）。<br />
+        填空题答案格式：<code>北京,北京市|是</code>（逗号=一空多答，竖线=分空）；简答题“答案”列为标准答案，可选“踩分点”列用分号分隔。
       </div>
 
       <el-upload
@@ -215,10 +341,19 @@ const form = reactive({
   options: [
     { key: 'A', text: '' },
     { key: 'B', text: '' }
-  ],
-  answer: ['A'],
+  ] as Array<{ key: string; text: string }>,
+  answer: ['A'] as any[],
+  grading_points: [] as string[],
   explanation: ''
 });
+
+// 填空题编辑态: 每空一个可接受答案数组
+const fillAnswers = ref<string[][]>([['']]);
+const shortAnswer = ref('');
+const gradingPointsStr = ref('');
+
+const isObjective = computed(() => ['single', 'multiple', 'judge'].includes(form.type));
+const fillBlankCount = computed(() => (form.title.match(/___/g) || []).length);
 
 const answerStr = computed({
   get: () => form.answer.join(','),
@@ -226,6 +361,66 @@ const answerStr = computed({
     form.answer = val.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean);
   }
 });
+
+// ---- ✨ AI 出题 ----
+const aiDialogVisible = ref(false);
+const aiGenerating = ref(false);
+const aiImporting = ref(false);
+const aiForm = reactive({ material: '', count: 5, q_type: 'single', difficulty: 'medium' });
+const aiPreview = ref<any[]>([]);
+const aiSelected = ref<any[]>([]);
+
+const openAiDialog = () => {
+  if (!checkCategoryPrerequisite()) return;
+  aiPreview.value = [];
+  aiSelected.value = [];
+  aiDialogVisible.value = true;
+};
+
+const formatAnswer = (row: any) => {
+  if (row.type === 'fill') return (row.answer || []).map((b: any) => (Array.isArray(b) ? b.join('/') : b)).join(' | ');
+  if (row.type === 'short') return (row.answer || [])[0] || '';
+  return (row.answer || []).join(', ');
+};
+
+const generateQuestions = async () => {
+  if (!aiForm.material.trim()) {
+    ElMessage.error('请填写出题材料或需求描述');
+    return;
+  }
+  aiGenerating.value = true;
+  try {
+    const res: any = await request.post('/api/v1/admin/ai/questions/generate', {
+      material: aiForm.material,
+      count: aiForm.count,
+      q_type: aiForm.q_type,
+      difficulty: aiForm.difficulty,
+      category_id: firstCategoryId()
+    });
+    aiPreview.value = res.questions || [];
+    aiSelected.value = [];
+    ElMessage.success('AI 已生成，请预览勾选后入库');
+  } catch (e) {
+    /* 拦截器已提示 */
+  } finally {
+    aiGenerating.value = false;
+  }
+};
+
+const confirmImport = async () => {
+  aiImporting.value = true;
+  try {
+    const payload = aiSelected.value.map((q) => ({ ...q, category_id: firstCategoryId(), source: 'ai' }));
+    const res: any = await request.post('/api/v1/admin/questions/batch', payload);
+    ElMessage.success(res.message || '入库成功');
+    aiDialogVisible.value = false;
+    loadQuestions();
+  } catch (e) {
+    /* 拦截器已提示 */
+  } finally {
+    aiImporting.value = false;
+  }
+};
 
 const importDialogVisible = ref(false);
 const importing = ref(false);
@@ -266,12 +461,16 @@ const loadQuestions = async () => {
 const getTypeTag = (type: string) => {
   if (type === 'single') return 'primary';
   if (type === 'multiple') return 'warning';
+  if (type === 'fill') return 'success';
+  if (type === 'short') return 'danger';
   return 'info';
 };
 
 const getTypeLabel = (type: string) => {
   if (type === 'single') return '单选题';
   if (type === 'multiple') return '多选题';
+  if (type === 'fill') return '填空题';
+  if (type === 'short') return '简答题';
   return '判断题';
 };
 
@@ -301,11 +500,19 @@ const openCreateDialog = () => {
   form.category_id = firstCategoryId();
   form.options = [{ key: 'A', text: '' }, { key: 'B', text: '' }];
   form.answer = ['A'];
+  form.grading_points = [];
   form.explanation = '';
+  fillAnswers.value = [['']];
+  shortAnswer.value = '';
+  gradingPointsStr.value = '';
   dialogVisible.value = true;
 };
 
 const openEditDialog = (row: any) => {
+  if (row.locked) {
+    ElMessage.warning('该题目已被上架/归档试卷引用锁定为只读，请使用「复制新题」');
+    return;
+  }
   editingId.value = row.id;
   form.type = row.type;
   form.title = row.title;
@@ -314,8 +521,30 @@ const openEditDialog = (row: any) => {
   form.category_id = row.category_id || firstCategoryId();
   form.options = row.options || [];
   form.answer = row.answer || [];
+  form.grading_points = row.grading_points || [];
   form.explanation = row.explanation || '';
+  // 题型相关编辑态
+  if (row.type === 'fill') {
+    fillAnswers.value = (row.answer || [['']]).map((blank: any) =>
+      Array.isArray(blank) ? [...blank] : [String(blank)]
+    );
+  }
+  if (row.type === 'short') {
+    shortAnswer.value = (row.answer || [''])[0] || '';
+    gradingPointsStr.value = (row.grading_points || []).join('\n');
+  }
   dialogVisible.value = true;
+};
+
+// 锁定题目的唯一修改路径: 复制产生新题
+const handleCopy = async (row: any) => {
+  const res: any = await request.post(`/api/v1/admin/questions/${row.id}/copy`);
+  ElMessage.success('已复制为新题，可编辑副本');
+  loadQuestions();
+  if (res?.id) {
+    // 打开副本编辑
+    openEditDialog({ ...res, locked: false, options: res.options || [], answer: res.answer || [] });
+  }
 };
 
 const saveQuestion = async () => {
@@ -327,11 +556,37 @@ const saveQuestion = async () => {
     ElMessage.error('题干不能为空');
     return;
   }
+
+  const payload: any = { ...form };
+  if (form.type === 'fill') {
+    if (fillBlankCount.value !== fillAnswers.value.length) {
+      ElMessage.error(`题干 ___ 数量(${fillBlankCount.value})必须与答案空数(${fillAnswers.value.length})一致`);
+      return;
+    }
+    payload.answer = fillAnswers.value.map((blank) => blank.map((a) => a.trim()).filter(Boolean));
+    if (payload.answer.some((blank: string[]) => blank.length === 0)) {
+      ElMessage.error('每个空至少需要一个可接受答案');
+      return;
+    }
+    payload.options = [];
+    payload.grading_points = [];
+  } else if (form.type === 'short') {
+    if (!shortAnswer.value.trim()) {
+      ElMessage.error('简答题必须填写标准答案');
+      return;
+    }
+    payload.answer = [shortAnswer.value];
+    payload.grading_points = gradingPointsStr.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    payload.options = [];
+  } else {
+    payload.grading_points = [];
+  }
+
   if (editingId.value) {
-    await request.put(`/api/v1/admin/questions/${editingId.value}`, form);
+    await request.put(`/api/v1/admin/questions/${editingId.value}`, payload);
     ElMessage.success('题目已修改');
   } else {
-    await request.post('/api/v1/admin/questions', form);
+    await request.post('/api/v1/admin/questions', payload);
     ElMessage.success('题目已创建');
   }
   dialogVisible.value = false;
@@ -339,35 +594,30 @@ const saveQuestion = async () => {
 };
 
 const handleDelete = (id: number) => {
-  ElMessageBox.confirm('确定要删除该题目吗？被已上架/已归档试卷引用的题目不可删除。', '提示', { type: 'warning' }).then(async () => {
+  ElMessageBox.confirm('删除后题目将从题库隐藏，但已被试卷引用的原题仍可正常使用（防牵连软删除）。确定删除吗？', '提示', { type: 'warning' }).then(async () => {
     await request.delete(`/api/v1/admin/questions/${id}`);
-    ElMessage.success('删除成功');
+    ElMessage.success('已删除');
     loadQuestions();
   });
 };
 
 const handleBatchDelete = () => {
   if (selectedQuestionIds.value.length === 0) return;
-  ElMessageBox.confirm(`确定要批量删除已选中的 ${selectedQuestionIds.value.length} 道题目吗？`, '警告', {
+  ElMessageBox.confirm(`确定要批量删除已选中的 ${selectedQuestionIds.value.length} 道题目吗？删除后题库隐藏，已引用试卷不受影响。`, '警告', {
     confirmButtonText: '确定删除',
     cancelButtonText: '取消',
     type: 'warning'
   }).then(async () => {
     let successCount = 0;
-    let failCount = 0;
     for (const qId of selectedQuestionIds.value) {
       try {
         await request.delete(`/api/v1/admin/questions/${qId}`);
         successCount++;
       } catch (e) {
-        failCount++;
+        /* 拦截器已提示 */
       }
     }
-    if (failCount > 0) {
-      ElMessage.warning(`成功删除 ${successCount} 道题目，${failCount} 道被试卷关联的题目无法删除`);
-    } else {
-      ElMessage.success(`已成功批量删除 ${successCount} 道题目`);
-    }
+    ElMessage.success(`已删除 ${successCount} 道题目`);
     selectedQuestionIds.value = [];
     loadQuestions();
   });
@@ -390,7 +640,7 @@ const submitImport = async () => {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
     const skipped = res.skipped_count || 0;
-    ElMessage.success(`成功导入 ${res.imported_count} 道题目${skipped ? `，跳过 ${skipped} 行预留题型` : ''}`);
+    ElMessage.success(`成功导入 ${res.imported_count} 道题目${skipped ? `，跳过 ${skipped} 行无法解析的题目` : ''}`);
     importDialogVisible.value = false;
     loadQuestions();
   } finally {
@@ -450,5 +700,28 @@ onMounted(() => {
   font-weight: 700;
   color: #0284c7;
   width: 20px;
+}
+
+.fill-answer-row {
+  margin-bottom: 6px;
+}
+
+.lock-icon {
+  font-size: 16px;
+}
+
+.ai-preview {
+  margin-top: 8px;
+}
+
+.ai-btn {
+  color: #7c3aed;
+  border-color: #c4b5fd;
+}
+
+.ai-btn:hover {
+  color: #6d28d9;
+  border-color: #a78bfa;
+  background: #f5f3ff;
 }
 </style>

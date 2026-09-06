@@ -28,6 +28,10 @@ CREATE TABLE `admins` (
   `password_hash` varchar(255) NOT NULL COMMENT '密码哈希',
   `role` varchar(20) DEFAULT NULL COMMENT '角色 (super_admin, admin)',
   `created_at` datetime DEFAULT NULL COMMENT '创建时间',
+  `status` tinyint(1) DEFAULT '1',
+  `ai_quota_limit` int DEFAULT '0',
+  `daily_ai_quota` int DEFAULT '0',
+  `quota_reset_date` date DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `ix_admins_username` (`username`),
   KEY `ix_admins_id` (`id`)
@@ -40,8 +44,71 @@ CREATE TABLE `admins` (
 
 LOCK TABLES `admins` WRITE;
 /*!40000 ALTER TABLE `admins` DISABLE KEYS */;
-INSERT INTO `admins` VALUES (2,'admin','$2b$12$ssCpU0hIUIe3SAuPoqB3P.NRbq5AtRyI6G0GHikqs1f1dybhVpYaa','super_admin','2026-09-03 22:51:46'),(3,'admreg','$2b$12$W2MjuHoyKKk4xZZGzAByC.zjQoLk2By87mGUgc5slxne3wh.2DJfm','super_admin','2026-09-04 01:16:33');
+INSERT INTO `admins` VALUES (2,'admin','$2b$12$ssCpU0hIUIe3SAuPoqB3P.NRbq5AtRyI6G0GHikqs1f1dybhVpYaa','super_admin','2026-09-03 22:51:46',1,0,0,NULL),(3,'admreg','$2b$12$W2MjuHoyKKk4xZZGzAByC.zjQoLk2By87mGUgc5slxne3wh.2DJfm','super_admin','2026-09-04 01:16:33',1,0,0,NULL);
 /*!40000 ALTER TABLE `admins` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `ai_usage_logs`
+--
+
+DROP TABLE IF EXISTS `ai_usage_logs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ai_usage_logs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `admin_id` int DEFAULT NULL COMMENT '发起老师ID (null=系统业务兜底调用)',
+  `action` varchar(30) NOT NULL COMMENT '动作 (question_gen, exam_gen, chat, grading)',
+  `quota_delta` int DEFAULT NULL COMMENT '个人额度变动 (负数=扣减, 0=系统调用)',
+  `detail` json DEFAULT NULL COMMENT '调用明细 (模型/耗时/题目数等)',
+  `created_at` datetime DEFAULT NULL COMMENT '调用时间',
+  PRIMARY KEY (`id`),
+  KEY `ix_ai_usage_logs_admin_id` (`admin_id`),
+  KEY `ix_ai_usage_logs_id` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `ai_usage_logs`
+--
+
+LOCK TABLES `ai_usage_logs` WRITE;
+/*!40000 ALTER TABLE `ai_usage_logs` DISABLE KEYS */;
+/*!40000 ALTER TABLE `ai_usage_logs` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `audit_logs`
+--
+
+DROP TABLE IF EXISTS `audit_logs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `audit_logs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `admin_id` int DEFAULT NULL COMMENT '操作人ID (AI 操作时可为空)',
+  `operator_type` varchar(20) DEFAULT NULL COMMENT '操作者类型 (admin 人类, ai AI员工, system 系统)',
+  `operator_name` varchar(50) DEFAULT NULL COMMENT '操作者名称快照',
+  `action_type` varchar(50) NOT NULL COMMENT '动作类型 (create/update/delete/publish/archive/grade/generate...)',
+  `target_type` varchar(50) DEFAULT NULL COMMENT '目标对象类型 (question/exam/record/admin/quota)',
+  `target_id` int DEFAULT NULL COMMENT '目标对象ID',
+  `summary` varchar(255) DEFAULT NULL COMMENT '动作摘要 (便于列表直读)',
+  `before_data` json DEFAULT NULL COMMENT '操作前数据快照',
+  `after_data` json DEFAULT NULL COMMENT '操作后数据',
+  `created_at` datetime DEFAULT NULL COMMENT '操作时间',
+  PRIMARY KEY (`id`),
+  KEY `ix_audit_logs_id` (`id`),
+  KEY `ix_audit_logs_admin_id` (`admin_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `audit_logs`
+--
+
+LOCK TABLES `audit_logs` WRITE;
+/*!40000 ALTER TABLE `audit_logs` DISABLE KEYS */;
+/*!40000 ALTER TABLE `audit_logs` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -177,6 +244,8 @@ CREATE TABLE `exam_records` (
   `start_time` datetime DEFAULT NULL COMMENT '开始做题时间',
   `submit_time` datetime DEFAULT NULL COMMENT '提交/结算时间',
   `user_answers` json DEFAULT NULL COMMENT '用户作答答案 JSON {question_id: [''A'']}',
+  `ai_grading_result` json DEFAULT NULL,
+  `short_scores` json DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `ix_exam_records_exam_id` (`exam_id`),
   KEY `ix_exam_records_user_id` (`user_id`),
@@ -192,7 +261,7 @@ CREATE TABLE `exam_records` (
 
 LOCK TABLES `exam_records` WRITE;
 /*!40000 ALTER TABLE `exam_records` DISABLE KEYS */;
-INSERT INTO `exam_records` VALUES (1,8,1,'timeout',0,0,0,'2026-09-04 10:11:04','2026-09-04 12:06:20',NULL),(2,8,1,'timeout',0,0,0,'2026-09-04 10:11:24','2026-09-04 12:06:20',NULL),(3,8,1,'timeout',0,0,0,'2026-09-04 10:11:42','2026-09-04 12:06:20',NULL),(4,8,1,'timeout',0,0,0,'2026-09-04 10:15:43','2026-09-04 12:06:20',NULL),(5,8,1,'submitted',5,0,28807,'2026-09-04 10:25:38','2026-09-04 10:25:45','{\"16\": [\"B\"], \"17\": [\"A\"], \"18\": [\"B\"], \"19\": [\"A\"]}'),(6,8,1,'timeout',0,0,0,'2026-09-04 10:26:32','2026-09-04 12:06:20',NULL),(7,8,1,'timeout',0,0,0,'2026-09-04 10:26:47','2026-09-04 12:06:20',NULL),(8,8,1,'timeout',0,0,0,'2026-09-04 10:28:12','2026-09-04 12:06:20',NULL),(9,8,1,'timeout',0,0,0,'2026-09-04 12:06:20','2026-09-04 12:42:33',NULL),(10,8,1,'submitted',5,0,28811,'2026-09-04 12:06:31','2026-09-04 12:06:42','{\"16\": [], \"17\": [\"B\"], \"18\": [\"A\"], \"19\": [\"B\"]}'),(11,8,1,'timeout',0,0,0,'2026-09-04 12:12:50','2026-09-04 14:45:43',NULL),(12,8,1,'timeout',0,0,0,'2026-09-04 12:12:58','2026-09-04 14:45:43',NULL),(13,8,1,'timeout',0,0,0,'2026-09-04 12:14:40','2026-09-04 14:45:43',NULL),(14,8,1,'timeout',0,0,0,'2026-09-04 12:42:33','2026-09-04 14:45:43',NULL),(15,8,1,'timeout',0,0,0,'2026-09-04 12:42:37','2026-09-04 14:45:43',NULL),(16,8,1,'timeout',0,0,0,'2026-09-04 12:42:41','2026-09-04 14:45:43',NULL),(17,8,1,'submitted',5,0,28816,'2026-09-04 14:45:43','2026-09-04 14:46:00','{\"16\": [\"C\"], \"17\": [\"A\"], \"18\": [\"B\"], \"19\": [\"A\"]}');
+INSERT INTO `exam_records` VALUES (1,8,1,'timeout',0,0,0,'2026-09-04 10:11:04','2026-09-04 12:06:20',NULL,NULL,NULL),(2,8,1,'timeout',0,0,0,'2026-09-04 10:11:24','2026-09-04 12:06:20',NULL,NULL,NULL),(3,8,1,'timeout',0,0,0,'2026-09-04 10:11:42','2026-09-04 12:06:20',NULL,NULL,NULL),(4,8,1,'timeout',0,0,0,'2026-09-04 10:15:43','2026-09-04 12:06:20',NULL,NULL,NULL),(5,8,1,'submitted',5,0,28807,'2026-09-04 10:25:38','2026-09-04 10:25:45','{\"16\": [\"B\"], \"17\": [\"A\"], \"18\": [\"B\"], \"19\": [\"A\"]}',NULL,NULL),(6,8,1,'timeout',0,0,0,'2026-09-04 10:26:32','2026-09-04 12:06:20',NULL,NULL,NULL),(7,8,1,'timeout',0,0,0,'2026-09-04 10:26:47','2026-09-04 12:06:20',NULL,NULL,NULL),(8,8,1,'timeout',0,0,0,'2026-09-04 10:28:12','2026-09-04 12:06:20',NULL,NULL,NULL),(9,8,1,'timeout',0,0,0,'2026-09-04 12:06:20','2026-09-04 12:42:33',NULL,NULL,NULL),(10,8,1,'submitted',5,0,28811,'2026-09-04 12:06:31','2026-09-04 12:06:42','{\"16\": [], \"17\": [\"B\"], \"18\": [\"A\"], \"19\": [\"B\"]}',NULL,NULL),(11,8,1,'timeout',0,0,0,'2026-09-04 12:12:50','2026-09-04 14:45:43',NULL,NULL,NULL),(12,8,1,'timeout',0,0,0,'2026-09-04 12:12:58','2026-09-04 14:45:43',NULL,NULL,NULL),(13,8,1,'timeout',0,0,0,'2026-09-04 12:14:40','2026-09-04 14:45:43',NULL,NULL,NULL),(14,8,1,'timeout',0,0,0,'2026-09-04 12:42:33','2026-09-04 14:45:43',NULL,NULL,NULL),(15,8,1,'timeout',0,0,0,'2026-09-04 12:42:37','2026-09-04 14:45:43',NULL,NULL,NULL),(16,8,1,'timeout',0,0,0,'2026-09-04 12:42:41','2026-09-04 14:45:43',NULL,NULL,NULL),(17,8,1,'submitted',5,0,28816,'2026-09-04 14:45:43','2026-09-04 14:46:00','{\"16\": [\"C\"], \"17\": [\"A\"], \"18\": [\"B\"], \"19\": [\"A\"]}',NULL,NULL);
 /*!40000 ALTER TABLE `exam_records` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -218,6 +287,10 @@ CREATE TABLE `exams` (
   `status` varchar(20) NOT NULL DEFAULT 'draft' COMMENT 'çŠ¶æ€: draft, published, archived',
   `category_name` varchar(100) DEFAULT '',
   `is_random` tinyint(1) DEFAULT '0',
+  `start_time` datetime DEFAULT NULL,
+  `end_time` datetime DEFAULT NULL,
+  `is_ai_auto_grade` tinyint(1) DEFAULT '0',
+  `creator_id` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `category_id` (`category_id`),
   KEY `ix_exams_id` (`id`),
@@ -231,8 +304,39 @@ CREATE TABLE `exams` (
 
 LOCK TABLES `exams` WRITE;
 /*!40000 ALTER TABLE `exams` DISABLE KEYS */;
-INSERT INTO `exams` VALUES (1,'心理健康测评',5,'preset:1',1,30,45,27,0,'2026-09-04 10:10:51',60,'published','心理测试',0);
+INSERT INTO `exams` VALUES (1,'心理健康测评',5,'preset:1',1,30,45,27,0,'2026-09-04 10:10:51',60,'published','心理测试',0,NULL,NULL,0,NULL);
 /*!40000 ALTER TABLE `exams` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `notifications`
+--
+
+DROP TABLE IF EXISTS `notifications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `notifications` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `admin_id` int NOT NULL COMMENT '接收老师ID',
+  `title` varchar(200) NOT NULL COMMENT '通知标题',
+  `content` text COMMENT '通知正文',
+  `notif_type` varchar(30) DEFAULT NULL COMMENT '通知类型 (grading, exam_draft, ai_error, system)',
+  `link` varchar(255) DEFAULT NULL COMMENT 'B端跳转路径 (仅 /admin/ 开头)',
+  `is_read` tinyint(1) DEFAULT NULL COMMENT '是否已读',
+  `created_at` datetime DEFAULT NULL COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `ix_notifications_admin_id` (`admin_id`),
+  KEY `ix_notifications_id` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `notifications`
+--
+
+LOCK TABLES `notifications` WRITE;
+/*!40000 ALTER TABLE `notifications` DISABLE KEYS */;
+/*!40000 ALTER TABLE `notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -253,6 +357,9 @@ CREATE TABLE `questions` (
   `category_id` int DEFAULT NULL COMMENT '所属分类ID',
   `created_at` datetime DEFAULT NULL COMMENT '创建时间',
   `score` int DEFAULT '10' COMMENT 'é¢˜ç›®é»˜è®¤åˆ†å€¼',
+  `is_deleted` tinyint(1) DEFAULT '0',
+  `source` varchar(20) DEFAULT 'manual',
+  `grading_points` json DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `category_id` (`category_id`),
   KEY `ix_questions_id` (`id`),
@@ -266,7 +373,7 @@ CREATE TABLE `questions` (
 
 LOCK TABLES `questions` WRITE;
 /*!40000 ALTER TABLE `questions` DISABLE KEYS */;
-INSERT INTO `questions` VALUES (11,'single','以下哪种灭火器适合扑灭电气火灾？','[{\"key\": \"A\", \"text\": \"泡沫灭火器\"}, {\"key\": \"B\", \"text\": \"水基型灭火器\"}, {\"key\": \"C\", \"text\": \"二氧化碳灭火器\"}, {\"key\": \"D\", \"text\": \"干粉灭火器\"}]','[\"C\"]','电气火灾不能用水或泡沫，应使用二氧化碳或干粉灭火器','easy',4,'2026-09-04 10:09:29',10),(12,'single','下列哪项不属于消防四个能力建设内容？','[{\"key\": \"A\", \"text\": \"检查消除火灾隐患的能力\"}, {\"key\": \"B\", \"text\": \"扑救初期火灾的能力\"}, {\"key\": \"C\", \"text\": \"组织引导人员疏散逃生的能力\"}, {\"key\": \"D\", \"text\": \"独立扑救大型火灾的能力\"}]','[\"D\"]','四个能力不含独立扑救大型火灾','medium',4,'2026-09-04 10:09:29',10),(13,'single','发现火灾时，第一步应该做什么？','[{\"key\": \"A\", \"text\": \"立即自行扑火\"}, {\"key\": \"B\", \"text\": \"大声呼救\"}, {\"key\": \"C\", \"text\": \"拨打119报警\"}, {\"key\": \"D\", \"text\": \"先转移财物\"}]','[\"C\"]','发现火灾应第一时间拨打119报警','easy',3,'2026-09-04 10:09:29',10),(14,'single','安全出口标志灯的颜色是？','[{\"key\": \"A\", \"text\": \"红色\"}, {\"key\": \"B\", \"text\": \"黄色\"}, {\"key\": \"C\", \"text\": \"绿色\"}, {\"key\": \"D\", \"text\": \"蓝色\"}]','[\"C\"]','安全出口标志灯为绿色，便于在浓烟中识别','easy',4,'2026-09-04 10:09:29',10),(15,'multiple','以下哪些属于常见的火灾逃生自救方法（多选）？','[{\"key\": \"A\", \"text\": \"低姿态匍匐前进\"}, {\"key\": \"B\", \"text\": \"用湿毛巾捂住口鼻\"}, {\"key\": \"C\", \"text\": \"乘坐电梯逃跑\"}, {\"key\": \"D\", \"text\": \"向有光亮处爬行\"}]','[\"A\", \"B\", \"D\"]','乘坐电梯逃跑是错误的，火灾时电梯可能断电或成为烟道','medium',3,'2026-09-04 10:09:29',15),(16,'multiple','以下哪些行为可能引发火灾（多选）？','[{\"key\": \"A\", \"text\": \"在床上吸烟\"}, {\"key\": \"B\", \"text\": \"电线私拉乱接\"}, {\"key\": \"C\", \"text\": \"规范使用燃气\"}, {\"key\": \"D\", \"text\": \"长期不清理油烟机\"}]','[\"A\", \"B\", \"D\"]','在床上吸烟、私拉电线、不清理油烟机均是常见火灾隐患','easy',3,'2026-09-04 10:09:29',15),(17,'multiple','灭火的基本原理包括哪几种（多选）？','[{\"key\": \"A\", \"text\": \"冷却法降低燃烧温度\"}, {\"key\": \"B\", \"text\": \"窒息法隔绝氧气\"}, {\"key\": \"C\", \"text\": \"隔离法移除可燃物\"}, {\"key\": \"D\", \"text\": \"转移法转移财产\"}]','[\"A\", \"B\", \"C\"]','灭火三要素为冷却、窒息、隔离，转移财产不属于灭火原理','hard',2,'2026-09-04 10:09:29',20),(18,'judge','家用电器着火时，应立即用水扑灭。','[{\"key\": \"A\", \"text\": \"正确\"}, {\"key\": \"B\", \"text\": \"错误\"}]','[\"B\"]','家用电器着火应先断电，再用干粉或二氧化碳灭火器扑救，不能直接用水','easy',3,'2026-09-04 10:09:29',5),(19,'judge','在高层建筑发生火灾时，人员应向上疏散到楼顶等待救援。','[{\"key\": \"A\", \"text\": \"正确\"}, {\"key\": \"B\", \"text\": \"错误\"}]','[\"B\"]','高层火灾应向下疏散至安全出口，若下方被堵才可至楼顶等待救援','medium',3,'2026-09-04 10:09:29',5),(20,'judge','干粉灭火器在有效期内可用于扑灭固体液体气体及电气火灾。','[{\"key\": \"A\", \"text\": \"正确\"}, {\"key\": \"B\", \"text\": \"错误\"}]','[\"A\"]','干粉灭火器适用范围广，可扑灭A类B类C类及电气火灾','medium',8,'2026-09-04 10:09:29',4);
+INSERT INTO `questions` VALUES (11,'single','以下哪种灭火器适合扑灭电气火灾？','[{\"key\": \"A\", \"text\": \"泡沫灭火器\"}, {\"key\": \"B\", \"text\": \"水基型灭火器\"}, {\"key\": \"C\", \"text\": \"二氧化碳灭火器\"}, {\"key\": \"D\", \"text\": \"干粉灭火器\"}]','[\"C\"]','电气火灾不能用水或泡沫，应使用二氧化碳或干粉灭火器','easy',4,'2026-09-04 10:09:29',10,0,'manual',NULL),(12,'single','下列哪项不属于消防四个能力建设内容？','[{\"key\": \"A\", \"text\": \"检查消除火灾隐患的能力\"}, {\"key\": \"B\", \"text\": \"扑救初期火灾的能力\"}, {\"key\": \"C\", \"text\": \"组织引导人员疏散逃生的能力\"}, {\"key\": \"D\", \"text\": \"独立扑救大型火灾的能力\"}]','[\"D\"]','四个能力不含独立扑救大型火灾','medium',4,'2026-09-04 10:09:29',10,0,'manual',NULL),(13,'single','发现火灾时，第一步应该做什么？','[{\"key\": \"A\", \"text\": \"立即自行扑火\"}, {\"key\": \"B\", \"text\": \"大声呼救\"}, {\"key\": \"C\", \"text\": \"拨打119报警\"}, {\"key\": \"D\", \"text\": \"先转移财物\"}]','[\"C\"]','发现火灾应第一时间拨打119报警','easy',3,'2026-09-04 10:09:29',10,0,'manual',NULL),(14,'single','安全出口标志灯的颜色是？','[{\"key\": \"A\", \"text\": \"红色\"}, {\"key\": \"B\", \"text\": \"黄色\"}, {\"key\": \"C\", \"text\": \"绿色\"}, {\"key\": \"D\", \"text\": \"蓝色\"}]','[\"C\"]','安全出口标志灯为绿色，便于在浓烟中识别','easy',4,'2026-09-04 10:09:29',10,0,'manual',NULL),(15,'multiple','以下哪些属于常见的火灾逃生自救方法（多选）？','[{\"key\": \"A\", \"text\": \"低姿态匍匐前进\"}, {\"key\": \"B\", \"text\": \"用湿毛巾捂住口鼻\"}, {\"key\": \"C\", \"text\": \"乘坐电梯逃跑\"}, {\"key\": \"D\", \"text\": \"向有光亮处爬行\"}]','[\"A\", \"B\", \"D\"]','乘坐电梯逃跑是错误的，火灾时电梯可能断电或成为烟道','medium',3,'2026-09-04 10:09:29',15,0,'manual',NULL),(16,'multiple','以下哪些行为可能引发火灾（多选）？','[{\"key\": \"A\", \"text\": \"在床上吸烟\"}, {\"key\": \"B\", \"text\": \"电线私拉乱接\"}, {\"key\": \"C\", \"text\": \"规范使用燃气\"}, {\"key\": \"D\", \"text\": \"长期不清理油烟机\"}]','[\"A\", \"B\", \"D\"]','在床上吸烟、私拉电线、不清理油烟机均是常见火灾隐患','easy',3,'2026-09-04 10:09:29',15,0,'manual',NULL),(17,'multiple','灭火的基本原理包括哪几种（多选）？','[{\"key\": \"A\", \"text\": \"冷却法降低燃烧温度\"}, {\"key\": \"B\", \"text\": \"窒息法隔绝氧气\"}, {\"key\": \"C\", \"text\": \"隔离法移除可燃物\"}, {\"key\": \"D\", \"text\": \"转移法转移财产\"}]','[\"A\", \"B\", \"C\"]','灭火三要素为冷却、窒息、隔离，转移财产不属于灭火原理','hard',2,'2026-09-04 10:09:29',20,0,'manual',NULL),(18,'judge','家用电器着火时，应立即用水扑灭。','[{\"key\": \"A\", \"text\": \"正确\"}, {\"key\": \"B\", \"text\": \"错误\"}]','[\"B\"]','家用电器着火应先断电，再用干粉或二氧化碳灭火器扑救，不能直接用水','easy',3,'2026-09-04 10:09:29',5,0,'manual',NULL),(19,'judge','在高层建筑发生火灾时，人员应向上疏散到楼顶等待救援。','[{\"key\": \"A\", \"text\": \"正确\"}, {\"key\": \"B\", \"text\": \"错误\"}]','[\"B\"]','高层火灾应向下疏散至安全出口，若下方被堵才可至楼顶等待救援','medium',3,'2026-09-04 10:09:29',5,0,'manual',NULL),(20,'judge','干粉灭火器在有效期内可用于扑灭固体液体气体及电气火灾。','[{\"key\": \"A\", \"text\": \"正确\"}, {\"key\": \"B\", \"text\": \"错误\"}]','[\"A\"]','干粉灭火器适用范围广，可扑灭A类B类C类及电气火灾','medium',8,'2026-09-04 10:09:29',4,0,'manual',NULL);
 /*!40000 ALTER TABLE `questions` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -341,4 +448,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-09-05 15:42:27
+-- Dump completed on 2026-09-06 17:34:54

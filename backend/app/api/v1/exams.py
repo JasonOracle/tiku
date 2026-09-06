@@ -1,8 +1,8 @@
 """
 [变更日志]
-修改时间：2026-09-04 00:08:00
-AI模型：Gemini 底层
-修改内容：[1. C端试卷列表与详情强制拦截非 published 状态试卷，防未上架预览泄露]
+修改时间：2026-09-06 18:00:00
+AI模型：ZCode (GLM)
+修改内容：[v1.2: C端试卷列表/详情携带时间窗口子状态 window_status, 强制拦截非 published 试卷]
 """
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
@@ -15,7 +15,7 @@ from app.schemas.question import QuestionResponse
 from app.schemas.common import ResponseModel, PageResponse
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.services.exam_service import cleanup_expired_records
+from app.services.exam_service import cleanup_expired_records, close_expired_window_records, exam_window_status
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ def list_exams(
     size: int = Query(10, ge=1, le=100, description="每页条数"),
     db: Session = Depends(get_db)
 ):
-    """C端查询已上架试卷列表 (标准分页)"""
+    """C端查询已上架试卷列表 (标准分页, 附带时间窗口子状态)"""
     query = db.query(Exam).filter(Exam.status == "published")
     if category_id is not None:
         query = query.filter(Exam.category_id == category_id)
@@ -39,12 +39,13 @@ def list_exams(
     has_next = page < total_pages
 
     exams = query.order_by(Exam.id.desc()).offset((page - 1) * size).limit(size).all()
-    
+
     result_items = []
     for exam in exams:
         count = db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam.id).count()
         item = ExamResponse.model_validate(exam)
         item.question_count = count
+        item.window_status = exam_window_status(exam)
         result_items.append(item)
 
     return ResponseModel(
@@ -61,13 +62,14 @@ def list_exams(
 
 @router.get("/{exam_id}", response_model=ResponseModel[ExamDetailResponse])
 def get_exam_detail(
-    exam_id: int, 
+    exam_id: int,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
     """C端获取试卷详情 (限制仅 published 状态)"""
     if current_user:
         cleanup_expired_records(db, current_user.id)
+        close_expired_window_records(db, user_id=current_user.id)
 
     exam = db.query(Exam).filter(Exam.id == exam_id, Exam.status == "published").first()
     if not exam:
@@ -75,7 +77,7 @@ def get_exam_detail(
 
 
     exam_questions = db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam_id).order_by(ExamQuestion.sort_order).all()
-    
+
     questions = []
     for eq in exam_questions:
         q = db.query(Question).filter(Question.id == eq.question_id).first()
@@ -84,6 +86,7 @@ def get_exam_detail(
 
     detail = ExamDetailResponse.model_validate(exam)
     detail.question_count = len(questions)
+    detail.window_status = exam_window_status(exam)
     detail.questions = questions
 
     return ResponseModel(code=200, data=detail)

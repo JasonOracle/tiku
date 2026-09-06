@@ -170,6 +170,13 @@ class PageResponse(BaseModel, Generic[T]):
 
 ## 4. v1.2 版本实现指北 (Implementation Guide for AI Developer)
 
+> **✅ v1.2 已于 2026-09-06 全量落地（ZCode GLM）**：下方 Step 1–5 全部实现并通过 39 项 pytest 与实库真 AI 阅卷验证。接手者请以下方【落地实况】为准，并同步阅读 `progress.md` §6.0/§7.6。
+>
+> **【落地实况 · 大模型接入定案】**
+> - API Key：宿主机用户系统环境变量 `SENSENOVA_API_KEY`，代码 `os.getenv()` 读取；`D:\docker\docker-compose.yml` 已透传 `SENSENOVA_*` 至容器。
+> - **网关与模型（实测有效）**：`https://token.sensenova.cn/v1/chat/completions` + `sensenova-6.8-flash-lite`（免费档）。老网关 `api.sensenova.cn` 会返回 Forbidden；`sensenova-6.7-flash-lite` 无路由；`deepseek-v4-flash/glm-5.2` 免费档配额不足；`deepseek-v4-pro` 为思考型（content 为空）勿用作阅卷。可用模型清单：`GET /v1/models`。
+> - 兜底实测有效：模型输出 markdown 代码块/多余文字时，`ai_service.extract_json` 可鲁棒提取 JSON。
+
 > **⚠️ 致接手此项目的 AI 或人类开发者**：
 > 下方是严格按照 MVP（最小可行性产品）和“AI平权”原则拆解的技术落地步骤。若遇技术瓶颈，请严格参考下方的**【平替方案/兜底逻辑】**，切勿自行增加过度复杂的设计。
 

@@ -1,8 +1,8 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-04
- * AI模型：Gemini 系列
- * 修改内容：[1. 替换自定义 header 为统一 NavBar 组件，修复返回跳转至首页的 Bug，改为返回上一页]
+ * 修改时间：2026-09-06 22:40:00
+ * AI模型：ZCode (GLM)
+ * 修改内容：[v1.2: 报告页支持待批阅状态(圆环变"批阅中"提示)/降级查看(锁答案与解析)/多选半对"部分得分"标签/简答题AI评语展示]
 -->
 <template>
   <div class="report-container" v-if="report">
@@ -11,45 +11,62 @@
 
     <!-- 得分与合格指示卡片 -->
     <section class="score-card">
-      <div class="score-circle">
-        <svg width="170" height="170" viewBox="0 0 170 170">
-          <defs>
-            <linearGradient id="ring-grad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#34d399" />
-              <stop offset="1" stop-color="#10b981" />
-            </linearGradient>
-          </defs>
-          <circle cx="85" cy="85" r="68" fill="none" stroke="#e8f5ef" stroke-width="14" />
-          <circle
-            cx="85"
-            cy="85"
-            r="68"
-            fill="none"
-            :stroke="report.passed ? 'url(#ring-grad)' : '#ef4444'"
-            stroke-width="14"
-            stroke-dasharray="427"
-            :stroke-dashoffset="ringOffset"
-            stroke-linecap="round"
-            transform="rotate(-90 85 85)"
-          />
-          <circle cx="85" cy="17" r="7" :fill="report.passed ? '#10b981' : '#ef4444'" />
-        </svg>
-        <div class="score-inner">
-          <div><span class="score-num">{{ report.score }}</span><span class="score-label">分</span></div>
-          <span class="score-total">总分 {{ ringTotal }}</span>
+      <!-- 待批阅态: 圆环中心显示批阅提示 -->
+      <template v-if="report.pending">
+        <div class="grading-hero">
+          <div class="grading-icon">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+          </div>
+          <div class="grading-title">批阅中</div>
+          <div class="grading-desc">
+            本卷包含 {{ report.pending_count }} 道简答题，正在由老师/AI 批阅，成绩发布后可查看完整解析。
+          </div>
         </div>
-      </div>
+      </template>
+      <template v-else>
+        <div class="score-circle">
+          <svg width="170" height="170" viewBox="0 0 170 170">
+            <defs>
+              <linearGradient id="ring-grad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#34d399" />
+                <stop offset="1" stop-color="#10b981" />
+              </linearGradient>
+            </defs>
+            <circle cx="85" cy="85" r="68" fill="none" stroke="#e8f5ef" stroke-width="14" />
+            <circle
+              cx="85"
+              cy="85"
+              r="68"
+              fill="none"
+              :stroke="report.passed ? 'url(#ring-grad)' : '#ef4444'"
+              stroke-width="14"
+              stroke-dasharray="427"
+              :stroke-dashoffset="ringOffset"
+              stroke-linecap="round"
+              transform="rotate(-90 85 85)"
+            />
+            <circle cx="85" cy="17" r="7" :fill="report.passed ? '#10b981' : '#ef4444'" />
+          </svg>
+          <div class="score-inner">
+            <div><span class="score-num">{{ report.score }}</span><span class="score-label">分</span></div>
+            <span class="score-total">总分 {{ ringTotal }}</span>
+          </div>
+        </div>
 
-      <div class="pass-badge" :class="{ passed: report.passed }">
-        <svg v-if="report.passed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        {{ report.passed ? '考核通过' : '未达到及格线' }}
-      </div>
+        <div class="pass-badge" :class="{ passed: report.passed }">
+          <svg v-if="report.passed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          {{ report.passed ? '考核通过' : '未达到及格线' }}
+        </div>
+      </template>
     </section>
 
-    <!-- 统计三元卡片 -->
-    <section class="stats-grid">
+    <!-- 统计三元卡片 (批阅中隐藏) -->
+    <section class="stats-grid" v-if="!report.pending">
       <div class="stat-box">
         <span class="stat-icon ok">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -75,27 +92,40 @@
 
     <!-- 题目解析明细列表 -->
     <main class="analysis-section">
-      <h3 class="sec-title">题目答题明细与解析</h3>
+      <h3 class="sec-title">{{ report.analysis_locked ? '我的作答明细（解析暂未开放）' : '题目答题明细与解析' }}</h3>
 
       <div v-for="(item, idx) in report.questions_analysis" :key="idx" class="analysis-card">
         <div class="card-head">
           <span class="q-num">Q{{ Number(idx) + 1 }}</span>
-          <span class="status-tag" :class="{ correct: item.is_correct }">
-            {{ item.is_correct ? '正确' : '错误' }}
+          <span
+            class="status-tag"
+            :class="{ correct: item.is_correct === true, partial: item.is_partial, grading: item.is_pending }"
+          >
+            {{ item.is_pending ? '批阅中' : item.is_correct === true ? '正确' : item.is_partial ? '部分得分' : '错误' }}
           </span>
         </div>
 
         <h4 class="q-text">{{ item.question.title }}</h4>
 
         <div class="ans-comparison">
-          <div class="ans-box user" :class="{ wrong: !item.is_correct }">
+          <div class="ans-box user" :class="{ wrong: item.is_correct === false }">
             <span class="lbl">你的答案</span>
             <span class="val">{{ item.user_answer.length ? item.user_answer.join(', ') : '未作答' }}</span>
           </div>
           <div class="ans-box correct">
             <span class="lbl">正确答案</span>
-            <span class="val">{{ item.correct_answer.join(', ') }}</span>
+            <span class="val" v-if="!report.analysis_locked">{{ formatCorrect(item.correct_answer) }}</span>
+            <span class="val locked" v-else>考试结束后开放</span>
           </div>
+        </div>
+
+        <div v-if="!report.pending" class="score-line">
+          本题得分：<strong :style="{ color: item.gained > 0 ? '#16a34a' : '#e11d48' }">{{ item.gained }}</strong> / {{ item.eq_score }} 分
+        </div>
+
+        <div v-if="item.comment" class="comment-box">
+          <span class="comment-title">批改评语：</span>
+          <p class="comment-text">{{ item.comment }}</p>
         </div>
 
         <div v-if="item.question.explanation" class="explanation-box">
@@ -132,6 +162,15 @@ const ringOffset = computed(() => {
   const ratio = Math.min(Math.max(report.value.score / ringTotal.value, 0), 1);
   return 427 - 427 * ratio;
 });
+
+// 填空/简答题的正确答案结构化展示 (填空二维数组按空分组)
+const formatCorrect = (ans: any) => {
+  if (!Array.isArray(ans)) return String(ans ?? '');
+  if (ans.length && Array.isArray(ans[0])) {
+    return ans.map((blank: any, i: number) => `第${i + 1}空: ${blank.join(' / ')}`).join('；');
+  }
+  return ans.join(', ');
+};
 
 onMounted(async () => {
   const recordId = route.query.record_id;
@@ -225,6 +264,42 @@ onMounted(async () => {
   background: #dcfce7;
   color: #15803d;
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.18);
+}
+
+/* 批阅中 Hero */
+.grading-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0 4px;
+}
+
+.grading-icon {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #b45309;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  box-shadow: 0 8px 20px rgba(180, 83, 9, 0.15);
+}
+
+.grading-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #92400e;
+}
+
+.grading-desc {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.7;
+  text-align: center;
+  padding: 0 16px;
 }
 
 .stats-grid {
@@ -325,6 +400,47 @@ onMounted(async () => {
 .status-tag.correct {
   background: #dcfce7;
   color: #15803d;
+}
+
+.status-tag.partial {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.status-tag.grading {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.score-line {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+
+.comment-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.comment-title {
+  font-weight: 800;
+  color: #b45309;
+}
+
+.comment-text {
+  margin: 4px 0 0;
+  color: #92400e;
+  line-height: 1.55;
+}
+
+.ans-box.correct .val.locked {
+  color: #94a3b8;
+  font-weight: 600;
 }
 
 .q-text {

@@ -2,11 +2,24 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_password_hash, verify_password, create_access_token
+from app.api.deps import get_current_admin
 from app.models.user import Admin
 from app.schemas.auth import RegisterRequest, LoginRequest, AdminResponse, TokenResponse
 from app.schemas.common import ResponseModel
 
 router = APIRouter()
+
+@router.get("/me", response_model=ResponseModel[AdminResponse])
+def get_admin_profile(
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """B端当前管理员信息 (含角色与今日 AI 额度余额, 前端 RBAC 菜单与额度展示依赖)"""
+    from app.services.quota_service import refresh_daily_quota
+    refresh_daily_quota(admin)
+    db.commit()
+    return ResponseModel(code=200, data=admin)
+
 
 @router.post("/login", response_model=ResponseModel[TokenResponse])
 def login_admin(data: LoginRequest, db: Session = Depends(get_db)):
@@ -14,6 +27,8 @@ def login_admin(data: LoginRequest, db: Session = Depends(get_db)):
     admin = db.query(Admin).filter(Admin.username == data.username).first()
     if not admin or not verify_password(data.password, admin.password_hash):
         raise HTTPException(status_code=400, detail="管理员账号或密码错误")
+    if not admin.status:
+        raise HTTPException(status_code=403, detail="该账号已被禁用，请联系超级管理员")
 
     token = create_access_token(subject=admin.id, user_type="admin")
     return ResponseModel(

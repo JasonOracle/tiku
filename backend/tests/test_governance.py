@@ -36,14 +36,26 @@ def test_delete_category_in_use_blocked(client):
     assert r2.status_code == 400
 
 
-def test_delete_question_blocked_by_published(client):
+def test_delete_question_soft_delete_with_published_ref(client):
+    """v1.2 防牵连软删除: 被上架卷引用的题目允许软删除, 已引用试卷仍可拉取原题, 且题目进入只读"""
     ah, uh, qcat, ecat, q = _setup(client)
-    _make_exam(client, ah, ecat["id"], [q["id"]], status="published", title="上架卷")
+    exam = _make_exam(client, ah, ecat["id"], [q["id"]], status="published", title="上架卷")
+    # 软删除成功 (不再物理拦截)
     r = client.delete(f"/api/v1/admin/questions/{q['id']}", headers=ah)
-    assert r.status_code == 400
+    assert r.status_code == 200
+    # B端题库列表不再展示
+    lst = client.get("/api/v1/admin/questions", headers=ah).json()["data"]
+    assert all(item["id"] != q["id"] for item in lst["items"])
+    # 防牵连: 已引用的试卷依然能正常拉取到原题
+    det = client.get(f"/api/v1/admin/exams/{exam['id']}", headers=ah).json()["data"]
+    assert len(det["questions"]) == 1
+    # 编辑被删/锁定题目被拦
+    r2 = client.put(f"/api/v1/admin/questions/{q['id']}", json={"title": "改?"}, headers=ah)
+    assert r2.status_code == 400
 
 
-def test_delete_question_draft_only_unlinks_and_recalcs(client):
+def test_delete_question_soft_delete_keeps_draft_reference(client):
+    """v1.2 软删除: 草稿卷引用的题目软删后引用保留, 总分不变"""
     ah, uh, qcat, ecat, q = _setup(client)
     q2 = client.post("/api/v1/admin/questions", json={
         "type": "single", "title": "第二题?", "options": [{"key": "A", "text": "a"}],
@@ -54,8 +66,8 @@ def test_delete_question_draft_only_unlinks_and_recalcs(client):
     r = client.delete(f"/api/v1/admin/questions/{q['id']}", headers=ah)
     assert r.status_code == 200
     det = client.get(f"/api/v1/admin/exams/{ex['id']}", headers=ah).json()["data"]
-    assert len(det["questions"]) == 1
-    assert det["total_score"] == 20
+    assert len(det["questions"]) == 2
+    assert det["total_score"] == 30
 
 
 def test_delete_exam_guards(client):
@@ -134,16 +146,24 @@ def test_import_legacy_no_category_col_falls_back(client):
     assert lst and lst[0]["category_id"] == qcat["id"]
 
 
-def test_import_skips_unsupported_types(client):
+def test_import_supports_fill_and_short_skips_unknown(client):
+    """v1.2: 导入支持 fill (一空多答 "a,b|c") 与 short (踩分点列), 未知题型跳过计数"""
     ah, uh, qcat, ecat, q = _setup(client)
-    buf = _xlsx_bytes(HDR, [
-        ["short", "简答题?", "", "", "", "", "略", "", "中等", 10, ""],
+    hdr = HDR + ["踩分点"]
+    buf = _xlsx_bytes(hdr, [
+        ["fill", "中国的首都是___，简称___。", "", "", "", "", "北京,北京市|京", "", "中等", 10, ""],
+        ["short", "简述HTTP协议特点。", "", "", "", "", "无状态等", "这是解析", "中等", 10, "", "无状态;基于TCP"],
+        ["compound", "未知题型?", "", "", "", "", "A", "", "中等", 10, ""],
         ["single", "正常题?", "a", "b", "", "", "A", "", "中等", 10, ""],
     ])
     r = client.post("/api/v1/admin/questions/import", files={"file": ("t.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}, headers=ah)
     assert r.status_code == 200
-    assert r.json()["data"]["imported_count"] == 1
-    assert r.json()["data"].get("skipped_count", 0) == 1
+    assert r.json()["data"]["imported_count"] == 3
+    assert r.json()["data"]["skipped_count"] == 1
+    fill_q = client.get("/api/v1/admin/questions?keyword=中国的首都", headers=ah).json()["data"]["items"]
+    assert fill_q and fill_q[0]["answer"] == [["北京", "北京市"], ["京"]]
+    short_q = client.get("/api/v1/admin/questions?keyword=HTTP", headers=ah).json()["data"]["items"]
+    assert short_q and short_q[0]["grading_points"] == ["无状态", "基于TCP"]
 
 
 def test_publish_snapshots_category_name(client):
