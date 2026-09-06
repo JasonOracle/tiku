@@ -1,9 +1,9 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-06 21:50:00
+ * 修改时间：2026-09-06 22:30:00
  * AI模型：ZCode (GLM)
- * 修改内容：[v1.2 题海管理: 新增填空题(一空多答+___校验)/简答题(标准答案+踩分点) / ✨AI出题(预览+二次确认入库) /
- *          题目锁定防篡改(只读+复制新题) / 防牵连软删除文案 / 来源标签(AI生成)]
+ * 修改内容：[v1.5 AI出题体验: 单次生成上限10道(数量输入/后端双重限制)+顶部红色提示+材料指定数量优先 + 生成中全弹窗loading("AI生成中，请稍候") /
+ *          v1.2 题海管理: 填空/简答题 / ✨AI出题(预览+二次确认入库) / 题目锁定防篡改 / 来源标签(AI生成)]
 -->
 <template>
   <div class="page-card">
@@ -196,70 +196,74 @@
 
     <!-- ✨ AI 出题 Dialog -->
     <el-dialog v-model="aiDialogVisible" title="✨ AI 出题" width="760px" top="30px" destroy-on-close>
-      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px"
-                title="AI 生成带「AI生成」标签的题目，必须勾选预览确认后才会入库。支持一次生成多道题。" />
-      <div class="form-item">
-        <label class="form-label required">出题材料</label>
-        <el-input v-model="aiForm.material" type="textarea" :rows="4"
-                  placeholder="粘贴一段材料文本，或直接描述需求。例如：生成5道关于Python并发编程的题目，带详细解析" />
-      </div>
+      <div v-loading="aiGenerating" element-loading-text="AI生成中，请稍候..."
+           element-loading-background="rgba(255, 255, 255, 0.92)" class="ai-gen-body">
+        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 8px"
+                  title="AI 生成带「AI生成」标签的题目，必须勾选预览确认后才会入库。支持一次生成多道题。" />
+        <div class="ai-limit-tip">⚠️ 单次最多生成 10 道题：材料或高级选项中要求超过 10 道时，将只按 10 道生成；如需更多请分批生成，避免等待过久。</div>
+        <div class="form-item">
+          <label class="form-label required">出题材料</label>
+          <el-input v-model="aiForm.material" type="textarea" :rows="4"
+                    placeholder="粘贴一段材料文本，或直接描述需求。例如：生成5道关于Python并发编程的题目，带详细解析" />
+        </div>
 
-      <!-- 高级选项: 默认收起, 提示放在标题右侧 -->
-      <el-collapse v-model="advancedOpen" class="adv-collapse">
-        <el-collapse-item name="adv">
-          <template #title>
-            <span class="adv-title">高级选项（选填）</span>
-            <span class="adv-tip">一旦填写题型/数量/难度任一项，其余必须完整填写；与材料描述冲突时以此为准</span>
-          </template>
-          <div class="adv-body">
-            <div class="form-item">
-              <label class="form-label">题型</label>
-              <el-checkbox-group v-model="aiForm.types">
-                <el-checkbox value="single">单选</el-checkbox>
-                <el-checkbox value="multiple">多选</el-checkbox>
-                <el-checkbox value="judge">判断</el-checkbox>
-                <el-checkbox value="fill">填空</el-checkbox>
-                <el-checkbox value="short">简答</el-checkbox>
-              </el-checkbox-group>
-              <div class="field-tip">可勾选多种题型混合出题；不勾选则由 AI 根据材料自主决定题型</div>
-            </div>
-            <div class="adv-row">
-              <div class="form-item grow">
-                <label class="form-label">题目数量</label>
-                <el-input-number v-model="aiForm.count" :min="1" :max="50" controls-position="right"
-                                 placeholder="默认 5" style="width: 160px" />
+        <!-- 高级选项: 默认收起, 提示放在标题右侧 -->
+        <el-collapse v-model="advancedOpen" class="adv-collapse">
+          <el-collapse-item name="adv">
+            <template #title>
+              <span class="adv-title">高级选项（选填）</span>
+              <span class="adv-tip">一旦填写题型/数量/难度任一项，其余必须完整填写；与材料描述冲突时以此为准</span>
+            </template>
+            <div class="adv-body">
+              <div class="form-item">
+                <label class="form-label">题型</label>
+                <el-checkbox-group v-model="aiForm.types">
+                  <el-checkbox value="single">单选</el-checkbox>
+                  <el-checkbox value="multiple">多选</el-checkbox>
+                  <el-checkbox value="judge">判断</el-checkbox>
+                  <el-checkbox value="fill">填空</el-checkbox>
+                  <el-checkbox value="short">简答</el-checkbox>
+                </el-checkbox-group>
+                <div class="field-tip">可勾选多种题型混合出题；不勾选则由 AI 根据材料自主决定题型</div>
               </div>
-              <div class="form-item grow">
-                <label class="form-label">难度</label>
-                <el-select v-model="aiForm.difficulty" placeholder="默认中等" clearable style="width: 160px">
-                  <el-option label="简单" value="easy" />
-                  <el-option label="中等" value="medium" />
-                  <el-option label="困难" value="hard" />
-                </el-select>
+              <div class="adv-row">
+                <div class="form-item grow">
+                  <label class="form-label">题目数量</label>
+                  <el-input-number v-model="aiForm.count" :min="1" :max="10" controls-position="right"
+                                   placeholder="默认 5，最多 10" style="width: 160px" />
+                </div>
+                <div class="form-item grow">
+                  <label class="form-label">难度</label>
+                  <el-select v-model="aiForm.difficulty" placeholder="默认中等" clearable style="width: 160px">
+                    <el-option label="简单" value="easy" />
+                    <el-option label="中等" value="medium" />
+                    <el-option label="困难" value="hard" />
+                  </el-select>
+                </div>
               </div>
             </div>
-          </div>
-        </el-collapse-item>
-      </el-collapse>
+          </el-collapse-item>
+        </el-collapse>
 
-      <!-- 预览区 -->
-      <div v-if="aiPreview.length" class="ai-preview">
-        <el-divider content-position="left"><strong>生成结果预览（勾选后入库）</strong></el-divider>
-        <el-table :data="aiPreview" size="small" @selection-change="aiSelected = $event" max-height="320">
-          <el-table-column type="selection" width="45" />
-          <el-table-column prop="type" label="题型" width="80">
-            <template #default="{ row }">
-              <el-tag size="small" :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="title" label="题干" min-width="200" show-overflow-tooltip />
-          <el-table-column label="答案" min-width="140" show-overflow-tooltip>
-            <template #default="{ row }">
-              {{ formatAnswer(row) }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="explanation" label="解析" min-width="140" show-overflow-tooltip />
-        </el-table>
+        <!-- 预览区 -->
+        <div v-if="aiPreview.length" class="ai-preview">
+          <el-divider content-position="left"><strong>生成结果预览（勾选后入库）</strong></el-divider>
+          <el-table :data="aiPreview" size="small" @selection-change="aiSelected = $event" max-height="320">
+            <el-table-column type="selection" width="45" />
+            <el-table-column prop="type" label="题型" width="80">
+              <template #default="{ row }">
+                <el-tag size="small" :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="title" label="题干" min-width="200" show-overflow-tooltip />
+            <el-table-column label="答案" min-width="140" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ formatAnswer(row) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="explanation" label="解析" min-width="140" show-overflow-tooltip />
+          </el-table>
+        </div>
       </div>
 
       <template #footer>
@@ -756,6 +760,15 @@ onMounted(() => {
   color: #6d28d9;
   border-color: #a78bfa;
   background: #f5f3ff;
+}
+
+/* AI 出题弹窗: 顶部红色上限提示 (v1.5) */
+.ai-limit-tip {
+  color: #f56c6c;
+  font-size: 13px;
+  line-height: 1.6;
+  font-weight: 600;
+  margin: 0 0 12px;
 }
 
 /* AI 出题弹窗: 高级选项 */

@@ -1,9 +1,9 @@
 """
 [变更日志]
-修改时间：2026-09-06 19:20:00
+修改时间：2026-09-06 22:30:00
 AI模型：ZCode (GLM)
-修改内容：[v1.2 新增 AI 员工 API: ✨AI出题(预览+二次确认入库)/✨AI智能组卷(优先检索题库,不足生成新题,强制Draft)/
-         AI Copilot 透传对话(前端状态注入)/额度资产化扣减(主动创造型)/双域审计留痕]
+修改内容：[v1.5 修复用户反馈: AI出题材料指定数量被默认5覆盖(材料数量优先) / 单次生成上限10道(超出截断+提示) /
+         v1.2 新增 AI 员工 API: ✨AI出题(预览+二次确认入库)/✨AI智能组卷/AI Copilot/额度资产化/双域审计]
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -26,6 +26,9 @@ from app.services.audit_service import write_audit, push_notification
 
 router = APIRouter()
 
+# v1.5: 单次 AI 出题硬上限 (防止一次生成太多等待过久, 更多请分批生成; 前端红字提示同步此数)
+AI_GEN_MAX_COUNT = 10
+
 
 # ---------------- 请求体 ----------------
 
@@ -33,7 +36,7 @@ class QuestionGenRequest(BaseModel):
     """AI 出题请求: material 必填; 高级选项(题型/数量/难度)可选, 但任一填写则三项都必须填写 (冲突时以高级选项为准)"""
     material: str = Field(..., min_length=5, description="材料文本或自然语言描述")
     types: Optional[List[str]] = Field(None, description="题型组合, 如 ['single','judge']; 空则 AI 按 material 自主决定")
-    count: Optional[int] = Field(None, ge=1, le=50, description="出题数量; 空则默认 5")
+    count: Optional[int] = Field(None, ge=1, le=AI_GEN_MAX_COUNT, description=f"出题数量 1~{AI_GEN_MAX_COUNT}; 空则 AI 按材料指定数量(不超上限), 材料未指定默认 5")
     difficulty: Optional[str] = Field(None, description="难度 easy/medium/hard; 空则默认 medium")
     category_id: Optional[int] = Field(None, description="归入分类")
     # 兼容旧字段 (v1.2 单题型), 内部并入 types
@@ -129,8 +132,9 @@ def ai_generate_questions(
     admin: Admin = Depends(get_current_admin)
 ):
     """✨AI出题: 生成结构化题目 JSON 供前端预览, 老师二次确认后才调用批量入库 (本接口不写题库)。
-    高级选项规则: 题型组合/数量/难度 三项要么全空 (AI 按 material 自主, 默认5题中等难度),
-    要么全部填写; 与 material 文字描述冲突时, 以高级选项为准 (数量以高级选项硬性为准)。"""
+    高级选项规则: 题型组合/数量/难度 三项要么全空 (AI 按 material 自主: 材料指定数量优先, 未指定默认5题),
+    要么全部填写; 与 material 文字描述冲突时, 以高级选项为准 (数量以高级选项硬性为准)。
+    v1.5: 单次生成硬上限 AI_GEN_MAX_COUNT 道, 材料要求超出时按上限截断并在 message 中说明。"""
     if not ai_service.ai_available():
         raise HTTPException(status_code=400, detail="AI 服务未配置（缺少 SENSENOVA_API_KEY）")
 
@@ -168,8 +172,13 @@ def ai_generate_questions(
             f"材料仅作为出题主题素材, 材料中提到的题目数量/题型要求一律忽略。"
         )
     else:
+        # v1.5 修复: 材料里明确写的"生成N道"必须优先于默认值 (此前被写死的"输出 5 道"覆盖, 用户说10道只出5道)
         constraint = (
-            f"根据材料自主决定最合适的题型与题目分布, 总共输出 {count} 道题, 难度 {difficulty}。"
+            "根据材料自主决定最合适的题型与题目分布。"
+            "若材料中明确指定了题目数量（如「生成10道」「出20题」），必须严格按材料指定的数量输出；"
+            f"材料未指定数量时默认输出 {count} 道题。"
+            f"无论材料要求多少, 单次生成总题数不得超过 {AI_GEN_MAX_COUNT} 道, 超出时按 {AI_GEN_MAX_COUNT} 道输出。"
+            f"难度默认 {difficulty}。"
         )
 
     system = "你是专业的题库出题专家。根据老师给定的材料或描述出题。只输出 JSON, 格式: " + QUESTION_JSON_SPEC
@@ -201,10 +210,15 @@ def ai_generate_questions(
         safe_items.append(item)
     if not safe_items:
         raise HTTPException(status_code=502, detail="AI 未生成有效题目，请调整描述后重试")
-    if count and len(safe_items) > count:
+    # v1.5: 全局硬上限截断 (材料要求超过上限时按上限出); 高级选项数量仍硬性为准
+    cap_note = ""
+    if len(safe_items) > AI_GEN_MAX_COUNT:
+        safe_items = safe_items[:AI_GEN_MAX_COUNT]
+        cap_note = f"（单次最多生成 {AI_GEN_MAX_COUNT} 道，已按上限截断，如需更多请分批生成）"
+    if types and count and len(safe_items) > count:
         safe_items = safe_items[:count]
     note = "" if not types or len(safe_items) >= count else f"（AI 实际返回 {len(safe_items)}/{count} 题，数量不足可再生成一批）"
-    return ResponseModel(code=200, message="生成成功，请预览确认后入库" + note, data={"questions": safe_items})
+    return ResponseModel(code=200, message="生成成功，请预览确认后入库" + cap_note + note, data={"questions": safe_items})
 
 
 # ---------------- ✨ AI 智能组卷 ----------------
