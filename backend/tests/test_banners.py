@@ -60,8 +60,8 @@ def test_report_has_total_scores(client):
     ex = client.post("/api/v1/admin/exams", json={
         "title": "e", "category_id": cat["id"], "status": "published", "question_ids": [q["id"]],
     }, headers=ah).json()["data"]
-    client.post("/api/v1/auth/register", json={"username": "u_rp", "password": "pw123456"})
-    ut = client.post("/api/v1/auth/login", json={"username": "u_rp", "password": "pw123456"}).json()["data"]["token"]
+    client.post("/api/v1/auth/register", json={"username": "u_rp", "password": "pw123456", "nickname": "推广学员", "gender": "female", "phone": "13900010001"})
+    ut = client.post("/api/v1/auth/login", json={"username": "u_rp", "password": "pw123456", "nickname": "推广学员", "gender": "female", "phone": "13900010001"}).json()["data"]["token"]
     uh = {"Authorization": f"Bearer {ut}"}
     rec = client.post("/api/v1/records/start", json={"exam_id": ex["id"]}, headers=uh).json()["data"]["record_id"]
     rep = client.post("/api/v1/records/submit", json={"record_id": rec, "user_answers": {str(q["id"]): ["A"]}, "time_spent": 10}, headers=uh).json()["data"]

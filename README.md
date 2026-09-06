@@ -11,6 +11,8 @@
 - C 端：`toc/` — Vue3 H5，构建挂 `/`
 - 部署：使用根目录下的 `docker-compose.yml`（MySQL + backend + Nginx），Nginx 配置 `nginx.conf`，`/api/v1/` 反代 backend
 - 导入模板：`sample_questions.xlsx`（数据表第一顺位 + "导入说明"工作表，支持填空/简答）
+- C 端注册：昵称(必填)/性别(必选)/手机号(必填唯一)/职务·邮箱(选填)；全端展示口径"昵称优先回退用户名"
+- 全链路自测：`python scripts/e2e_selftest.py [BASE_URL]`（分类/题目/AI出题/AI组卷/批量账号/模拟考试/AI阅卷 35 项断言，可重复执行）
 
 英文版：[README.en.md](./README.en.md)
 

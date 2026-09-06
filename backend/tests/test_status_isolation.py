@@ -4,8 +4,8 @@ def _setup_admin_and_user(client):
     admin_login = client.post("/api/v1/admin/auth/login", json={"username": "admin_iso", "password": "adminpassword"})
     admin_token = admin_login.json()["data"]["token"]
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
-    client.post("/api/v1/auth/register", json={"username": "user_iso", "password": "userpassword"})
-    user_login = client.post("/api/v1/auth/login", json={"username": "user_iso", "password": "userpassword"})
+    client.post("/api/v1/auth/register", json={"username": "user_iso", "password": "userpassword", "nickname": "隔离学员", "gender": "female", "phone": "13900010004"})
+    user_login = client.post("/api/v1/auth/login", json={"username": "user_iso", "password": "userpassword", "nickname": "隔离学员", "gender": "female", "phone": "13900010004"})
     user_token = user_login.json()["data"]["token"]
     user_headers = {"Authorization": f"Bearer {user_token}"}
     cat_res = client.post("/api/v1/admin/categories", json={"name": "隔离分类", "icon": "fire", "sort_order": 1}, headers=admin_headers)

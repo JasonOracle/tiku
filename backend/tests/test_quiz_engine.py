@@ -50,8 +50,8 @@ def test_full_quiz_lifecycle(client):
     exam_id = exam_res.json()["data"]["id"]
 
     # 5. C端注册用户并登录
-    client.post("/api/v1/auth/register", json={"username": "test_user", "password": "userpassword"})
-    user_login = client.post("/api/v1/auth/login", json={"username": "test_user", "password": "userpassword"})
+    client.post("/api/v1/auth/register", json={"username": "test_user", "password": "userpassword", "nickname": "刷题学员", "gender": "male", "phone": "13900010003"})
+    user_login = client.post("/api/v1/auth/login", json={"username": "test_user", "password": "userpassword", "nickname": "刷题学员", "gender": "male", "phone": "13900010003"})
     user_token = user_login.json()["data"]["token"]
     user_headers = {"Authorization": f"Bearer {user_token}"}
 

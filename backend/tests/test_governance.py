@@ -7,8 +7,8 @@ def _setup(client):
     client.post("/api/v1/admin/auth/init", json={"username": "admin_gov", "password": "adminpassword"})
     admin_token = client.post("/api/v1/admin/auth/login", json={"username": "admin_gov", "password": "adminpassword"}).json()["data"]["token"]
     ah = {"Authorization": f"Bearer {admin_token}"}
-    client.post("/api/v1/auth/register", json={"username": "user_gov", "password": "userpassword"})
-    user_token = client.post("/api/v1/auth/login", json={"username": "user_gov", "password": "userpassword"}).json()["data"]["token"]
+    client.post("/api/v1/auth/register", json={"username": "user_gov", "password": "userpassword", "nickname": "治理学员", "gender": "male", "phone": "13900010002"})
+    user_token = client.post("/api/v1/auth/login", json={"username": "user_gov", "password": "userpassword", "nickname": "治理学员", "gender": "male", "phone": "13900010002"}).json()["data"]["token"]
     uh = {"Authorization": f"Bearer {user_token}"}
     qcat = client.post("/api/v1/admin/categories", json={"name": "题分类A", "icon": "f", "sort_order": 1, "target_type": "question"}, headers=ah).json()["data"]
     ecat = client.post("/api/v1/admin/categories", json={"name": "卷分类A", "icon": "f", "sort_order": 1, "target_type": "exam"}, headers=ah).json()["data"]

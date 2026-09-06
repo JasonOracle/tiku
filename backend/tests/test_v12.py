@@ -19,8 +19,8 @@ def _bootstrap(client):
     t_token = client.post("/api/v1/admin/auth/login", json={"username": "teacher_wang", "password": "teapass123"}).json()["data"]["token"]
     th = {"Authorization": f"Bearer {t_token}"}
     # C端用户
-    client.post("/api/v1/auth/register", json={"username": "stu01", "password": "stupass123"})
-    u_token = client.post("/api/v1/auth/login", json={"username": "stu01", "password": "stupass123"}).json()["data"]["token"]
+    client.post("/api/v1/auth/register", json={"username": "stu01", "password": "stupass123", "nickname": "冒烟学员", "gender": "male", "phone": "13900010005"})
+    u_token = client.post("/api/v1/auth/login", json={"username": "stu01", "password": "stupass123", "nickname": "冒烟学员", "gender": "male", "phone": "13900010005"}).json()["data"]["token"]
     uh = {"Authorization": f"Bearer {u_token}"}
     qcat = client.post("/api/v1/admin/categories", json={"name": "题类", "target_type": "question"}, headers=ah).json()["data"]
     ecat = client.post("/api/v1/admin/categories", json={"name": "卷类", "target_type": "exam"}, headers=ah).json()["data"]

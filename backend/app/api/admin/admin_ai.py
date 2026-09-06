@@ -86,6 +86,34 @@ QUESTION_JSON_SPEC = """{"questions": [{"type": "single|multiple|judge|fill|shor
  "grading_points": ["简答题踩分点1", "踩分点2"],
  "explanation": "解析", "difficulty": "easy|medium|hard", "score": 10}]}"""
 
+
+def _normalize_generated_question(q: dict, default_type: str, default_difficulty: str) -> dict:
+    """规范化 AI 生成的题目结构 (大模型常把 answer 返回成字符串/把填空答案返回成一级数组, 统一纠正)"""
+    q_type = q.get("type", default_type)
+    answer = q.get("answer")
+    if q_type == "fill":
+        if not isinstance(answer, list):
+            answer = []
+        answer = [b if isinstance(b, list) else [str(b)] for b in answer]
+    elif q_type == "short":
+        if isinstance(answer, str):
+            answer = [answer]
+        answer = [str(a) for a in (answer or [])]
+    else:
+        if isinstance(answer, str):
+            answer = [a.strip() for a in answer.replace(",", "").replace(";", "") if a.strip()]
+        answer = [str(a) for a in (answer or [])]
+    return {
+        "type": q_type,
+        "title": str(q.get("title", "")),
+        "options": q.get("options") or [],
+        "answer": answer,
+        "grading_points": q.get("grading_points") or [],
+        "explanation": str(q.get("explanation", "")),
+        "difficulty": q.get("difficulty", default_difficulty),
+        "score": 10,
+    }
+
 @router.post("/questions/generate")
 def ai_generate_questions(
     data: QuestionGenRequest,
@@ -114,23 +142,15 @@ def ai_generate_questions(
     except (AiServiceError, ValueError) as e:
         raise HTTPException(status_code=502, detail=f"AI 出题失败: {e}")
 
-    # 结构规范化 (不给 AI 越权字段)
+    # 结构规范化 (不给 AI 越权字段; 纠正 answer 结构)
     safe_items = []
     for q in questions[:data.count]:
         if not isinstance(q, dict) or not q.get("title"):
             continue
-        safe_items.append({
-            "type": q.get("type", data.q_type),
-            "title": str(q.get("title", "")),
-            "options": q.get("options") or [],
-            "answer": q.get("answer") or [],
-            "grading_points": q.get("grading_points") or [],
-            "explanation": str(q.get("explanation", "")),
-            "difficulty": q.get("difficulty", data.difficulty),
-            "score": 10,
-            "category_id": data.category_id,
-            "source": "ai",
-        })
+        item = _normalize_generated_question(q, data.q_type, data.difficulty)
+        item["category_id"] = data.category_id
+        item["source"] = "ai"
+        safe_items.append(item)
     if not safe_items:
         raise HTTPException(status_code=502, detail="AI 未生成有效题目，请调整描述后重试")
     return ResponseModel(code=200, message="生成成功，请预览确认后入库", data={"questions": safe_items})
@@ -188,20 +208,20 @@ def ai_generate_exam(
             if q:
                 question_ids.append(q.id)
         elif isinstance(item.get("new_question"), dict):
-            nq = item["new_question"]
+            nq = _normalize_generated_question(item["new_question"], "single", "medium")
             try:
                 from app.api.admin.questions import _validate_question_payload
-                _validate_question_payload(nq.get("type", "single"), str(nq.get("title", "")), nq.get("answer") or [])
+                _validate_question_payload(nq["type"], nq["title"], nq["answer"])
             except HTTPException:
                 continue  # 生成的新题不合法直接丢弃, 宁缺毋滥
             q = Question(
-                type=nq.get("type", "single"),
-                title=str(nq.get("title", "")),
-                options=nq.get("options") or [],
-                answer=nq.get("answer") or [],
-                grading_points=nq.get("grading_points") or [],
-                explanation=str(nq.get("explanation", "")),
-                difficulty=nq.get("difficulty", "medium"),
+                type=nq["type"],
+                title=nq["title"],
+                options=nq["options"],
+                answer=nq["answer"],
+                grading_points=nq["grading_points"],
+                explanation=nq["explanation"],
+                difficulty=nq["difficulty"],
                 score=10,
                 source="ai",
                 category_id=first_category_id(db, "question"),
@@ -213,6 +233,30 @@ def ai_generate_exam(
 
     if not question_ids:
         raise HTTPException(status_code=502, detail="AI 组卷未命中任何有效题目，请调整需求重试")
+
+    # ---- 确定性兜底: AI 漏项时按题型构成从共享题库补齐 ----
+    wanted: dict = {}
+    for s in data.specs:
+        wanted[s.q_type] = wanted.get(s.q_type, 0) + s.count
+    got: dict = {}
+    for qid in question_ids:
+        q = db.query(Question).filter(Question.id == qid).first()
+        if q:
+            got[q.type] = got.get(q.type, 0) + 1
+    missing_total = 0
+    for q_type, need in wanted.items():
+        lack = need - got.get(q_type, 0)
+        for _ in range(max(0, lack)):
+            bank_q = (
+                db.query(Question)
+                .filter(Question.type == q_type, Question.is_deleted == False, Question.id.notin_(question_ids))  # noqa: E712
+                .first()
+            )
+            if bank_q:
+                question_ids.append(bank_q.id)
+                got[q_type] = got.get(q_type, 0) + 1
+            else:
+                missing_total += 1
 
     title = data.title or (parsed.get("title") if isinstance(parsed, dict) else None) or "AI 智能组卷"
     exam = Exam(
@@ -247,7 +291,8 @@ def ai_generate_exam(
     db.commit()
 
     detail_q = db.query(Question).filter(Question.id.in_(question_ids)).all()
-    return ResponseModel(code=200, message=f"AI 组卷完成：草稿《{exam.title}》共 {len(question_ids)} 题（新生成 {created_new}），请审核后上架",
+    shortage_note = f"，题库不足缺 {missing_total} 题" if missing_total else ""
+    return ResponseModel(code=200, message=f"AI 组卷完成：草稿《{exam.title}》共 {len(question_ids)} 题（新生成 {created_new}{shortage_note}），请审核后上架",
                          data={"exam_id": exam.id, "title": exam.title, "question_count": len(question_ids),
                                "new_questions": created_new,
                                "questions": [QuestionResponse.model_validate(q) for q in detail_q]})

@@ -125,7 +125,12 @@
         <el-divider content-position="left"><strong>用户答卷历史明细</strong></el-divider>
 
         <el-table :data="statsData?.user_records || []" size="small" stripe style="width: 100%" max-height="300">
-          <el-table-column prop="username" label="作答用户" width="130" />
+          <el-table-column label="作答用户" width="150">
+            <template #default="{ row }">
+              <span style="font-weight: 700">{{ row.nickname || row.username }}</span>
+              <span v-if="row.nickname" style="font-size: 12px; color: #94a3b8"> ({{ row.username }})</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="score" label="得 分" width="90">
             <template #default="{ row }">
               <span style="font-weight: 700">{{ row.score }} 分</span>

@@ -1,8 +1,8 @@
 """
 [变更日志]
-修改时间：2026-09-06 17:00:00
+修改时间：2026-09-06 19:00:00
 AI模型：ZCode (GLM)
-修改内容：[v1.2: auto_patch 扩展 (考试时间窗/AI全托管/软删除/额度列 + audit_logs/notifications/ai_usage_logs 新表) 并挂载 v1.2 新路由]
+修改内容：[v1.3: auto_patch 新增 users 注册资料列 (nickname/gender/position/phone 唯一/email)]
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,6 +43,13 @@ def auto_patch_db_columns():
         # ---- v1.2 主观题阅卷 ----
         "ALTER TABLE exam_records ADD COLUMN ai_grading_result JSON NULL",
         "ALTER TABLE exam_records ADD COLUMN short_scores JSON NULL",
+        # ---- v1.3 C端注册资料 ----
+        "ALTER TABLE users ADD COLUMN nickname VARCHAR(50) NULL",
+        "ALTER TABLE users ADD COLUMN gender VARCHAR(10) NULL",
+        "ALTER TABLE users ADD COLUMN position VARCHAR(50) DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN phone VARCHAR(20) NULL",
+        "ALTER TABLE users ADD COLUMN email VARCHAR(100) DEFAULT ''",
+        "ALTER TABLE users ADD UNIQUE INDEX uix_users_phone (phone)",
     ]
     try:
         with engine.connect() as conn:

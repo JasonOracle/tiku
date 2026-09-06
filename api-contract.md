@@ -423,3 +423,29 @@
 - 题型扩展 `fill / short`：fill 的 `answer` 为二维数组 `[["北京","北京市"],["京"]]`，保存强校验 `title.count("___") == len(answer)`；short 的 `answer=["标准答案全文"]` + `grading_points=["踩分点"]`。
 - **PUT** 编辑被 published/archived 卷引用的题目 → 400（全局只读）；**POST** `/{id}/copy` 复制新题；**DELETE** 改为软删除 `is_deleted=1`（已引用试卷不受影响）。
 - Excel 导入支持 fill（`a,b|c` 格式）与 short（可选"踩分点"列）。
+
+
+---
+
+## 6. v1.3 注册资料契约 (2026-09-06 落地)
+
+### 6.1 注册 `POST /api/v1/auth/register`
+- **Request Body**:
+  ```json
+  {
+    "username": "3-50位", "password": "至少6位",
+    "nickname": "昵称(必填,1-30位)", "gender": "male|female(必选)",
+    "phone": "大陆11位(必填,全局唯一)", "position": "职务(选填)", "email": "选填"
+  }
+  ```
+- **校验口径**: 必填/格式/唯一性全部返回 `400 + 中文 detail`（"请填写昵称"/"请选择性别"/"手机号格式不正确（需为大陆 11 位手机号）"/"该手机号已被注册"/"该用户名已被占用"/"邮箱格式不正确"）。**禁止改回 Pydantic 422**（C端拦截器不解析 422）。
+- **Response 201**: `UserResponse{ id, username, nickname, gender, position, phone, email, avatar, status, created_at }`。
+
+### 6.2 个人资料 `GET /api/v1/users/me`
+- 返回当前登录用户完整 `UserResponse`（个人中心展示与昵称刷新依赖）。
+
+### 6.3 昵称展示口径 (nickname display policy)
+- 全端统一：**昵称优先，无则回退用户名**（老用户 nickname=NULL）。
+- B端已接入：用户列表(users)、全站答题明细(users/records，响应新增 nickname 字段)、阅卷大厅列表与详情、考情看板 user_records。
+- C端已接入：登录响应 user、/users/me、个人中心 (昵称大字 + @用户名 + 性别/职务标签)。
+- users 表唯一索引: `uix_users_phone(phone)`；五列均经 main.py auto_patch 幂等补列。

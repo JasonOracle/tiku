@@ -345,6 +345,7 @@ def first_category_id(db: Session, target_type: str) -> Optional[int]:
 
 def recalc_exam_totals(db: Session, exam: Exam) -> Exam:
     """按现行关联重算试卷总分与及格线（删题联动/组卷变更共用）"""
+    db.flush()  # 确保 pending 的关联写入可见 (autoflush 关闭场景下 query 查不到未 flush 行)
     links = db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam.id).all()
     total = 0
     for eq in links:

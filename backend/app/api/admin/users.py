@@ -17,6 +17,7 @@ class AdminExamRecordResponse(BaseModel):
     record_id: int
     user_id: int
     username: str
+    nickname: Optional[str] = None
     exam_id: int
     exam_title: str
     status: str
@@ -77,6 +78,7 @@ def list_all_records(
             record_id=r.id,
             user_id=r.user_id,
             username=u.username if u else "已注销",
+            nickname=(u.nickname if u else None),
             exam_id=r.exam_id,
             exam_title=e.title if e else "已删除试卷",
             status=r.status,

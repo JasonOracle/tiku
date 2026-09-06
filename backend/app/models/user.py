@@ -10,12 +10,19 @@ from datetime import datetime
 from app.core.database import Base
 
 class User(Base):
-    """C端注册用户模型"""
+    """C端注册用户模型
+    v1.3 注册资料: nickname/gender/position/phone(唯一)/email; 老数据可空, 展示口径"昵称优先回退用户名"
+    """
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     username = Column(String(50), unique=True, index=True, nullable=False, comment="用户名")
     password_hash = Column(String(255), nullable=False, comment="密码哈希")
+    nickname = Column(String(50), nullable=True, comment="昵称 (注册必填, 展示回退 username)")
+    gender = Column(String(10), nullable=True, comment="性别 (male/female, 注册必选)")
+    position = Column(String(50), nullable=True, default="", comment="职务 (选填)")
+    phone = Column(String(20), nullable=True, unique=True, comment="手机号 (注册必填, 全局唯一)")
+    email = Column(String(100), nullable=True, default="", comment="邮箱 (选填)")
     avatar = Column(String(255), nullable=True, default="", comment="头像URL")
     status = Column(Boolean, default=True, comment="账号状态 (True=正常, False=禁用)")
     created_at = Column(DateTime, default=datetime.now, comment="注册时间")

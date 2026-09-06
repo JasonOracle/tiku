@@ -1,8 +1,9 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-04
- * AI模型：Gemini 系列
- * 修改内容：[1. 退出登录从右上角移入 cell-group 底部; 2. 删除 logout-btn 样式]
+ * 修改时间：2026-09-06 19:50:00
+ * AI模型：ZCode (GLM)
+ * 修改内容：[v1.3: 个人中心展示注册资料——昵称为主(@用户名小字)+性别/职务标签, 数据源 GET /users/me;
+ *          老用户无昵称时回退用户名]
 -->
 <template>
   <div class="profile-container">
@@ -18,7 +19,12 @@
           </svg>
         </div>
         <div class="user-info" v-if="userStore.token">
-          <h2>{{ userStore.username || '答题学员' }}</h2>
+          <h2>{{ displayName }}</h2>
+          <div class="user-sub">
+            <span class="at-username">@{{ userStore.username }}</span>
+            <span v-if="genderLabel" class="profile-tag" :class="profile.gender">{{ genderLabel }}</span>
+            <span v-if="profile.position" class="profile-tag job">{{ profile.position }}</span>
+          </div>
           <p>欢迎回来，继续探索知识的世界</p>
         </div>
         <div class="user-info" v-else @click="router.push('/login')">
@@ -97,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../../store/user';
 import http from '../../utils/http';
@@ -115,6 +121,25 @@ const stats = ref({
   favorite_count: 0,
   history_count: 0
 });
+
+// v1.3 注册资料 (昵称优先展示)
+const profile = ref<any>({ nickname: '', gender: '', position: '', phone: '', email: '' });
+const displayName = computed(() => profile.value.nickname || userStore.nickname || userStore.username || '答题学员');
+const genderLabel = computed(() => (profile.value.gender === 'male' ? '男' : profile.value.gender === 'female' ? '女' : ''));
+
+const loadProfile = async () => {
+  if (!userStore.token) return;
+  try {
+    const res: any = await http.get('/api/v1/users/me');
+    const data = res?.data || res;
+    if (data) {
+      profile.value = data;
+      if (data.nickname) userStore.setNickname(data.nickname);
+    }
+  } catch (e) {
+    // 静默: 回退 store 中缓存的昵称/用户名
+  }
+};
 
 const loadStats = async () => {
   if (!userStore.token) return;
@@ -142,10 +167,12 @@ const handleLogout = () => {
 const onConfirmLogout = () => {
   userStore.logout();
   stats.value = { total_exams_taken: 0, passed_count: 0, pass_rate: 0, favorite_count: 0, history_count: 0 };
+  profile.value = { nickname: '', gender: '', position: '', phone: '', email: '' };
   router.push('/login');
 };
 
 onMounted(() => {
+  loadProfile();
   loadStats();
 });
 </script>
@@ -184,6 +211,44 @@ onMounted(() => {
 .user-info h2 { margin: 0 0 6px; font-size: 24px; color: #0f172a; font-weight: 800; }
 .user-info p { margin: 0; font-size: 13px; color: #94a3b8; }
 .login-tip { color: #0284c7 !important; font-weight: 700; }
+
+.user-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.at-username {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.profile-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.profile-tag.female {
+  background: #fce7f3;
+  color: #be185d;
+}
+
+.profile-tag.male {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.profile-tag.job {
+  background: #fef3c7;
+  color: #b45309;
+}
 
 .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 22px 20px 0; }
 

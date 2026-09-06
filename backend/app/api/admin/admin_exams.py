@@ -343,6 +343,7 @@ def get_exam_stats(
             "record_id": r.id,
             "user_id": r.user_id,
             "username": u.username if u else f"用户#{r.user_id}",
+            "nickname": (u.nickname if u else None),
             "score": r.score,
             "is_passed": r.passed,
             "time_spent": r.time_spent,

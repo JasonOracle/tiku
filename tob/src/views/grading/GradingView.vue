@@ -21,7 +21,12 @@
     <el-table :data="records" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
       <el-table-column prop="record_id" label="答卷ID" width="90" />
       <el-table-column prop="exam_title" label="试卷" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="username" label="考生" width="130" />
+      <el-table-column label="考生" min-width="130">
+        <template #default="{ row }">
+          <span style="font-weight: 700">{{ row.nickname || row.username }}</span>
+          <span v-if="row.nickname" style="font-size: 12px; color: #94a3b8"> ({{ row.username }})</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="objective_score" label="客观题得分" width="110">
         <template #default="{ row }">
           <span style="font-weight: 700; color: #0284c7">{{ row.objective_score }}</span>
@@ -57,7 +62,7 @@
     </div>
 
     <!-- 批阅弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="`批阅答卷 #${detail?.record_id} — ${detail?.exam_title || ''}（${detail?.username}）`"
+    <el-dialog v-model="dialogVisible" :title="`批阅答卷 #${detail?.record_id} — ${detail?.exam_title || ''}（${detail?.nickname || detail?.username}）`"
                width="860px" top="30px" destroy-on-close>
       <div v-loading="detailLoading">
         <el-alert v-if="detail?.ai_error" type="error" :closable="false" show-icon style="margin-bottom: 12px"

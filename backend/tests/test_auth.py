@@ -4,10 +4,13 @@ def test_health_check(client):
     assert response.json()["status"] == "ok"
 
 def test_c_user_register_and_login(client):
-    # 注册 C端用户
+    # 注册 C端用户 (v1.3: 需带昵称/性别/手机号)
     reg_res = client.post("/api/v1/auth/register", json={
         "username": "student_test",
-        "password": "password123"
+        "password": "password123",
+        "nickname": "测试学员",
+        "gender": "male",
+        "phone": "13900020001"
     })
     assert reg_res.status_code == 201
     assert reg_res.json()["data"]["username"] == "student_test"
@@ -15,7 +18,10 @@ def test_c_user_register_and_login(client):
     # 重复注册测试
     reg_repeat = client.post("/api/v1/auth/register", json={
         "username": "student_test",
-        "password": "password123"
+        "password": "password123",
+        "nickname": "测试学员",
+        "gender": "male",
+        "phone": "13900020002"
     })
     assert reg_repeat.status_code == 400
 
