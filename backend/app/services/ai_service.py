@@ -40,8 +40,10 @@ def chat_completion(
     json_mode: bool = False,
     temperature: float = 0.3,
     timeout: float = 90.0,
+    retries: int = 2,
 ) -> str:
-    """单轮调用大模型, 返回文本。任何失败抛 AiServiceError (调用方负责兜底)"""
+    """单轮调用大模型, 返回文本。任何失败抛 AiServiceError (调用方负责兜底)。
+    429 限流/瞬时 5xx 自动退避重试 (免费档限流常见)。"""
     cfg = get_ai_config()
     if not cfg["api_key"]:
         raise AiServiceError("未配置 SENSENOVA_API_KEY，AI 能力不可用")
@@ -56,25 +58,33 @@ def chat_completion(
         "messages": messages,
         "temperature": temperature,
     }
-    try:
-        resp = httpx.post(
-            cfg["api_url"],
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {cfg['api_key']}",
-                "Content-Type": "application/json",
-            },
-            timeout=timeout,
-        )
-        if resp.status_code != 200:
-            raise AiServiceError(f"大模型接口返回 {resp.status_code}: {resp.text[:300]}")
-        data = resp.json()
-        content = data["choices"][0]["message"]["content"]
-        return content if isinstance(content, str) else str(content)
-    except AiServiceError:
-        raise
-    except Exception as e:
-        raise AiServiceError(f"大模型调用失败: {e}")
+    headers = {
+        "Authorization": f"Bearer {cfg['api_key']}",
+        "Content-Type": "application/json",
+    }
+    last_err: Optional[str] = None
+    import time
+    for attempt in range(retries + 1):
+        try:
+            resp = httpx.post(cfg["api_url"], json=payload, headers=headers, timeout=timeout)
+            if resp.status_code in (429, 500, 502, 503, 504) and attempt < retries:
+                last_err = f"大模型接口返回 {resp.status_code}"
+                time.sleep(4 * (attempt + 1))  # 退避重试
+                continue
+            if resp.status_code != 200:
+                raise AiServiceError(f"大模型接口返回 {resp.status_code}: {resp.text[:300]}")
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"]
+            return content if isinstance(content, str) else str(content)
+        except AiServiceError:
+            raise
+        except Exception as e:
+            if attempt < retries:
+                last_err = f"大模型调用失败: {e}"
+                time.sleep(4 * (attempt + 1))
+                continue
+            raise AiServiceError(f"大模型调用失败: {e}")
+    raise AiServiceError(last_err or "大模型调用失败")
 
 
 def extract_json(text: str):

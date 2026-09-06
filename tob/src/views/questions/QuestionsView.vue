@@ -197,40 +197,50 @@
     <!-- ✨ AI 出题 Dialog -->
     <el-dialog v-model="aiDialogVisible" title="✨ AI 出题" width="760px" top="30px" destroy-on-close>
       <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px"
-                title="AI 生成带「AI生成」标签的题目，必须勾选预览确认后才会入库。" />
-      <el-form label-width="90px">
-        <el-form-item label="出题材料" required>
-          <el-input v-model="aiForm.material" type="textarea" :rows="4"
-                    placeholder="粘贴一段材料文本，或直接描述需求。例如：生成5道关于Python并发编程的单选题，带详细解析，难度中等" />
-        </el-form-item>
-        <el-row :gutter="12">
-          <el-col :span="6">
-            <el-form-item label="题型">
-              <el-select v-model="aiForm.q_type" style="width: 100%">
-                <el-option label="单选" value="single" />
-                <el-option label="多选" value="multiple" />
-                <el-option label="判断" value="judge" />
-                <el-option label="填空" value="fill" />
-                <el-option label="简答" value="short" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="数量">
-              <el-input-number v-model="aiForm.count" :min="1" :max="20" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="难度">
-              <el-select v-model="aiForm.difficulty" style="width: 100%">
-                <el-option label="简单" value="easy" />
-                <el-option label="中等" value="medium" />
-                <el-option label="困难" value="hard" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </el-form>
+                title="AI 生成带「AI生成」标签的题目，必须勾选预览确认后才会入库。支持一次生成多道题。" />
+      <div class="form-item">
+        <label class="form-label required">出题材料</label>
+        <el-input v-model="aiForm.material" type="textarea" :rows="4"
+                  placeholder="粘贴一段材料文本，或直接描述需求。例如：生成5道关于Python并发编程的题目，带详细解析" />
+      </div>
+
+      <!-- 高级选项: 默认收起, 提示放在标题右侧 -->
+      <el-collapse v-model="advancedOpen" class="adv-collapse">
+        <el-collapse-item name="adv">
+          <template #title>
+            <span class="adv-title">高级选项（选填）</span>
+            <span class="adv-tip">一旦填写题型/数量/难度任一项，其余必须完整填写；与材料描述冲突时以此为准</span>
+          </template>
+          <div class="adv-body">
+            <div class="form-item">
+              <label class="form-label">题型</label>
+              <el-checkbox-group v-model="aiForm.types">
+                <el-checkbox value="single">单选</el-checkbox>
+                <el-checkbox value="multiple">多选</el-checkbox>
+                <el-checkbox value="judge">判断</el-checkbox>
+                <el-checkbox value="fill">填空</el-checkbox>
+                <el-checkbox value="short">简答</el-checkbox>
+              </el-checkbox-group>
+              <div class="field-tip">可勾选多种题型混合出题；不勾选则由 AI 根据材料自主决定题型</div>
+            </div>
+            <div class="adv-row">
+              <div class="form-item grow">
+                <label class="form-label">题目数量</label>
+                <el-input-number v-model="aiForm.count" :min="1" :max="50" controls-position="right"
+                                 placeholder="默认 5" style="width: 160px" />
+              </div>
+              <div class="form-item grow">
+                <label class="form-label">难度</label>
+                <el-select v-model="aiForm.difficulty" placeholder="默认中等" clearable style="width: 160px">
+                  <el-option label="简单" value="easy" />
+                  <el-option label="中等" value="medium" />
+                  <el-option label="困难" value="hard" />
+                </el-select>
+              </div>
+            </div>
+          </div>
+        </el-collapse-item>
+      </el-collapse>
 
       <!-- 预览区 -->
       <div v-if="aiPreview.length" class="ai-preview">
@@ -358,15 +368,26 @@ const fillBlankCount = computed(() => (form.title.match(/___/g) || []).length);
 const answerStr = computed({
   get: () => form.answer.join(','),
   set: (val: string) => {
-    form.answer = val.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean);
+    if (form.type === 'multiple') {
+      // 连写兼容: "ABC" / "A,B" / "a b c" → 拆成单字母数组
+      form.answer = (val.toUpperCase().match(/[A-F]/g) || []);
+    } else {
+      form.answer = val.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean);
+    }
   }
 });
 
-// ---- ✨ AI 出题 ----
+// ---- ✨ AI 出题 (v1.4: 高级选项默认收起, 任一填写则需完整; 与材料冲突时以高级选项为准) ----
 const aiDialogVisible = ref(false);
 const aiGenerating = ref(false);
 const aiImporting = ref(false);
-const aiForm = reactive({ material: '', count: 5, q_type: 'single', difficulty: 'medium' });
+const advancedOpen = ref<string[]>([]);
+const aiForm = reactive({
+  material: '',
+  types: [] as string[],
+  count: undefined as number | undefined,
+  difficulty: ''
+});
 const aiPreview = ref<any[]>([]);
 const aiSelected = ref<any[]>([]);
 
@@ -374,6 +395,11 @@ const openAiDialog = () => {
   if (!checkCategoryPrerequisite()) return;
   aiPreview.value = [];
   aiSelected.value = [];
+  aiForm.material = '';
+  aiForm.types = [];
+  aiForm.count = undefined;
+  aiForm.difficulty = '';
+  advancedOpen.value = [];
   aiDialogVisible.value = true;
 };
 
@@ -388,18 +414,25 @@ const generateQuestions = async () => {
     ElMessage.error('请填写出题材料或需求描述');
     return;
   }
+  // 高级选项联动: 任一填写 → 三项必须完整
+  const anyAdvanced = aiForm.types.length > 0 || aiForm.count != null || !!aiForm.difficulty;
+  if (anyAdvanced && !(aiForm.types.length > 0 && aiForm.count != null && !!aiForm.difficulty)) {
+    advancedOpen.value = ['adv'];
+    ElMessage.error('高级选项需完整填写（题型、数量、难度），或全部留空由 AI 自主决定');
+    return;
+  }
   aiGenerating.value = true;
   try {
     const res: any = await request.post('/api/v1/admin/ai/questions/generate', {
       material: aiForm.material,
-      count: aiForm.count,
-      q_type: aiForm.q_type,
-      difficulty: aiForm.difficulty,
+      types: aiForm.types.length ? aiForm.types : undefined,
+      count: aiForm.count ?? undefined,
+      difficulty: aiForm.difficulty || undefined,
       category_id: firstCategoryId()
-    });
+    }, { timeout: 120000 }); // 真实大模型出题较慢, 覆盖全局 10s 超时
     aiPreview.value = res.questions || [];
     aiSelected.value = [];
-    ElMessage.success('AI 已生成，请预览勾选后入库');
+    ElMessage.success(res.message || 'AI 已生成，请预览勾选后入库');
   } catch (e) {
     /* 拦截器已提示 */
   } finally {
@@ -723,5 +756,80 @@ onMounted(() => {
   color: #6d28d9;
   border-color: #a78bfa;
   background: #f5f3ff;
+}
+
+/* AI 出题弹窗: 高级选项 */
+.adv-collapse {
+  border: none;
+  margin-top: 4px;
+}
+
+.adv-collapse :deep(.el-collapse-item__header) {
+  background: #faf5ff;
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 40px;
+}
+
+.adv-collapse :deep(.el-collapse-item__wrap) {
+  border: none;
+}
+
+.adv-collapse :deep(.el-collapse-item__content) {
+  padding: 12px 4px 0;
+}
+
+.adv-title {
+  font-weight: 700;
+  color: #6d28d9;
+  font-size: 13px;
+}
+
+.adv-tip {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.adv-body {
+  background: #faf5ff;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.form-item {
+  margin-bottom: 14px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.form-label.required::before {
+  content: '* ';
+  color: #e11d48;
+}
+
+.field-tip {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.adv-row {
+  display: flex;
+  gap: 24px;
+}
+
+.adv-row .grow {
+  flex: 1;
 }
 </style>

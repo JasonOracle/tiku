@@ -352,7 +352,7 @@ def test_ai_question_generation_with_quota(client, mock_ai):
 
     # 老师额度 5
     r1 = client.post("/api/v1/admin/ai/questions/generate",
-                     json={"material": "Python并发编程", "count": 1, "q_type": "single"}, headers=s["th"])
+                     json={"material": "Python并发编程", "count": 1, "q_type": "single", "difficulty": "medium"}, headers=s["th"])
     assert r1.status_code == 200
     preview = r1.json()["data"]["questions"]
     assert preview[0]["source"] == "ai"
@@ -368,9 +368,9 @@ def test_ai_question_generation_with_quota(client, mock_ai):
     # 额度耗尽拦截 (再扣4次后为0)
     for _ in range(4):
         client.post("/api/v1/admin/ai/questions/generate",
-                    json={"material": "更多题目材料内容", "count": 1, "q_type": "single"}, headers=s["th"])
+                    json={"material": "更多题目材料内容", "count": 1, "q_type": "single", "difficulty": "medium"}, headers=s["th"])
     r_ex = client.post("/api/v1/admin/ai/questions/generate",
-                       json={"material": "额度耗尽后的请求", "count": 1, "q_type": "single"}, headers=s["th"])
+                       json={"material": "额度耗尽后的请求", "count": 1, "q_type": "single", "difficulty": "medium"}, headers=s["th"])
     assert r_ex.status_code == 400 and "额度" in r_ex.json()["detail"]
 
     # 超管即时补充

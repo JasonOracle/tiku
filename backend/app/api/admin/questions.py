@@ -26,13 +26,36 @@ router = APIRouter()
 SUPPORTED_TYPES = ("single", "multiple", "judge", "fill", "short")
 
 
+def normalize_options(options) -> list:
+    """规范化选项结构: 字符串数组 ["A. 甲","乙"] → [{"key":"A","text":"甲"},...] (AI 生成/历史数据双兼容)"""
+    import re as _re
+    if not isinstance(options, list):
+        return []
+    normalized = []
+    for opt in options:
+        if isinstance(opt, dict):
+            if opt.get("key") is not None or opt.get("text") is not None:
+                normalized.append({"key": str(opt.get("key", "")), "text": str(opt.get("text", ""))})
+            continue
+        text = str(opt).strip()
+        if not text:
+            continue
+        m = _re.match(r"^([A-Fa-f])\s*[.、:：\)）]\s*(.+)$", text)
+        if m:
+            normalized.append({"key": m.group(1).upper(), "text": m.group(2).strip()})
+        else:
+            key = "ABCDEF"[len(normalized)] if len(normalized) < 6 else "X"
+            normalized.append({"key": key, "text": text})
+    return normalized
+
+
 def _decorate_locked(db: Session, q: Question, res: QuestionResponse) -> QuestionResponse:
     res.locked = bool(get_locked_exam_titles(db, q.id))
     return res
 
 
 def _validate_question_payload(q_type: str, title: str, answer) -> None:
-    """入库前题型级校验 (防崩溃)"""
+    """入库前题型级校验 (防崩溃)。multiple 连写答案 ["ABC"] 自动拆分为 ["A","B","C"] (原地修正)"""
     if q_type not in SUPPORTED_TYPES:
         raise HTTPException(status_code=400, detail=f"不支持的题型: {q_type}")
     if q_type == "fill":
@@ -40,12 +63,23 @@ def _validate_question_payload(q_type: str, title: str, answer) -> None:
     elif q_type == "short":
         if not answer or not str(answer[0]).strip():
             raise HTTPException(status_code=400, detail="简答题必须配置标准答案")
-    elif q_type in ("single", "judge"):
+    elif q_type == "single":
         if not answer or len(answer) != 1:
-            raise HTTPException(status_code=400, detail="单选/判断题答案只能有一个")
+            raise HTTPException(status_code=400, detail="单选题答案只能有一个")
+    elif q_type == "judge":
+        if not answer or len(answer) != 1:
+            raise HTTPException(status_code=400, detail="判断题答案只能有一个")
     elif q_type == "multiple":
-        if not answer or len(answer) < 2:
+        # 兼容连写: ["ABC"] / ["A","BC"] → 拆成单字母集合再校验
+        expanded: list = []
+        for a in (answer or []):
+            token = str(a).strip().upper()
+            for ch in token:
+                if ch in "ABCDEF":
+                    expanded.append(ch)
+        if len(expanded) < 2:
             raise HTTPException(status_code=400, detail="多选题答案至少两个")
+        answer[:] = expanded
 
 
 @router.get("", response_model=ResponseModel[PageResponse[QuestionResponse]])
@@ -104,7 +138,7 @@ def create_question(
     question = Question(
         type=data.type,
         title=data.title,
-        options=[opt.model_dump() for opt in data.options] if data.options else [],
+        options=normalize_options(data.options),
         answer=data.answer,
         grading_points=data.grading_points or [],
         explanation=data.explanation,
@@ -141,7 +175,7 @@ def batch_create_questions(
         q = Question(
             type=item.type,
             title=item.title,
-            options=[opt.model_dump() for opt in item.options] if item.options else [],
+            options=normalize_options(item.options),
             answer=item.answer,
             grading_points=item.grading_points or [],
             explanation=item.explanation or "",
@@ -216,7 +250,7 @@ def update_question(
 
     update_dict = data.model_dump(exclude_unset=True)
     if "options" in update_dict and update_dict["options"] is not None:
-        update_dict["options"] = [opt.model_dump() if hasattr(opt, 'model_dump') else opt for opt in update_dict["options"]]
+        update_dict["options"] = normalize_options(update_dict["options"])
 
     new_type = update_dict.get("type", question.type)
     new_title = update_dict.get("title", question.title)

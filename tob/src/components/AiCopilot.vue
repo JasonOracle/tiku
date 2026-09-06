@@ -85,7 +85,7 @@ const send = async () => {
     const res: any = await request.post('/api/v1/admin/ai/chat', {
       message: buildPreamble(text),
       history
-    });
+    }, { timeout: 120000 }); // 大模型回复较慢, 覆盖全局 10s 超时
     userStore.quotaRemaining = res.quota_remaining ?? userStore.quotaRemaining;
     messages.value.push({ role: 'assistant', content: res.reply || '(空回复)' });
   } catch (e: any) {

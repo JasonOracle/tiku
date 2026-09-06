@@ -30,11 +30,14 @@ router = APIRouter()
 # ---------------- 请求体 ----------------
 
 class QuestionGenRequest(BaseModel):
+    """AI 出题请求: material 必填; 高级选项(题型/数量/难度)可选, 但任一填写则三项都必须填写 (冲突时以高级选项为准)"""
     material: str = Field(..., min_length=5, description="材料文本或自然语言描述")
-    count: int = Field(3, ge=1, le=20, description="生成数量")
-    q_type: str = Field("single", description="题型 single/multiple/judge/fill/short")
-    difficulty: str = Field("medium", description="难度 easy/medium/hard")
+    types: Optional[List[str]] = Field(None, description="题型组合, 如 ['single','judge']; 空则 AI 按 material 自主决定")
+    count: Optional[int] = Field(None, ge=1, le=50, description="出题数量; 空则默认 5")
+    difficulty: Optional[str] = Field(None, description="难度 easy/medium/hard; 空则默认 medium")
     category_id: Optional[int] = Field(None, description="归入分类")
+    # 兼容旧字段 (v1.2 单题型), 内部并入 types
+    q_type: Optional[str] = Field(None, description="已废弃, 兼容旧前端: 单题型")
 
 class ExamSpecItem(BaseModel):
     q_type: str = Field(..., description="题型")
@@ -87,8 +90,13 @@ QUESTION_JSON_SPEC = """{"questions": [{"type": "single|multiple|judge|fill|shor
  "explanation": "解析", "difficulty": "easy|medium|hard", "score": 10}]}"""
 
 
+def _normalize_options(options) -> list:
+    from app.api.admin.questions import normalize_options
+    return normalize_options(options)
+
+
 def _normalize_generated_question(q: dict, default_type: str, default_difficulty: str) -> dict:
-    """规范化 AI 生成的题目结构 (大模型常把 answer 返回成字符串/把填空答案返回成一级数组, 统一纠正)"""
+    """规范化 AI 生成的题目结构 (大模型常把 answer/options 返回成字符串或错位结构, 统一纠正)"""
     q_type = q.get("type", default_type)
     answer = q.get("answer")
     if q_type == "fill":
@@ -101,12 +109,12 @@ def _normalize_generated_question(q: dict, default_type: str, default_difficulty
         answer = [str(a) for a in (answer or [])]
     else:
         if isinstance(answer, str):
-            answer = [a.strip() for a in answer.replace(",", "").replace(";", "") if a.strip()]
+            answer = [a.strip().upper() for a in answer.replace(",", "").replace("；", "").replace(";", "") if a.strip()]
         answer = [str(a) for a in (answer or [])]
     return {
         "type": q_type,
         "title": str(q.get("title", "")),
-        "options": q.get("options") or [],
+        "options": _normalize_options(q.get("options")),
         "answer": answer,
         "grading_points": q.get("grading_points") or [],
         "explanation": str(q.get("explanation", "")),
@@ -120,17 +128,54 @@ def ai_generate_questions(
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
-    """✨AI出题: 生成结构化题目 JSON 供前端预览, 老师二次确认后才调用批量入库 (本接口不写题库)"""
+    """✨AI出题: 生成结构化题目 JSON 供前端预览, 老师二次确认后才调用批量入库 (本接口不写题库)。
+    高级选项规则: 题型组合/数量/难度 三项要么全空 (AI 按 material 自主, 默认5题中等难度),
+    要么全部填写; 与 material 文字描述冲突时, 以高级选项为准 (数量以高级选项硬性为准)。"""
     if not ai_service.ai_available():
         raise HTTPException(status_code=400, detail="AI 服务未配置（缺少 SENSENOVA_API_KEY）")
-    deduct_quota(db, admin, "question_gen", {"count": data.count, "q_type": data.q_type})
 
-    system = (
-        "你是专业的题库出题专家。根据老师给定的材料或描述出题。只输出 JSON, 格式: " + QUESTION_JSON_SPEC
-    )
+    # ---- 归一化高级选项 (兼容旧 q_type 字段) ----
+    types = list(data.types) if data.types else ([data.q_type] if data.q_type else None)
+    count = data.count
+    difficulty = (data.difficulty or "").strip().lower() or None
+    for t in (types or []):
+        if t not in ("single", "multiple", "judge", "fill", "short"):
+            raise HTTPException(status_code=400, detail=f"不支持的题型: {t}")
+
+    provided = [bool(types), count is not None, bool(difficulty)]
+    if any(provided) and not all(provided):
+        raise HTTPException(status_code=400, detail="高级选项需完整填写（题型、数量、难度），或全部留空由 AI 自主决定")
+    if not types:
+        count = count or 5
+        difficulty = difficulty or "medium"
+
+    deduct_quota(db, admin, "question_gen", {"count": count, "types": types})
+
+    # ---- Prompt: 高级选项是硬性指令 (与 material 文字冲突时以指令为准) ----
+    type_names = {"single": "单选题", "multiple": "多选题", "judge": "判断题", "fill": "填空题", "short": "简答题"}
+    if types:
+        if len(types) == 1:
+            type_line = f"所有题目必须为【{type_names[types[0]]}】, 不得混入其他题型。"
+        else:
+            type_line = ("题目必须严格按以下题型构成输出(合计恰好 "
+                         + f"{count} 题): " + "、".join(f"{type_names[t]}若干" for t in types)
+                         + f"。总题数必须正好 {count} 题。")
+        constraint = (
+            f"【硬性要求(优先级最高, 与材料文字描述冲突时以此为准)】:\n"
+            f"1. 必须输出恰好 {count} 道题, 不多不少。\n"
+            f"2. {type_line}\n"
+            f"3. 难度统一为 {difficulty}。\n"
+            f"材料仅作为出题主题素材, 材料中提到的题目数量/题型要求一律忽略。"
+        )
+    else:
+        constraint = (
+            f"根据材料自主决定最合适的题型与题目分布, 总共输出 {count} 道题, 难度 {difficulty}。"
+        )
+
+    system = "你是专业的题库出题专家。根据老师给定的材料或描述出题。只输出 JSON, 格式: " + QUESTION_JSON_SPEC
     prompt = (
-        f"请出 {data.count} 道{data.q_type}题, 难度 {data.difficulty}。"
-        f"每题 score=10, 带解析。填空题题干中 ___ 的数量必须与 answer 二维数组长度一致; "
+        f"{constraint}\n\n"
+        f"出题要求: 每题 score=10, 带解析。填空题题干中 ___ 的数量必须与 answer 二维数组长度一致; "
         f"简答题必须给出参考答案和踩分点。\n\n材料/需求:\n{data.material}"
     )
     try:
@@ -142,18 +187,24 @@ def ai_generate_questions(
     except (AiServiceError, ValueError) as e:
         raise HTTPException(status_code=502, detail=f"AI 出题失败: {e}")
 
-    # 结构规范化 (不给 AI 越权字段; 纠正 answer 结构)
+    # 结构规范化 (不给 AI 越权字段; 纠正 answer/options 结构)
     safe_items = []
-    for q in questions[:data.count]:
+    for q in questions:
         if not isinstance(q, dict) or not q.get("title"):
             continue
-        item = _normalize_generated_question(q, data.q_type, data.difficulty)
+        default_type = types[0] if (types and len(types) == 1) else "single"
+        item = _normalize_generated_question(q, default_type, difficulty or "medium")
+        if types and item["type"] not in types:
+            continue  # AI 越出题型构成, 丢弃
         item["category_id"] = data.category_id
         item["source"] = "ai"
         safe_items.append(item)
     if not safe_items:
         raise HTTPException(status_code=502, detail="AI 未生成有效题目，请调整描述后重试")
-    return ResponseModel(code=200, message="生成成功，请预览确认后入库", data={"questions": safe_items})
+    if count and len(safe_items) > count:
+        safe_items = safe_items[:count]
+    note = "" if not types or len(safe_items) >= count else f"（AI 实际返回 {len(safe_items)}/{count} 题，数量不足可再生成一批）"
+    return ResponseModel(code=200, message="生成成功，请预览确认后入库" + note, data={"questions": safe_items})
 
 
 # ---------------- ✨ AI 智能组卷 ----------------
@@ -170,10 +221,9 @@ def ai_generate_exam(
     total_expected = sum(s.count for s in data.specs)
     deduct_quota(db, admin, "exam_gen", {"title": data.title, "specs": [s.model_dump() for s in data.specs]})
 
-    # 题库摘要 (供 AI 检索复用)
-    bank = db.query(Question).filter(Question.is_deleted == False).all()  # noqa: E712
-    bank_digest = [{"id": q.id, "type": q.type, "title": (q.title or "")[:60], "difficulty": q.difficulty}
-                   for q in bank]
+    # 题库摘要 (供 AI 检索复用; 截断防 prompt 过长超时)
+    bank = db.query(Question).filter(Question.is_deleted == False).order_by(Question.id.desc()).limit(120).all()  # noqa: E712
+    bank_digest = [{"id": q.id, "type": q.type, "title": (q.title or "")[:30]} for q in bank]
 
     system = (
         "你是智能组卷助理。你会收到: 老师需求、题型构成要求、当前共享题库摘要。"

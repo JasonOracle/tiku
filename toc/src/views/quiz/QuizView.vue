@@ -341,9 +341,17 @@ const toggleFavorite = async () => {
 };
 
 const handleManualSubmit = () => {
-  const answeredCount = Object.keys(userAnswers).filter(
-    (key) => userAnswers[key] && userAnswers[key].length > 0
-  ).length;
+  // 未作答统计: 客观选项 + 填空逐空 + 简答文本 三类作答一并计入 (v1.4 修复主观题不计入的Bug)
+  const answeredCount = questions.value.filter((q) => {
+    const qid = String(q.id);
+    if (q.type === 'fill') {
+      return (fillAnswers[qid] || []).some((v) => (v || '').trim());
+    }
+    if (q.type === 'short') {
+      return (shortAnswers[qid] || '').trim().length > 0;
+    }
+    return (userAnswers[q.id] || []).length > 0;
+  }).length;
 
   if (answeredCount < questions.value.length) {
     const unAnswered = questions.value.length - answeredCount;

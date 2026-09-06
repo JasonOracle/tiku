@@ -89,14 +89,24 @@ def main():
     # ---------- 4. ✨AI 出题 (真实大模型) ----------
     print("【2】✨AI 出题 (真实调用 SenseNova)")
     t0 = time.time()
+    # 负路径: 高级选项部分填写 → 400
+    r_part = c.post("/api/v1/admin/ai/questions/generate", headers=ah, json={
+        "material": "围绕 Python 基础语法出题", "count": 2})
+    check("AI出题高级选项部分填写 400", r_part.status_code == 400)
     gen = jp(c.post("/api/v1/admin/ai/questions/generate", headers=ah, json={
-        "material": "围绕 Python 基础语法出题：变量命名、缩进、列表与元组的区别",
-        "count": 2, "q_type": "single", "difficulty": "easy", "category_id": qcat["id"]}))
+        "material": "围绕 Python 基础语法出题：变量命名、缩进、列表与元组的区别。材料中说3道，但按高级选项出5道",
+        "types": ["single"], "count": 5, "difficulty": "easy", "category_id": qcat["id"]}))
+    check("AI出题多题型/数量优先级(高级选项5题为准)", len(gen["questions"]) <= 5 and all(q["type"] == "single" for q in gen["questions"]),
+          f"生成{len(gen['questions'])}题 single")
     ai_questions = gen["questions"]
     check("AI 生成题目(预览不入库)", len(ai_questions) >= 1 and all(q["source"] == "ai" for q in ai_questions),
           f"{len(ai_questions)} 题, 耗时 {time.time()-t0:.0f}s")
     batch = jp(c.post("/api/v1/admin/questions/batch", headers=ah, json=ai_questions))
     check("AI 题目二次确认入库", len(batch["question_ids"]) == len(ai_questions))
+    # options 结构规范化回归 (曾因字符串 options 拖垮题目列表)
+    lst_check = jp(c.get("/api/v1/admin/questions", headers=ah, params={"size": 10}))
+    check("题目列表无脏 options(规范化回归)", all(
+        (not q["options"]) or isinstance(q["options"][0], dict) for q in lst_check["items"]))
 
     # ---------- 5. 三份试卷 ----------
     print("【3】组卷与上架")

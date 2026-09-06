@@ -15,7 +15,7 @@ class OptionItem(BaseModel):
 class QuestionCreate(BaseModel):
     type: str = Field(..., description="题型: single(单选), multiple(多选), judge(判断), fill(填空), short(简答)")
     title: str = Field(..., description="题目题干说明 (填空题用 ___ 作空位占位符)")
-    options: Optional[List[OptionItem]] = Field(default=[], description="选项列表 (填空/简答为空)")
+    options: Optional[List[Any]] = Field(default=[], description="选项列表 (兼容 {key,text} 对象与 AI 生成的字符串形态, 入库前统一规范化)")
     answer: List[Any] = Field(..., description="标准答案: 客观题 ['A']; 填空题二维数组 [['北京','北京市'],['是']]; 简答题 ['答案全文']")
     grading_points: Optional[List[str]] = Field(default=[], description="简答题踩分点列表")
     explanation: Optional[str] = Field("", description="文字详细解析")
@@ -27,7 +27,7 @@ class QuestionCreate(BaseModel):
 class QuestionUpdate(BaseModel):
     type: Optional[str] = None
     title: Optional[str] = None
-    options: Optional[List[OptionItem]] = None
+    options: Optional[List[Any]] = None
     answer: Optional[List[Any]] = None
     grading_points: Optional[List[str]] = None
     explanation: Optional[str] = None
@@ -39,7 +39,8 @@ class QuestionResponse(BaseModel):
     id: int
     type: str
     title: str
-    options: Optional[List[Dict[str, Any]]] = []
+    # 读取容错: 历史数据可能存在字符串形态选项, 前端按对象展示, B端编辑保存时由后端统一规范化
+    options: Optional[List[Any]] = []
     answer: List[Any]
     grading_points: Optional[List[str]] = []
     explanation: Optional[str] = ""

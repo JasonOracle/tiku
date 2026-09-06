@@ -934,7 +934,7 @@ const generateAiExam = async () => {
       is_timed: true,
       time_limit: aiExamForm.time_limit,
       pass_percent: aiExamForm.pass_percent
-    });
+    }, { timeout: 180000 }); // 真实大模型组卷较慢, 覆盖全局 10s 超时
     aiExamId = res.exam_id;
     aiExamResult.value = res.message || `已生成草稿，共 ${res.question_count} 题（AI 新生成 ${res.new_questions} 题）`;
     loadExams();
