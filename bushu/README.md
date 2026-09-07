@@ -66,49 +66,49 @@
 
 ---
 
-## 第二步：云端部署 Python FastAPI 后端 (Hugging Face Spaces - 真正 100% 永久免费免绑卡)
+## 第二步：云端部署 Python FastAPI 后端 (Vercel Serverless - 真正 100% 免绑卡极速方案)
 
-> **为什么选 Hugging Face Spaces？**  
-> 1. **真正 100% 免任何银行卡**：只需要一个邮箱或 GitHub 登录，永久零扣费陷阱；  
-> 2. **极其强悍的免费配置**：免费提供 **2 核 CPU + 16GB 内存** 独立容器（比普通云平台大 32 倍！）；  
-> 3. **原生支持 Docker**：项目自带生产级 Dockerfile，直接拉取运行，免去各种构建依赖兼容问题；  
-> 4. **自带全球 HTTPS 域名**：分配永久的 `.hf.space` 免费公网接口地址。
+> **为什么选 Vercel？**  
+> 1. **真正 100% 免任何银行卡**：用你的 GitHub 账号直接登录，永久 Hobby 免费套餐；  
+> 2. **原生支持 Python Serverless**：代码中已内置 `backend/vercel.json`，Vercel 会自动将 FastAPI 转换为全球分布式 Serverless 云函数；  
+> 3. **零冷启动延迟**：全球 CDN 边缘节点分发，国内访问速度极快；  
+> 4. **分配永久免费域名**：部署完毕即获得带 SSL 证书的 `.vercel.app` 专属公网接口地址。
 
-### 2.1 注册并新建 Space
-1. 打开官网：[https://huggingface.co/](https://huggingface.co/)，点击右上角 **Sign Up**（用邮箱或 GitHub 授权直接注册）。
-2. 点击右上角个人头像 $\rightarrow$ 选择 **New Space**（新建空间）。
-3. 填写基本信息：
-   * **Space name**: `tiku-api`（自定义名字）
-   * **License**: 默认 `mit`
-   * **Select the Space SDK**: 必须选择 **`Docker`** 选项！
-   * **Choose a Docker template**: 选择 **`Blank`**（空白，使用代码里的 Dockerfile）
-   * **Space hardware**: 默认的 **`CPU basic · 2 vCPU · 16 GB · FREE`**（免费）
-   * **Public / Private**: 选择 **Public**
-4. 点击最下方的 **Create Space**。
+### 2.1 登录并导入仓库
+1. 打开官网：[https://vercel.com/](https://vercel.com/)，点击 **Log In** $\rightarrow$ 选择 **Continue with GitHub** 登录。
+2. 登录后在 Dashboard 点击右上角 **Add New...** $\rightarrow$ **Project**。
+3. 在 Import Git Repository 列表中找到你的 `tiku` 仓库，点击 **Import**。
 
-### 2.2 关联你的 GitHub 仓库代码（或一键同步）
-创建成功后，你有两种最简单的方式导入代码：
-* **方式 1（最推荐）：直接在 Settings 里关联 GitHub 自动同步**
-  1. 进入该 Space 的 **Settings** 标签页。
-  2. 找到 **GitHub Repository** 绑定功能，关联你的 `JasonOracle/tiku` 仓库。
-* **方式 2：直接复制 backend 文件夹上传**
-  1. 在 Space 页面点击 **Files and versions** $\rightarrow$ **Add file** $\rightarrow$ **Upload files**。
-  2. 将本地 `backend` 目录下的所有文件拖拽进去，点击 Commit 即可。
+### 2.2 填写构建参数 (Configure Project)
+* **Project Name**: `tiku-api`（自定义项目名）
+* **Framework Preset**: 选 **Other**
+* **Root Directory**: 点击 **Edit**，选择 **`backend`**（**关键：必须选中 backend 目录并点击 Continue**）
 
-### 2.3 配置安全环境变量 (Secrets)
-在 Space 页面点击 **Settings** 标签页，向下滚动找到 **Variables and secrets** $\rightarrow$ 点击 **New secret**：
+### 2.3 配置环境变量 (Environment Variables)
+展开 **Environment Variables** 折叠面板，逐个添加 4 个必要变量：
 
-| Secret Name (名称) | Secret Value (内容) | 说明 |
+| Key (变量名) | Value 示例 | 说明 |
 | :--- | :--- | :--- |
-| `DATABASE_URL` | `mysql+pymysql://2kQ7...:4000/test?ssl_ca=/etc/ssl/certs/ca-certificates.crt&ssl_verify_cert=true&ssl_verify_identity=true` | TiDB 连接串 |
+| `DATABASE_URL` | `mysql+pymysql://2kQ7...:4000/test?ssl_ca=/etc/ssl/certs/ca-certificates.crt&ssl_verify_cert=true&ssl_verify_identity=true` | TiDB 数据库连接串 |
 | `ENVIRONMENT` | `production` | 生产模式 |
-| `SECRET_KEY` | `tiku-prod-secret-key-random-token-2026` | JWT 密钥 |
-| `CORS_ORIGINS` | `*` | 跨域全通 |
+| `SECRET_KEY` | `tiku-prod-secret-key-random-token-2026` | 32位随机 JWT 密钥 |
+| `CORS_ORIGINS` | `*` | 跨域全放行 |
 
-### 2.4 获取后端公网 API 地址
-1. 点击 Space 右上角的 **三点图标 (⋮)** $\rightarrow$ 选择 **Embed this Space**。
-2. 里面有一项 **Direct URL**（例如 `https://jason-tiku-api.hf.space`），这个就是你的全球公网后端 API 根地址！
-3. 在浏览器中访问 `https://你的Space地址.hf.space/docs`，即可看到交互式 API 接口文档！
+### 2.4 点击 Deploy 并获取在线 API
+1. 点击底部的 **Deploy** 按钮。
+2. Vercel 会自动读取 `vercel.json` 与 `requirements.txt` 进行轻量化构建，大约 30 秒内完成部署并撒花！
+3. 点击生成的卡片，获取你的后端公网网址，例如：
+   `https://tiku-api.vercel.app`
+4. 验证接口：在浏览器打开 `https://tiku-api.vercel.app/docs`，即可看到交互式 Swagger API 文档！
+
+---
+
+### 💡 备选方案：Render.com (适合已有海外信用卡用户)
+如果在 [render.com](https://render.com/) 通过了绑卡验证，也可使用 Render Web Service：
+- **Root Directory**: `backend`
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **环境变量**: 同上表。
 
 ---
 
