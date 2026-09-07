@@ -66,51 +66,59 @@
 
 ---
 
-## 第二步：云端部署 Python FastAPI 后端 (Render.com)
+## 第二步：云端部署 Python FastAPI 后端 (Koyeb - 100% 免绑卡推荐)
 
-> **为什么选 Render？**  
-> 支持直接连接 GitHub 仓库自动拉取代码部署，原生支持 Python 3.10+ 环境，免费提供独立二级域名与全站 HTTPS。
+> **为什么首选 Koyeb？**  
+> 1. **完全免绑信用卡**：支持 GitHub 账号一键授权登录，永久免费额度无需任何银行卡验证，彻底避开 Stripe/外币卡 3DS 拦截风险；  
+> 2. **原生支持 Buildpack & Docker**：自动识别 Python 3.10+ / FastAPI 项目；  
+> 3. **全球边缘加速 & HTTPS**：自动分配 `.koyeb.app` 免费域名与 SSL 证书；  
+> *(备选：如果已有海外信用卡且通过了 Stripe 验证，也可以使用 Render.com)*
 
-### 2.1 注册并新建 Web Service
-1. 打开 [https://render.com/](https://render.com/)，使用 GitHub 登录。
-2. 点击右上角 **New +** $\rightarrow$ **Web Service**。
-3. 选择 **Build and deploy from a Git repository**，选中你的 `tiku` 仓库并点击 Connect。
+### 2.1 注册并创建 Koyeb Service
+1. 打开官网：[https://app.koyeb.com/](https://app.koyeb.com/)，点击 **Sign in with GitHub** 直接登录。
+2. 登录后进入控制台，点击右上角 **Create Service**。
+3. 部署来源选择 **GitHub**。
+4. 在仓库列表中找到并选中你的 `tiku` 仓库（首次使用点击授权 Install Koyeb GitHub App）。
 
-### 2.2 填写构建与运行参数
-* **Name**: `tiku-api`（自定义名称）
-* **Region**: 选择与数据库相近的地区（如 `Singapore` 或 `Oregon`）
-* **Branch**: `master`（或你的主分支）
-* **Root Directory**: `backend` （**非常重要：填写项目的后端根目录**）
-* **Runtime**: `Python 3`
-* **Build Command**:
+### 2.2 填写构建与运行参数 (App Configuration)
+* **Branch**: `master`
+* **Work Directory (工作目录)**: 点击展开高级选项，填写 `backend` （**关键：必须指向后端目录**）
+* **Builder**: 保持默认的 **Buildpack**（会自动识别 requirements.txt 并安装 Python 依赖）
+* **Build Command**: 留空（Buildpack 会自动执行 `pip install -r requirements.txt`）
+* **Run Command**:
   ```bash
-  pip install --upgrade pip && pip install -r requirements.txt
+  uvicorn app.main:app --host 0.0.0.0 --port 8000
   ```
-* **Start Command**:
-  ```bash
-  uvicorn app.main:app --host 0.0.0.0 --port $PORT
-  ```
-* **Instance Type**: 选择 **Free**
+  *(或者 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`)*
+* **Instance Type (实例规格)**: 选择 **Free (Nano)**（$0/month，512MB 内存，免绑卡可用）
+* **Regions**: 默认通常分配 `Frankfurt (fra)` 或 `Washington D.C. (was)`，选默认即可。
+* **Exposed Port (暴露端口)**: 默认是 `8000`（与 Run Command 端口一致），Path 为 `/`，协议选 `HTTP`。
 
 ### 2.3 配置环境变量 (Environment Variables)
-在下方 **Environment Variables** 点击 **Add Environment Variable** 添加必要配置：
+在 **Environment variables** 区域逐个添加：
 
-| Key | Value 示例 | 说明 |
+| Key (变量名) | Value 示例 | 说明 |
 | :--- | :--- | :--- |
-| `DATABASE_URL` | `mysql+pymysql://...:4000/tiku?ssl_verify_cert=true` | 第一步获取的 TiDB 连接串 |
-| `ENVIRONMENT` | `production` | 生产模式（开启更严密的跨域与日志） |
-| `SECRET_KEY` | `your_custom_jwt_secret_key_random_string` | JWT 加密密钥（可随机敲32位字符串） |
-| `SENSENOVA_API_KEY` | `your_sensenova_key` | 商汤日日新模型 Key（若有） |
-| `XIAO_HONG_SHU_API_KEY` | `your_dots_key` | Dots.ai 高速模型 Key（若有） |
+| `DATABASE_URL` | `mysql+pymysql://2kQ7...:4000/test?ssl_ca=/etc/ssl/certs/ca-certificates.crt&ssl_verify_cert=true&ssl_verify_identity=true` | 第一步获取的 TiDB 连接串 |
+| `ENVIRONMENT` | `production` | 生产模式 |
+| `SECRET_KEY` | `tiku-prod-secret-key-random-token-2026` | 32位随机密钥 |
+| `CORS_ORIGINS` | `*` | 跨域放行 |
 
-### 2.4 点击创建并等待部署
-1. 点击 **Create Web Service**，系统将自动执行依赖安装、建表与服务启动。
-2. 观察控制台日志（Logs），看到 `Application startup complete.` 即表示后端启动成功！
-3. 复制 Render 顶部为你分配的公网网址，例如：
-   `https://tiku-api.onrender.com`
-4. 在浏览器中打开 `https://tiku-api.onrender.com/docs`，若能正常看到 Swagger API 交互文档，说明后端 100% 成功！
+### 2.4 点击 Deploy 并获取公网地址
+1. 点击最底部的 **Deploy** 按钮。
+2. 等待 1~2 分钟，页面上方会显示构建与运行日志，状态变为绿色的 **Healthy**。
+3. 复制 Koyeb 分配的公网访问网址，格式类似于：
+   `https://tiku-api-xxxx.koyeb.app`
+4. 验证后端：在浏览器打开 `https://tiku-api-xxxx.koyeb.app/docs`，若能正常打开 Swagger 接口文档，说明后端与 TiDB 云数据库已经 100% 连通上线！
 
-> 💡 **冷启动提示**：Render 免费版实例在无请求 15 分钟后会进入轻微休眠。首次打开可能需要等待 30 秒“唤醒”，后续运行速度完全正常。
+---
+
+### 💡 备选方案：Render.com (适合已有外币信用卡用户)
+如果已有支持海外消费的信用卡并通过了 Stripe 验证，也可以在 [render.com](https://render.com/) 创建 Web Service：
+- **Root Directory**: `backend`
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **环境变量**: 同上表。
 
 ---
 
