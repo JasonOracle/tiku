@@ -3,6 +3,12 @@
 修改时间：2026-09-07 01:05:00
 AI模型：Gemini 系列
 修改内容：[重构三级权限架构 API: 允许超级管理员创建管理员/出题人，管理员创建出题人；增加 name(姓名)/phone(手机号) 字段]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.2 Step5: 创建账号写入 created_by_id 层级溯源; 划拨额度红线校验(普通管理员仅可向直属出题人充值, 违背403; 超管全域调配)]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.7: 成员列表返回 created_by_id; 普通管理员仅可见自己创建的直属账号(超管全览)]
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -53,9 +59,11 @@ def list_members(
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
-    """成员列表 (含角色/状态/姓名/手机号/额度配置/今日余额)"""
+    """成员列表 (含角色/状态/姓名/手机号/额度配置/今日余额; 普通管理员仅见直属下级, 超管全览)"""
     require_admin_or_super(admin)
     query = db.query(Admin)
+    if admin.role == "admin":
+        query = query.filter(Admin.created_by_id == admin.id)
     if keyword:
         query = query.filter(
             (Admin.username.like(f"%{keyword}%")) | (Admin.name.like(f"%{keyword}%"))
@@ -76,6 +84,7 @@ def list_members(
             "phone": m.phone or "",
             "role": m.role,
             "status": m.status,
+            "created_by_id": m.created_by_id,
             "ai_quota_limit": m.ai_quota_limit or 0,
             "daily_ai_quota": m.daily_ai_quota or 0,
             "quota_reset_date": str(m.quota_reset_date) if m.quota_reset_date else None,
@@ -95,10 +104,10 @@ def create_member(
 ):
     """创建账号 (超管可创建管理员/出题人；管理员仅可创建出题人)"""
     require_admin_or_super(admin)
-    if admin.role == "admin" and data.role != "teacher":
+    if admin.role == "admin" and data.role not in ("teacher", "creator"):
         raise HTTPException(status_code=403, detail="管理员仅可创建出题人账号")
-    if data.role not in ("admin", "teacher"):
-        raise HTTPException(status_code=400, detail="角色非法，可选 role: admin(管理员) 或 teacher(出题人)")
+    if data.role not in ("admin", "teacher", "creator"):
+        raise HTTPException(status_code=400, detail="角色非法，可选 role: admin(管理员) 或 teacher/creator(出题人)")
 
     if db.query(Admin).filter(Admin.username == data.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
@@ -110,6 +119,7 @@ def create_member(
         password_hash=get_password_hash(data.password),
         role=data.role,
         status=True,
+        created_by_id=admin.id,
         ai_quota_limit=data.ai_quota_limit,
         daily_ai_quota=data.ai_quota_limit,
         quota_reset_date=datetime.now().date(),
@@ -173,11 +183,15 @@ def refill_quota(
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
-    """即时补充账号今日 AI 余额"""
+    """即时补充账号今日 AI 余额 (红线: 普通管理员仅可向自己创建的直属出题人充值; 超管全域调配)"""
     require_admin_or_super(admin)
     member = db.query(Admin).filter(Admin.id == member_id).first()
     if not member:
         raise HTTPException(status_code=404, detail="账号不存在")
+    if admin.role == "admin":
+        # v1.2 禁止清单#4: 严禁向同级管理员或上级超管充值/改动额度
+        if member.role not in ("creator", "teacher") or member.created_by_id != admin.id:
+            raise HTTPException(status_code=403, detail="仅可向自己创建的直属出题人划拨额度")
     refresh_daily_quota(member)
     member.daily_ai_quota = (member.daily_ai_quota or 0) + data.amount
     db.commit()

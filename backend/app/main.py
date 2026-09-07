@@ -3,6 +3,9 @@
 修改时间：2026-09-06 19:00:00
 AI模型：ZCode (GLM)
 修改内容：[v1.3: auto_patch 新增 users 注册资料列 (nickname/gender/position/phone 唯一/email)]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.2 Step1: auto_patch 新增 admins.created_by_id / admins.role 兜底 / exams.grading_mode 幂等补列]
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,17 +31,21 @@ def auto_patch_db_columns():
         "ALTER TABLE exams ADD COLUMN is_random BOOLEAN DEFAULT FALSE",
         "ALTER TABLE questions ADD COLUMN score INT DEFAULT 10",
         # ---- v1.2 RBAC / 题库治理 ----
+        "ALTER TABLE admins ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'admin'",
+        "ALTER TABLE admins ADD COLUMN created_by_id INT NULL",
         "ALTER TABLE admins ADD COLUMN status BOOLEAN DEFAULT TRUE",
         "ALTER TABLE admins ADD COLUMN ai_quota_limit INT DEFAULT 0",
         "ALTER TABLE admins ADD COLUMN daily_ai_quota INT DEFAULT 0",
         "ALTER TABLE admins ADD COLUMN quota_reset_date DATE NULL",
         "ALTER TABLE questions ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE questions ADD COLUMN creator_id INT NULL",
         "ALTER TABLE questions ADD COLUMN source VARCHAR(20) DEFAULT 'manual'",
         "ALTER TABLE questions ADD COLUMN grading_points JSON NULL",
         # ---- v1.2 考试时间窗 / AI 全托管 / 试卷隔离 ----
         "ALTER TABLE exams ADD COLUMN start_time DATETIME NULL",
         "ALTER TABLE exams ADD COLUMN end_time DATETIME NULL",
         "ALTER TABLE exams ADD COLUMN is_ai_auto_grade BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE exams ADD COLUMN grading_mode VARCHAR(20) NOT NULL DEFAULT 'manual'",
         "ALTER TABLE exams ADD COLUMN creator_id INT NULL",
         # ---- v1.2 主观题阅卷 ----
         "ALTER TABLE exam_records ADD COLUMN ai_grading_result JSON NULL",

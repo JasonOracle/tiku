@@ -3,6 +3,9 @@
 修改时间：2026-09-06 17:30:00
 AI模型：ZCode (GLM)
 修改内容：[v1.2 Schema 扩展: Exam 增加 start_time/end_time/is_ai_auto_grade/creator 字段与 pending_count 红点、window_status 子状态]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.2 Step2: Exam 增加 grading_mode(manual|ai_pre|ai_auto) 与 is_ai_auto_grade 双写兼容]
 """
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -26,7 +29,8 @@ class ExamCreate(BaseModel):
     status: Optional[str] = Field("draft", description="状态: draft (待上架), published (已上架)")
     is_recommended: bool = Field(False, description="首页推荐标识")
     is_random: bool = Field(False, description="是否随机题目顺序")
-    is_ai_auto_grade: bool = Field(False, description="AI全权阅卷开关 (含简答题时生效)")
+    is_ai_auto_grade: bool = Field(False, description="AI全权阅卷开关 (含简答题时生效, 与 grading_mode=ai_auto 同义)")
+    grading_mode: Optional[str] = Field(None, description="阅卷模式: manual人工全权 | ai_pre AI辅助预审 | ai_auto AI自动托管")
     question_ids: Optional[List[int]] = Field(default=[], description="包含的题目ID列表")
     questions: Optional[List[ExamQuestionConfig]] = Field(default=[], description="组卷关联题目与分值明细")
 
@@ -43,6 +47,7 @@ class ExamUpdate(BaseModel):
     is_recommended: Optional[bool] = None
     is_random: Optional[bool] = None
     is_ai_auto_grade: Optional[bool] = None
+    grading_mode: Optional[str] = None
     question_ids: Optional[List[int]] = None
     questions: Optional[List[ExamQuestionConfig]] = None
 
@@ -71,6 +76,7 @@ class ExamResponse(BaseModel):
     is_recommended: bool = False
     is_random: bool = False
     is_ai_auto_grade: bool = False
+    grading_mode: str = "manual"
     creator_id: Optional[int] = None
     creator_name: Optional[str] = ""
     question_count: Optional[int] = 0

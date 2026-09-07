@@ -3,6 +3,12 @@
 修改时间：2026-09-06 17:00:00
 AI模型：ZCode (GLM)
 修改内容：[v1.2 考试时间窗口与AI全托管: Exam 增加 start_time/end_time/is_ai_auto_grade/creator_id]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.2 Step1: Exam 增加 grading_mode(manual|ai_pre|ai_auto, 默认manual), 与 is_ai_auto_grade 历史开关双写兼容]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.2 Step2: 新增 exam_grading_mode/sync_grading_fields 双写兼容助手]
 """
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from datetime import datetime
@@ -28,8 +34,36 @@ class Exam(Base):
     is_recommended = Column(Boolean, default=False, comment="是否在首页推荐推荐")
     is_random = Column(Boolean, default=False, comment="是否随机题目顺序")
     is_ai_auto_grade = Column(Boolean, default=False, comment="AI全权阅卷开关 (含简答题时生效: 开启=AI批完直接发布成绩)")
+    grading_mode = Column(String(20), default="manual", nullable=False, comment="阅卷模式 (manual人工全权|ai_pre AI辅助预审|ai_auto AI自动托管, 与is_ai_auto_grade双写兼容)")
     creator_id = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True, comment="创建老师ID (试卷隔离依据)")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+
+GRADING_MODES = ("manual", "ai_pre", "ai_auto")
+
+
+def exam_grading_mode(exam) -> str:
+    """解析试卷阅卷模式 (v1.2 Step2, 向后兼容历史 is_ai_auto_grade 开关).
+
+    - grading_mode 为 manual/ai_pre/ai_auto 时直接采用;
+    - 历史数据 grading_mode 缺失(NULL)时: is_ai_auto_grade=True 视为 ai_auto, 否则视为 ai_pre
+      (历史 False 即预批改语义: AI 给建议分 + 人工可直接定分).
+    - 其余一律 manual (不消耗 AI 额度, 等待人工批阅).
+    """
+    mode = getattr(exam, "grading_mode", None)
+    if mode in ("ai_pre", "ai_auto", "manual"):
+        return mode
+    if getattr(exam, "is_ai_auto_grade", False) is True:
+        return "ai_auto"
+    return "ai_pre"
+
+
+def sync_grading_fields(exam, mode: str) -> str:
+    """以 grading_mode 为准双写 is_ai_auto_grade, 返回归一化后的 mode."""
+    normalized = mode if mode in GRADING_MODES else "manual"
+    exam.grading_mode = normalized
+    exam.is_ai_auto_grade = (normalized == "ai_auto")
+    return normalized
 
 
 

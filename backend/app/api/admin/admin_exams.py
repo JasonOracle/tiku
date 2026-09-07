@@ -4,6 +4,9 @@
 AI模型：ZCode (GLM)
 修改内容：[v1.2 试卷管理: RBAC 试卷按创建者隔离(超管全览)/组卷时间锁强制校验/is_ai_auto_grade 全托管开关/
          列表双维状态(主状态+时间窗子状态)+待批阅红点(pending_count)/写操作审计留痕]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.2 Step2: grading_mode 与 is_ai_auto_grade 双写兼容; 出题人(creator/teacher)查询隔离显式化]
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -12,7 +15,7 @@ import math
 from app.core.database import get_db
 from app.api.deps import get_current_admin
 from app.models.user import Admin
-from app.models.exam import Exam, ExamQuestion
+from app.models.exam import Exam, ExamQuestion, GRADING_MODES, sync_grading_fields
 from app.models.question import Question
 from app.models.record import ExamRecord
 from app.schemas.exam import ExamCreate, ExamUpdate, ExamResponse, ExamDetailResponse
@@ -88,9 +91,12 @@ def list_admin_exams(
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
-    """B端试卷列表查询 (老师仅见自己创建的试卷, 超管全览; 附带待批阅红点与时间窗子状态)"""
+    """B端试卷列表查询 (出题人 creator/teacher 仅见自己创建的试卷, 超管全览; 附带待批阅红点与时间窗子状态)"""
     query = db.query(Exam)
-    if not is_super(admin):
+    # v1.2 Step2 出题人查询隔离: role == 'creator' (兼容历史 'teacher' 别名) 强制追加 creator_id 过滤
+    if admin.role in ("creator", "teacher"):
+        query = query.filter(Exam.creator_id == admin.id)
+    elif not is_super(admin):
         query = query.filter((Exam.creator_id == admin.id) | (Exam.creator_id.is_(None)))
     if category_id:
         query = query.filter(Exam.category_id == category_id)
@@ -129,8 +135,21 @@ def create_exam(
     admin: Admin = Depends(get_current_admin)
 ):
     """B端创建试卷与进行关联组卷 (时间锁校验 + 记录创建者)"""
+    # v1.2 Step2 时间悖论硬校验: 考试限时不能大于开放总区间时间
+    if data.start_time and data.end_time and data.time_limit:
+        delta_minutes = (data.end_time - data.start_time).total_seconds() / 60
+        if data.time_limit > delta_minutes:
+            raise HTTPException(status_code=400, detail="考试限时不能大于开放总区间时间")
     validate_exam_window(time_limit=data.time_limit, is_timed=data.is_timed,
                          start_time=data.start_time, end_time=data.end_time)
+
+    # v1.2 Step2 阅卷模式归一化: grading_mode 显式值优先;
+    # 未传 grading_mode 时沿用历史开关语义 (True=ai_auto, False/缺省=ai_pre), 仅显式 manual 关闭 AI
+    _mode = data.grading_mode
+    if _mode is not None and _mode not in GRADING_MODES:
+        raise HTTPException(status_code=400, detail="grading_mode 非法, 可选 manual / ai_pre / ai_auto")
+    if _mode is None:
+        _mode = "ai_auto" if data.is_ai_auto_grade else "ai_pre"
 
     exam = Exam(
         title=data.title,
@@ -146,7 +165,8 @@ def create_exam(
         pass_score=0,
         is_recommended=data.is_recommended,
         is_random=data.is_random,
-        is_ai_auto_grade=data.is_ai_auto_grade,
+        is_ai_auto_grade=(_mode == "ai_auto"),
+        grading_mode=_mode,
         creator_id=admin.id,
     )
     db.add(exam)
@@ -250,7 +270,22 @@ def update_exam(
     new_is_timed = update_dict.get("is_timed", exam.is_timed)
     new_start = update_dict.get("start_time", exam.start_time)
     new_end = update_dict.get("end_time", exam.end_time)
+    # v1.2 Step2 时间悖论硬校验
+    if new_start and new_end and new_time_limit:
+        _delta = (new_end - new_start).total_seconds() / 60
+        if new_time_limit > _delta:
+            raise HTTPException(status_code=400, detail="考试限时不能大于开放总区间时间")
     validate_exam_window(time_limit=new_time_limit, is_timed=new_is_timed, start_time=new_start, end_time=new_end)
+
+    # v1.2 Step2 阅卷模式双写: grading_mode 优先, 否则由 is_ai_auto_grade 推导
+    if "grading_mode" in update_dict or "is_ai_auto_grade" in update_dict:
+        _g = update_dict.pop("grading_mode", None)
+        _a = update_dict.pop("is_ai_auto_grade", None)
+        if _g is not None and _g not in GRADING_MODES:
+            raise HTTPException(status_code=400, detail="grading_mode 非法, 可选 manual / ai_pre / ai_auto")
+        _resolved = _g if _g is not None else ("ai_auto" if _a else "ai_pre") if _a is not None else None
+        if _resolved is not None:
+            sync_grading_fields(exam, _resolved)
 
     before_snapshot = {"title": exam.title, "status": exam.status, "is_ai_auto_grade": exam.is_ai_auto_grade}
 

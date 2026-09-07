@@ -4,6 +4,9 @@
 AI模型：ZCode (GLM)
 修改内容：[v1.2 C端答题流重构: 考试时间硬边界(未开始/已结束拦截+倒计时压缩)、续答、含简答题交卷转 pending_grading 并触发 AI 批阅、
          新增"我的测试"三态聚合接口、报告降级查看与防泄题解析锁]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.2 Step2: 交卷 AI 触发按 grading_mode 分流 (manual 不调大模型, ai_pre/ai_auto 后台异步批阅)]
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -12,7 +15,7 @@ from typing import Optional, List
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.models.exam import Exam, ExamQuestion
+from app.models.exam import Exam, ExamQuestion, exam_grading_mode
 from app.models.question import Question
 from app.models.record import ExamRecord, UserFavorite
 from app.schemas.record import (
@@ -179,7 +182,11 @@ def submit_exam(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """提交答卷: 悲观锁抢提交; 含简答题转 pending_grading, 开启 AI 全托管/预批改时后台异步批阅"""
+    """提交答卷: 悲观锁抢提交; 全客观/填空直接出分, 含简答题转 pending_grading.
+
+    分流 (v1.2 Step2): ai_auto 后台异步批阅后直接发布; ai_pre 后台异步生成初评待复核;
+    manual 不调用大模型, 直接等待人工批阅.
+    """
     # 允许 5 分钟宽限期 Token
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
@@ -195,9 +202,12 @@ def submit_exam(
         time_spent=data.time_spent
     )
 
-    # 含简答题: 交卷瞬间立刻返回, AI 批阅(全托管或预批改)在后台协程执行 (主线程不阻塞)
+    # 含简答题: 交卷瞬间立刻返回. ai_pre/ai_auto 在后台协程执行 (主线程不阻塞);
+    # manual 不消耗 AI 额度, 直接等待人工批阅.
     if record.status == "pending_grading" and ai_service.ai_available():
-        background_tasks.add_task(run_ai_grading, record.id)
+        _exam = db.query(Exam).filter(Exam.id == record.exam_id).first()
+        if _exam is not None and exam_grading_mode(_exam) in ("ai_auto", "ai_pre"):
+            background_tasks.add_task(run_ai_grading, record.id)
 
     return ResponseModel(code=200, data=build_report_response(db, record, current_user))
 

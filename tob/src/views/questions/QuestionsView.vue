@@ -199,21 +199,13 @@
       <div v-loading="aiGenerating" element-loading-text="AI生成中，请稍候..."
            element-loading-background="rgba(255, 255, 255, 0.92)" class="ai-gen-body">
         <el-alert type="info" :closable="false" show-icon style="margin-bottom: 8px"
-                  title="AI 生成带「AI生成」标签的题目，必须勾选预览确认后才会入库。支持一次生成多道题。" />
+                  title="AI 生成带「AI生成」标签的题目，必须勾选预览确认后才会入库。支持一次生成多道题。默认难度中等、默认生成 5 题（材料中指定数量优先）。" />
         <div class="ai-limit-tip">⚠️ 单次最多生成 10 道题：材料或高级选项中要求超过 10 道时，将只按 10 道生成；如需更多请分批生成，避免等待过久。</div>
         <div class="form-row" style="display: flex; gap: 16px;">
           <div class="form-item" style="flex: 1;">
             <label class="form-label required">所属分类</label>
             <el-select v-model="aiForm.category_id" placeholder="请选择归属分类" style="width: 100%">
               <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
-            </el-select>
-          </div>
-          <div class="form-item" style="width: 200px;">
-            <label class="form-label">题目难度</label>
-            <el-select v-model="aiForm.difficulty" placeholder="默认简单" clearable style="width: 100%">
-              <el-option label="简单" value="easy" />
-              <el-option label="中等" value="medium" />
-              <el-option label="困难" value="hard" />
             </el-select>
           </div>
         </div>
@@ -229,12 +221,20 @@
           <el-collapse-item name="adv">
             <template #title>
               <span class="adv-title">高级选项（选填）</span>
-              <span class="adv-tip">自定义题型与题目数量；与材料描述冲突时以此为准</span>
+              <span class="adv-tip">自定义题型、题目数量与难度；与材料描述冲突时以此为准（启用后三项需完整填写）</span>
             </template>
             <div class="adv-body">
               <div class="form-item">
+                <label class="form-label">题目难度</label>
+                <el-radio-group v-model="aiForm.difficulty" @change="markAdvancedTouched">
+                  <el-radio label="easy">简单</el-radio>
+                  <el-radio label="medium">中等</el-radio>
+                  <el-radio label="hard">困难</el-radio>
+                </el-radio-group>
+              </div>
+              <div class="form-item">
                 <label class="form-label">题型</label>
-                <el-checkbox-group v-model="aiForm.types">
+                <el-checkbox-group v-model="aiForm.types" @change="markAdvancedTouched">
                   <el-checkbox value="single">单选</el-checkbox>
                   <el-checkbox value="multiple">多选</el-checkbox>
                   <el-checkbox value="judge">判断</el-checkbox>
@@ -246,7 +246,7 @@
               <div class="form-item">
                 <label class="form-label">题目数量</label>
                 <el-input-number v-model="aiForm.count" :min="1" :max="10" controls-position="right"
-                                 placeholder="默认 5，最多 10" style="width: 200px" />
+                                 placeholder="默认 5，最多 10" style="width: 200px" @change="markAdvancedTouched" />
               </div>
             </div>
           </el-collapse-item>
@@ -393,12 +393,16 @@ const aiDialogVisible = ref(false);
 const aiGenerating = ref(false);
 const aiImporting = ref(false);
 const advancedOpen = ref<string[]>([]);
+const advancedTouched = ref(false);
+const markAdvancedTouched = () => {
+  advancedTouched.value = true;
+};
 const aiForm = reactive({
   category_id: undefined as number | undefined,
   material: '',
   types: [] as string[],
-  count: undefined as number | undefined,
-  difficulty: 'easy'
+  count: 5 as number | undefined,
+  difficulty: 'medium'
 });
 const aiPreview = ref<any[]>([]);
 const aiSelected = ref<any[]>([]);
@@ -410,8 +414,9 @@ const openAiDialog = () => {
   aiForm.category_id = firstCategoryId();
   aiForm.material = '';
   aiForm.types = [];
-  aiForm.count = undefined;
-  aiForm.difficulty = 'easy';
+  aiForm.count = 5;
+  aiForm.difficulty = 'medium';
+  advancedTouched.value = false;
   advancedOpen.value = [];
   aiDialogVisible.value = true;
 };
@@ -431,13 +436,30 @@ const generateQuestions = async () => {
     ElMessage.error('请填写出题材料或需求描述');
     return;
   }
+  // 高级选项未动过则三项全空（后端自主：材料数量优先，默认 5 道/中等）；
+  // 动过则必须三项齐全，否则后端 400
+  const useAdvanced = advancedTouched.value;
+  if (useAdvanced) {
+    if (!aiForm.types.length) {
+      ElMessage.error('已启用高级选项，请至少勾选一种题型');
+      return;
+    }
+    if (aiForm.count == null) {
+      ElMessage.error('已启用高级选项，请填写题目数量');
+      return;
+    }
+    if (!aiForm.difficulty) {
+      ElMessage.error('已启用高级选项，请选择题目难度');
+      return;
+    }
+  }
   aiGenerating.value = true;
   try {
     const res: any = await request.post('/api/v1/admin/ai/questions/generate', {
       material: aiForm.material,
-      types: aiForm.types.length ? aiForm.types : undefined,
-      count: aiForm.count ?? undefined,
-      difficulty: aiForm.difficulty || undefined,
+      types: useAdvanced ? aiForm.types : undefined,
+      count: useAdvanced ? aiForm.count : undefined,
+      difficulty: useAdvanced ? aiForm.difficulty : undefined,
       category_id: aiForm.category_id
     }, { timeout: 120000 }); // 真实大模型出题较慢, 覆盖全局 10s 超时
     aiPreview.value = res.questions || [];

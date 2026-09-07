@@ -1,9 +1,12 @@
 <!--
- * [变更日志]
- * 修改时间：2026-09-06 20:40:00
- * AI模型：ZCode (GLM)
- * 修改内容：[v1.2 新增消息中心: 站内信列表/未读过滤/单条与全部已读/链接跳转]
--->
+  * [变更日志]
+  * 修改时间：2026-09-06 20:40:00
+  * AI模型：ZCode (GLM)
+  * 修改内容：[v1.2 新增消息中心: 站内信列表/未读过滤/单条与全部已读/链接跳转]
+  * 修改时间：2026-09-07
+  * AI模型：Muse Spark
+  * 修改内容：[v1.7: 跳转链接按角色守卫，越权直接 Toast 拦截不跳转]
+  -->
 <template>
   <div class="page-card">
     <div class="filter-bar">
@@ -49,8 +52,10 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import request from '../../utils/request';
+import { useUserStore } from '../../store/user';
 
 const router = useRouter();
+const userStore = useUserStore();
 const items = ref<any[]>([]);
 const loading = ref(false);
 const unreadOnly = ref(false);
@@ -91,7 +96,22 @@ const goLink = async (row: any) => {
     await request.post('/api/v1/admin/notifications/read', { ids: [row.id] });
   }
   if (row.link && row.link.startsWith('/admin/')) {
-    router.push(row.link.replace('/admin', ''));
+    const target = row.link.replace('/admin', '') || '/dashboard';
+    // v1.7: 越权链接直接 Toast 拦截，不跳转
+    const needRole: Record<string, string[]> = {
+      '/users': ['super_admin', 'admin'],
+      '/members': ['super_admin', 'admin'],
+      '/audit': ['super_admin'],
+      '/banners': ['super_admin'],
+      '/ai-config': ['super_admin', 'admin']
+    };
+    const hit = Object.keys(needRole).find((k) => target === k || target.startsWith(`${k}/`));
+    if (hit && !needRole[hit].includes(userStore.role)) {
+      ElMessage.error('当前角色无权访问该页面');
+      loadList();
+      return;
+    }
+    router.push(target);
   }
   loadList();
 };

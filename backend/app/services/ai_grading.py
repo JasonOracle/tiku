@@ -3,13 +3,19 @@
 修改时间：2026-09-06 17:30:00
 AI模型：ZCode (GLM)
 修改内容：[v1.2 新增 AI 阅卷调度器: 原子化 Prompt 单次请求批阅整卷简答题, 动态满分(exam_questions.score), 全托管/预批改双模式, 失败回退人工大厅]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.2 Step2: 全托管判定改走 exam_grading_mode(grading_mode 为准, 兼容历史开关)]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[致命修复: chat_completion 返回元组需解包 (AI 阅卷生产 500 根因)]
 """
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.models.exam import Exam, ExamQuestion
+from app.models.exam import Exam, ExamQuestion, exam_grading_mode
 from app.models.question import Question
 from app.models.record import ExamRecord
 from app.models.user import Admin
@@ -69,8 +75,8 @@ def collect_short_items(db: Session, record: ExamRecord) -> list:
 
 def run_ai_grading(record_id: int, db: Optional[Session] = None) -> Optional[ExamRecord]:
     """AI 批阅入口 (BackgroundTasks 后台执行)。
-    - 成功 + is_ai_auto_grade: 直接终算发布成绩
-    - 成功 + 预批改模式: 仅写建议分数, 留给老师复核
+    - 成功 + grading_mode == 'ai_auto': 直接终算发布成绩
+    - 成功 + 'ai_pre': 仅写建议分数, 留给老师复核
     - 任何失败: 写入 error 信息, 记录留在 pending_grading 交人工大厅兜底
     """
     own_session = db is None
@@ -99,7 +105,7 @@ def _run(db: Session, record_id: int) -> Optional[ExamRecord]:
         return record
 
     try:
-        raw = ai_service.chat_completion(
+        raw, _ = ai_service.chat_completion(
             build_grading_prompt(short_items),
             system=GRADING_SYSTEM_PROMPT,
             json_mode=True,
@@ -130,7 +136,7 @@ def _run(db: Session, record_id: int) -> Optional[ExamRecord]:
         record.ai_grading_result = {"suggestions": suggestions, "error": None, "graded_at": datetime.now().isoformat(sep=" ", timespec="seconds")}
         log_system_usage(db, "grading", {"record_id": record.id, "exam_id": exam.id, "short_count": len(short_items)})
 
-        if exam.is_ai_auto_grade:
+        if exam_grading_mode(exam) == "ai_auto":
             finalize_record(db, record, short_scores=short_scores)
             write_audit(db, "grade", "record", record.id,
                         summary=f"AI 全托管批阅并发布成绩: 记录#{record.id} 得分{record.score}",

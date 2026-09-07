@@ -1,8 +1,14 @@
 <!--
- * [变更日志]
- * 修改时间：2026-09-07 00:05:00
- * AI模型：Gemini 系列
- * 修改内容：[1. AI 智能一键组卷弹窗 UI 对齐普通新建试卷: 增加题目难度单选框(默认简单)、限时作答开关+输入框、及格比例 Slider 滑块；2. 说明 AI 组卷及格线在题目生成后进入查看与确认页动态向上取整计算]
+  * [变更日志]
+  * 修改时间：2026-09-07 00:05:00
+  * AI模型：Gemini 系列
+  * 修改内容：[1. AI 智能一键组卷弹窗 UI 对齐普通新建试卷: 增加题目难度单选框(默认简单)、限时作答开关+输入框、及格比例 Slider 滑块；2. 说明 AI 组卷及格线在题目生成后进入查看与确认页动态向上取整计算]
+  * 修改时间：2026-09-07
+  * AI模型：Muse Spark
+  * 修改内容：[v1.2 Step3: 试卷标题列行内待办橙色微章 + GradingDrawer 行内批阅抽屉 (替代跳阅卷大厅)]
+  * 修改时间：2026-09-07
+  * AI模型：Muse Spark
+  * 修改内容：[v1.2 Step4: 已选题目透亮选项与正确答案高亮(QuestionPreview) + grading_mode 三态单选(仅简答题展开)]
 -->
 <template>
   <div class="page-card">
@@ -27,7 +33,22 @@
     <!-- 试卷列表表格 -->
     <el-table :data="exams" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
       <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column prop="title" label="试卷名称" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="title" label="试卷名称" min-width="200" show-overflow-tooltip>
+        <template #default="{ row }">
+          <div class="exam-title-cell">
+            <span>{{ row.title }}</span>
+            <el-tag
+              v-if="row.pending_count > 0"
+              type="warning"
+              effect="dark"
+              class="cursor-pointer pending-badge"
+              @click="handleOpenGrading(row)"
+            >
+              {{ row.pending_count }} 份待批阅
+            </el-tag>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column prop="category_id" label="试卷分类" width="140">
         <template #default="{ row }">
           <el-tag type="info" effect="plain">{{ row.category_name || getCategoryName(row.category_id) }}</el-tag>
@@ -77,8 +98,11 @@
       </el-table-column>
       <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="row.pending_count > 0" type="danger" size="small" round @click="goGrading(row)">
-            {{ row.pending_count }}份待批阅
+          <el-button v-if="row.pending_count > 0" type="warning" text size="small" @click="handleOpenGrading(row)">
+            行内批阅
+          </el-button>
+          <el-button v-if="row.pending_count > 0" type="primary" text size="small" @click="openGradingHall(row)">
+            阅卷大厅
           </el-button>
           <el-button v-if="row.status !== 'draft'" type="success" text size="small" @click="openStatsDialog(row)">
             <el-icon><DataAnalysis /></el-icon> 考情
@@ -308,11 +332,16 @@
 
         <el-row v-if="hasShortQuestion" :gutter="16">
           <el-col :span="24">
-            <el-form-item label="AI 全权阅卷">
-              <el-switch v-model="form.is_ai_auto_grade" active-text="AI 自动批阅简答题" />
+            <el-form-item label="AI 阅卷模式">
+              <el-radio-group v-model="form.grading_mode">
+                <el-radio label="manual">人工全权批阅</el-radio>
+                <el-radio label="ai_pre">AI 辅助预审</el-radio>
+                <el-radio label="ai_auto">AI 自动托管</el-radio>
+              </el-radio-group>
               <div class="score-calc-tip" style="margin-top: 6px">
-                试卷包含<strong>简答题</strong>才会显示此开关：开启后交卷即由 AI 批阅并直接发布成绩；
-                关闭则 AI 仅预批改，需老师在「阅卷大厅」复核确认。AI 批阅失败会自动降级回人工。
+                检测到<strong>简答题</strong>才显示此选项：人工全权不消耗 AI 额度，交卷后等待老师批改；
+                AI 辅助预审由 AI 生成初评建议分，需老师确认发布；AI 自动托管批完直接发布成绩。
+                全客观题试卷隐藏此选项（纯代码秒出分）。
               </div>
             </el-form-item>
           </el-col>
@@ -395,7 +424,12 @@
                 <el-tag size="small" :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="title" label="题干描述" show-overflow-tooltip />
+            <el-table-column prop="title" label="题干描述" min-width="260">
+              <template #default="{ row }">
+                <div class="selected-title">{{ row.title }}</div>
+                <QuestionPreview :question="row" />
+              </template>
+            </el-table-column>
             <el-table-column prop="score" label="分值" width="80">
               <template #default="{ row }">
                 <span style="font-weight: 700; color: #0284c7">{{ row.score || 10 }} 分</span>
@@ -482,96 +516,128 @@
         </el-button>
       </template>
     </el-dialog>
+    <!-- ✨ AI 智能一键组卷 Dialog (v1.2 Step4: 极简两项必填 + 生成后原地审阅) -->
+    <el-dialog v-model="aiExamVisible" :title="aiReviewVisible ? '✨ AI 组卷结果审阅' : '✨ AI 智能一键组卷'" width="700px" destroy-on-close>
+      <!-- 生成后所见即所得审阅清单 -->
+      <div v-if="aiReviewVisible">
+        <el-alert type="success" :closable="false" show-icon style="margin-bottom: 14px"
+                  :title="aiExamResult || 'AI 组卷完成，请核对题目后确认保存'" />
+        <div class="ai-review-list">
+          <div v-for="(q, idx) in aiReviewQuestions" :key="q.id || idx" class="ai-review-card">
+            <div class="ai-review-head">
+              <span class="ai-review-index">第 {{ idx + 1 }} 题</span>
+              <el-tag size="small" :type="getTypeTag(q.type)">{{ getTypeLabel(q.type) }}</el-tag>
+              <span class="ai-review-score">{{ q.score || 10 }} 分</span>
+            </div>
+            <div class="ai-review-title">{{ q.title }}</div>
+            <QuestionPreview :question="q" />
+          </div>
+        </div>
+      </div>
 
-    <!-- ✨ AI 智能一键组卷 Dialog -->
-    <el-dialog v-model="aiExamVisible" title="✨ AI 智能一键组卷" width="660px" destroy-on-close>
-      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 14px"
-                title="AI 优先从共享题库检索复用；不足时自动生成新题。生成的试卷强制为草稿，生成后点击「去检查并上架」可查看与挑选调整最终题目及算分及格线。" />
-      <el-form label-width="100px">
+      <!-- 组卷表单：仅两项必填，其余折叠 -->
+      <el-form v-else label-width="100px">
         <el-form-item label="组卷需求" required>
           <el-input v-model="aiExamForm.description" type="textarea" :rows="3"
                     placeholder="例如：帮我组一份消防安全测试卷，包含3道单选、2道判断、1道简答，难度中等" />
         </el-form-item>
-        <el-form-item label="试卷标题">
-          <el-input v-model="aiExamForm.title" placeholder="留空则由 AI 命名" />
-        </el-form-item>
-
-        <el-form-item label="试卷分类">
-          <el-select v-model="aiExamForm.category_id" placeholder="选择试卷分类" style="width: 100%">
-            <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item label="题目难度">
-          <el-radio-group v-model="aiExamForm.difficulty">
-            <el-radio label="easy">简单</el-radio>
-            <el-radio label="medium">中等</el-radio>
-            <el-radio label="hard">困难</el-radio>
-          </el-radio-group>
-        </el-form-item>
-
-        <el-form-item label="限时作答">
-          <div style="display: flex; align-items: center; gap: 12px">
-            <el-switch v-model="aiExamForm.is_timed" />
-            <div v-if="aiExamForm.is_timed" style="display: flex; align-items: center; gap: 6px">
-              <el-input-number v-model="aiExamForm.time_limit" :min="5" :max="300" size="default" style="width: 130px" />
-              <span style="font-size: 13px; color: #64748b">分钟</span>
-            </div>
-            <span v-else style="font-size: 13px; color: #94a3b8">不限时长</span>
-          </div>
-        </el-form-item>
-
-        <el-form-item label="考试时间窗">
+        <el-form-item label="考试时间" required>
           <div style="display: flex; align-items: center; gap: 10px; width: 100%">
-            <el-date-picker v-model="aiExamForm.start_time" type="datetime" placeholder="开始时间(可选)" format="YYYY-MM-DD HH:mm"
-                            value-format="YYYY-MM-DDTHH:mm:ss" style="flex: 1" />
+            <el-date-picker v-model="aiExamForm.start_time" type="datetime" placeholder="开始时间(必填，不得早于现在)" format="YYYY-MM-DD HH:mm"
+                            value-format="YYYY-MM-DDTHH:mm:ss" :disabled-date="disablePastDate" style="flex: 1" />
             <span style="color: #94a3b8">至</span>
-            <el-date-picker v-model="aiExamForm.end_time" type="datetime" placeholder="结束时间(可选)" format="YYYY-MM-DD HH:mm"
-                            value-format="YYYY-MM-DDTHH:mm:ss" style="flex: 1" />
+            <el-date-picker v-model="aiExamForm.end_time" type="datetime" placeholder="结束时间(必填，须晚于开始时间)" format="YYYY-MM-DD HH:mm"
+                            value-format="YYYY-MM-DDTHH:mm:ss" :disabled-date="disableBeforeStart" style="flex: 1" />
           </div>
           <div class="score-calc-tip" style="margin-top: 4px; color: #64748b; font-size: 12px">
-            不设置则长期开放（可选）；设置后 C 端按「未开始/进行中/已结束」流转
+            必填：开始时间不得早于现在，结束时间须晚于开始时间，保障 C 端时间流转闭环（未开始/进行中/已结束）
           </div>
         </el-form-item>
 
-        <el-form-item label="及格比例">
-          <div style="display: flex; align-items: center; width: 100%; gap: 16px">
-            <el-slider v-model="aiExamForm.pass_percent" :min="10" :max="100" :step="5" style="flex: 1" />
-            <span style="font-weight: 700; width: 50px; color: #0284c7">{{ aiExamForm.pass_percent }}%</span>
-          </div>
-          <div class="score-calc-tip" style="margin-top: 4px; color: #64748b; font-size: 12px">
-            💡 及格分数将在 AI 生成题目并进入修改界面选定最终试题及分值后自动向上取整计算
-          </div>
-        </el-form-item>
-
-        <div v-if="aiExamResult" class="ai-result-tip" style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534">
-          ✅ {{ aiExamResult }}
-          <div style="margin-top: 8px">
-            <el-button type="primary" size="small" @click="goNewExam">去检查并上架</el-button>
-          </div>
-        </div>
+        <el-collapse>
+          <el-collapse-item title="高级选项（试卷标题 / 分类 / 难度 / 限时 / 及格线，已设最优默认）" name="advanced">
+            <el-form-item label="试卷标题">
+              <el-input v-model="aiExamForm.title" placeholder="留空则由 AI 命名" />
+            </el-form-item>
+            <el-form-item label="试卷分类">
+              <el-select v-model="aiExamForm.category_id" placeholder="默认第一项" style="width: 100%">
+                <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="题目难度">
+              <el-radio-group v-model="aiExamForm.difficulty">
+                <el-radio label="easy">简单</el-radio>
+                <el-radio label="medium">中等</el-radio>
+                <el-radio label="hard">困难</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="限时作答">
+              <div style="display: flex; align-items: center; gap: 12px">
+                <el-switch v-model="aiExamForm.is_timed" />
+                <div v-if="aiExamForm.is_timed" style="display: flex; align-items: center; gap: 6px">
+                  <el-input-number v-model="aiExamForm.time_limit" :min="5" :max="300" size="default" style="width: 130px" />
+                  <span style="font-size: 13px; color: #64748b">分钟</span>
+                </div>
+                <span v-else style="font-size: 13px; color: #94a3b8">不限时长</span>
+              </div>
+            </el-form-item>
+            <el-form-item label="及格比例">
+              <div style="display: flex; align-items: center; width: 100%; gap: 16px">
+                <el-slider v-model="aiExamForm.pass_percent" :min="10" :max="100" :step="5" style="flex: 1" />
+                <span style="font-weight: 700; width: 50px; color: #0284c7">{{ aiExamForm.pass_percent }}%</span>
+              </div>
+              <div class="score-calc-tip" style="margin-top: 4px; color: #64748b; font-size: 12px">
+                💡 及格分数将在 AI 生成题目并进入修改界面选定最终试题及分值后自动向上取整计算
+              </div>
+            </el-form-item>
+          </el-collapse-item>
+        </el-collapse>
       </el-form>
       <template #footer>
-        <el-button @click="aiExamVisible = false">关闭</el-button>
-        <el-button type="warning" :loading="aiExamLoading" :disabled="!!aiExamResult" @click="generateAiExam">
-          {{ aiExamLoading ? 'AI 组卷中...' : '开始 AI 组卷' }}
-        </el-button>
+        <template v-if="aiReviewVisible">
+          <el-button @click="aiReviewVisible = false">返回修改</el-button>
+          <el-button type="primary" @click="confirmAiExam">确认保存试卷</el-button>
+        </template>
+        <template v-else>
+          <el-button @click="aiExamVisible = false">关闭</el-button>
+          <el-button type="warning" :loading="aiExamLoading" @click="generateAiExam">
+            {{ aiExamLoading ? 'AI 组卷中...' : '开始 AI 组卷' }}
+          </el-button>
+        </template>
       </template>
     </el-dialog>
+
+    <!-- v1.2 Step3: 主观题批阅抽屉 (行内待办原地批阅) -->
+    <GradingDrawer
+      :visible="gradingVisible"
+      :exam-id="gradingExam?.id ?? null"
+      :exam-title="gradingExam?.title ?? ''"
+      @update:visible="gradingVisible = $event"
+      @graded="handleGraded"
+    />
+
+    <!-- v1.7: 行级阅卷大厅全屏弹窗 -->
+    <ExamGradingDialog
+      :visible="gradingHallVisible"
+      :exam-id="gradingHallExam?.id ?? null"
+      :exam-title="gradingHallExam?.title ?? ''"
+      @update:visible="gradingHallVisible = $event"
+      @graded="handleGraded"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Delete, DataAnalysis, View } from '@element-plus/icons-vue';
 import request from '../../utils/request';
 import CoverArt from '../../components/CoverArt.vue';
+import GradingDrawer from './components/GradingDrawer.vue';
+import ExamGradingDialog from './components/ExamGradingDialog.vue';
+import QuestionPreview from './components/QuestionPreview.vue';
 import { COVER_PRESETS } from '../../assets/covers/index';
 
-const route = useRoute();
-const router = useRouter();
 const loading = ref(false);
 
 const exams = ref<any[]>([]);
@@ -606,7 +672,8 @@ const form = reactive({
   status: 'draft',
   is_recommended: false,
   is_random: false,
-  is_ai_auto_grade: false
+  is_ai_auto_grade: false,
+  grading_mode: 'ai_pre' as string
 });
 
 // ---- v1.2 时间锁与 AI 全托管 ----
@@ -831,6 +898,7 @@ const openCreateDialog = () => {
   form.is_recommended = false;
   form.is_random = false;
   form.is_ai_auto_grade = false;
+  form.grading_mode = 'ai_pre';
   selectedQuestions.value = [];
   batchRemoveSelectedIds.value = [];
   poolFilter.type = '';
@@ -860,6 +928,7 @@ const openEditDialog = async (row: any) => {
   form.is_recommended = row.is_recommended;
   form.is_random = row.is_random || false;
   form.is_ai_auto_grade = row.is_ai_auto_grade || false;
+  form.grading_mode = row.grading_mode || (row.is_ai_auto_grade ? 'ai_auto' : 'ai_pre');
   selectedQuestions.value = [];
   batchRemoveSelectedIds.value = [];
   poolFilter.type = '';
@@ -893,6 +962,8 @@ const saveExam = async () => {
   }
 
   saving.value = true;
+  // v1.2 Step4: 简答题智能展开 grading_mode；全客观题固定 manual（纯代码秒出分，不耗 AI 额度）
+  const resolvedMode = hasShortQuestion.value ? form.grading_mode : 'manual';
   const payload = {
     title: form.title,
     category_id: form.category_id,
@@ -905,7 +976,8 @@ const saveExam = async () => {
     status: form.status,
     is_recommended: form.is_recommended,
     is_random: form.is_random,
-    is_ai_auto_grade: form.is_ai_auto_grade,
+    is_ai_auto_grade: resolvedMode === 'ai_auto',
+    grading_mode: resolvedMode,
     question_ids: selectedQuestions.value.map((q) => q.id)
   };
 
@@ -932,20 +1004,39 @@ const handleDelete = (id: number) => {
   });
 };
 
-// ---- v1.2: 待批阅红点 → 阅卷大厅 ----
-const goGrading = (row: any) => {
-  router.push({ path: '/grading', query: { exam_id: row.id } });
+// ---- v1.2 Step3: 行内待办 → 批阅抽屉 ----
+const gradingVisible = ref(false);
+const gradingExam = ref<any>(null);
+
+const handleOpenGrading = (row: any) => {
+  gradingExam.value = row;
+  gradingVisible.value = true;
 };
 
-// ---- v1.2: ✨ AI 智能一键组卷 ----
+const handleGraded = () => {
+  loadExams();
+};
+
+// ---- v1.7: 行级阅卷大厅全屏弹窗 ----
+const gradingHallVisible = ref(false);
+const gradingHallExam = ref<any>(null);
+
+const openGradingHall = (row: any) => {
+  gradingHallExam.value = row;
+  gradingHallVisible.value = true;
+};
+
+// ---- v1.2 Step4: ✨ AI 智能一键组卷 (极简两项 + 审阅确认) ----
 const aiExamVisible = ref(false);
 const aiExamLoading = ref(false);
 const aiExamResult = ref('');
+const aiReviewVisible = ref(false);
+const aiReviewQuestions = ref<any[]>([]);
 const aiExamForm = reactive({
   description: '',
   title: '',
   category_id: null as number | null,
-  difficulty: 'easy',
+  difficulty: 'medium',
   is_timed: true,
   time_limit: 30,
   start_time: null as string | null,
@@ -954,19 +1045,59 @@ const aiExamForm = reactive({
 });
 let aiExamId: number | null = null;
 
+const aiWindowMinutes = computed(() => {
+  if (!aiExamForm.start_time || !aiExamForm.end_time) return 0;
+  return Math.floor((new Date(aiExamForm.end_time).getTime() - new Date(aiExamForm.start_time).getTime()) / 60000);
+});
+
+// 开始时间不得早于现在（精确到天禁用过去日期，提交时精确到分钟复核）
+const disablePastDate = (date: Date): boolean => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date.getTime() < today.getTime();
+};
+
+// 结束时间须晚于开始时间（未选开始则不早于今天）
+const disableBeforeStart = (date: Date): boolean => {
+  if (aiExamForm.start_time) {
+    return date.getTime() < new Date(aiExamForm.start_time).getTime();
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date.getTime() < today.getTime();
+};
+
 const generateAiExam = async () => {
   if (!aiExamForm.description.trim()) {
     ElMessage.error('请描述组卷需求');
     return;
   }
+  if (!aiExamForm.start_time || !aiExamForm.end_time) {
+    ElMessage.error('请选择考试时间（开始时间与结束时间均为必填）');
+    return;
+  }
+  if (new Date(aiExamForm.start_time).getTime() < Date.now() - 60000) {
+    ElMessage.error('开始时间不能早于现在');
+    return;
+  }
+  if (aiWindowMinutes.value <= 0) {
+    ElMessage.error('考试结束时间必须晚于开始时间');
+    return;
+  }
+  if (aiExamForm.is_timed && aiExamForm.time_limit > aiWindowMinutes.value) {
+    ElMessage.error(`考试限时不能大于开放区间 ${aiWindowMinutes.value} 分钟`);
+    return;
+  }
   aiExamLoading.value = true;
+  aiReviewVisible.value = false;
+  aiReviewQuestions.value = [];
   try {
     const res: any = await request.post('/api/v1/admin/ai/exams/generate', {
       title: aiExamForm.title || undefined,
       description: aiExamForm.description,
       specs: parseSpecs(aiExamForm.description),
       difficulty: aiExamForm.difficulty,
-      category_id: aiExamForm.category_id || undefined,
+      category_id: aiExamForm.category_id || categories.value[0]?.id || undefined,
       is_timed: aiExamForm.is_timed,
       time_limit: aiExamForm.is_timed ? aiExamForm.time_limit : 0,
       start_time: aiExamForm.start_time || undefined,
@@ -975,12 +1106,25 @@ const generateAiExam = async () => {
     }, { timeout: 180000 }); // 真实大模型组卷较慢, 覆盖全局 10s 超时
     aiExamId = res.exam_id;
     aiExamResult.value = res.message || `已生成草稿，共 ${res.question_count} 题（AI 新生成 ${res.new_questions} 题）`;
+    // 大模型实时全量原创生成题目，弹窗原地切换为审阅卡片（选项与正确答案绿色高亮）
+    aiReviewQuestions.value = res.questions || [];
+    aiReviewVisible.value = true;
     loadExams();
   } catch (e) {
     /* 拦截器已提示 */
   } finally {
     aiExamLoading.value = false;
   }
+};
+
+// 审阅无误后手动确认落库（后端已存为草稿，此处确认并刷新列表）
+const confirmAiExam = () => {
+  ElMessage.success('试卷已保存为草稿，请检查无误后手动上架');
+  aiExamVisible.value = false;
+  aiReviewVisible.value = false;
+  aiExamResult.value = '';
+  aiExamId = null;
+  loadExams();
 };
 
 // 从自然语言需求中粗提取题型构成 ("3道单选、2道判断、1道简答" 或 "生成6道题目")
@@ -1006,12 +1150,6 @@ const parseSpecs = (text: string) => {
   return specs;
 };
 
-const goNewExam = () => {
-  aiExamVisible.value = false;
-  aiExamResult.value = '';
-  if (aiExamId) router.push('/exams');
-};
-
 onMounted(() => {
   loadCategories();
   loadExams();
@@ -1030,6 +1168,67 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.exam-title-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.pending-badge {
+  cursor: pointer;
+}
+
+.selected-title {
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.ai-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.ai-review-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+}
+
+.ai-review-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.ai-review-index {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.ai-review-score {
+  margin-left: auto;
+  font-weight: 700;
+  color: #0284c7;
+  font-size: 13px;
+}
+
+.ai-review-title {
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.cursor-pointer {
+  cursor: pointer;
 }
 
 .filters {

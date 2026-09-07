@@ -4,8 +4,12 @@
 AI模型：ZCode (GLM)
 修改内容：[v1.5 修复用户反馈: AI出题材料指定数量被默认5覆盖(材料数量优先) / 单次生成上限10道(超出截断+提示) /
          v1.2 新增 AI 员工 API: ✨AI出题(预览+二次确认入库)/✨AI智能组卷/AI Copilot/额度资产化/双域审计]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[v1.2 Step2: AI 组卷 grading_mode 与 is_ai_auto_grade 双写]
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
@@ -24,7 +28,9 @@ from app.services.quota_service import deduct_quota
 from app.services.exam_service import first_category_id, recalc_exam_totals
 from app.services.audit_service import write_audit, push_notification
 from app.services.ai_tools_registry import get_allowed_tools, REGISTRY
+from app.models.ai_chat import AiChatSession, AiChatMessage
 import json
+import re
 
 router = APIRouter()
 
@@ -62,13 +68,16 @@ class ExamGenRequest(BaseModel):
     end_time: Optional[datetime] = None
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, description="老师提问")
+    message: str = Field(..., min_length=1, description="老师提问 (可含前端状态快照)")
     history: Optional[List[dict]] = Field(default=[], description="轻量历史 [{role, content}]")
+    session_id: Optional[int] = Field(None, description="云端会话ID (stream 落库用, 未传自动新建)")
+    display_text: Optional[str] = Field(None, description="用户原文 (落库与展示用, 不含隐藏快照)")
 
 class ExecuteToolRequest(BaseModel):
     tool_name: str
     arguments: dict
     tool_call_id: str
+    message_id: Optional[int] = Field(None, description="卡片所属消息ID (执行成功后持久化 executed 状态)")
 
 class ChatFeedbackRequest(BaseModel):
     message_content: str
@@ -101,6 +110,169 @@ def ai_status(
         "model": cfg["model"],
         "quota_remaining": q_remaining,
         "quota_limit": q_limit,
+    })
+
+
+# ---------------- 云端会话与消息流水 (跨端漫游 + 游标分页) ----------------
+
+class SessionRenameRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=120, description="新标题")
+
+
+def _get_owned_session(db: Session, admin: Admin, session_id: int) -> AiChatSession:
+    s = db.query(AiChatSession).filter(
+        AiChatSession.id == session_id, AiChatSession.admin_id == admin.id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="会话不存在或无权访问")
+    return s
+
+
+def _serialize_session(s: AiChatSession) -> dict:
+    return {
+        "id": s.id,
+        "title": s.title,
+        "created_at": s.created_at.strftime("%Y-%m-%d %H:%M:%S") if s.created_at else "",
+        "updated_at": s.updated_at.strftime("%Y-%m-%d %H:%M:%S") if s.updated_at else "",
+    }
+
+
+def _serialize_message(m: AiChatMessage) -> dict:
+    return {
+        "id": m.id,
+        "session_id": m.session_id,
+        "role": m.role,
+        "content": m.content,
+        "quote": m.quote,
+        "action_card_data": m.action_card_data,
+        "action_list_data": m.action_list_data,
+        "created_at": m.created_at.strftime("%Y-%m-%d %H:%M:%S") if m.created_at else "",
+    }
+
+
+def _format_tool_result_fallback(t_name: str, result_data) -> str:
+    """空回复兜底：模型归纳轮返回空包时，按工具结果拼装人工可读回复，绝不落空库"""
+    try:
+        data = result_data or {}
+        if t_name == "get_my_exams":
+            exams = data.get("my_exams") or []
+            if not exams:
+                return "你名下暂无创建的试卷（共 0 套）。可在试卷管理中新建组卷。"
+            lines = [f"《{e.get('title')}》(状态: {e.get('status')})" for e in exams[:10]]
+            suffix = f"等共 {len(exams)} 套" if len(exams) > 10 else f"共 {len(exams)} 套"
+            return f"你名下{suffix}试卷：\n" + "\n".join(f"- {l}" for l in lines)
+        if t_name == "get_database_stats":
+            cur = data.get("current_user") or {}
+            glo = data.get("global_stats") or {}
+            return (f"业务统计：全站题目 {glo.get('total_questions', 0)} 道、试卷 {glo.get('total_exams', 0)} 套、"
+                    f"分类 {glo.get('total_categories', 0)} 个；你（{cur.get('username', '')}）创建题目 "
+                    f"{cur.get('created_questions_count', 0)} 道、试卷 {cur.get('created_exams_count', 0)} 套。")
+        if t_name == "get_user_stats":
+            parts = [f"{k}: {v}" for k, v in data.items() if k != "role_distribution"]
+            return "用户统计：" + ("、".join(parts) if parts else "暂无数据")
+        s = json.dumps(data, ensure_ascii=False)
+        return "已获取业务数据：" + (s[:500] + "…" if len(s) > 500 else (s or "暂无数据"))
+    except Exception:
+        return "已获取业务数据，请继续追问细化。"
+
+
+def _parse_action_blocks(text: str):
+    """从 Assistant 全文提取 action_card / action_list 代码块 (落库用, 解析失败则 None)"""
+    card = lst = None
+    if text:
+        mc = re.search(r"```action_card\s*([\s\S]*?)```", text)
+        if mc:
+            try:
+                card = json.loads(mc.group(1))
+                if isinstance(card, dict):
+                    card = {**card, "status": "pending"}
+                else:
+                    card = None
+            except Exception:
+                card = None
+        ml = re.search(r"```action_list\s*([\s\S]*?)```", text)
+        if ml:
+            try:
+                lst = json.loads(ml.group(1))
+                if not isinstance(lst, list):
+                    lst = None
+            except Exception:
+                lst = None
+    return card, lst
+
+
+@router.get("/sessions", response_model=ResponseModel[dict])
+def list_chat_sessions(
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """云端会话列表 (按最近活跃倒序, 仅本人)"""
+    sessions = db.query(AiChatSession).filter(
+        AiChatSession.admin_id == admin.id).order_by(AiChatSession.updated_at.desc()).all()
+    return ResponseModel(code=200, data={"items": [_serialize_session(s) for s in sessions]})
+
+
+@router.post("/sessions", response_model=ResponseModel[dict])
+def create_chat_session(
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """新建云端会话 (默认标题“新对话”)"""
+    s = AiChatSession(admin_id=admin.id, title="新对话")
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    return ResponseModel(code=201, message="会话已创建", data=_serialize_session(s))
+
+
+@router.delete("/sessions/{session_id}", response_model=ResponseModel[dict])
+def delete_chat_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """删除会话及旗下全部消息 (校验归属权, 显式双删以兼容无 FK 强约束库)"""
+    s = _get_owned_session(db, admin, session_id)
+    db.query(AiChatMessage).filter(AiChatMessage.session_id == s.id).delete()
+    db.delete(s)
+    db.commit()
+    return ResponseModel(code=200, message="会话已删除", data={"id": session_id})
+
+
+@router.put("/sessions/{session_id}", response_model=ResponseModel[dict])
+def rename_chat_session(
+    session_id: int,
+    data: SessionRenameRequest,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """重命名会话标题"""
+    s = _get_owned_session(db, admin, session_id)
+    s.title = data.title.strip()
+    db.commit()
+    return ResponseModel(code=200, message="已重命名", data=_serialize_session(s))
+
+
+@router.get("/sessions/{session_id}/messages", response_model=ResponseModel[dict])
+def list_chat_messages(
+    session_id: int,
+    before_id: Optional[int] = Query(None, description="游标: 仅返回 id 更小的更早消息"),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """游标分页拉取消息 (DESC 取 limit+1 判 has_more, 内存反转为时间正序)"""
+    _get_owned_session(db, admin, session_id)
+    q = db.query(AiChatMessage).filter(AiChatMessage.session_id == session_id)
+    if before_id is not None:
+        q = q.filter(AiChatMessage.id < before_id)
+    rows = q.order_by(AiChatMessage.id.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    items = [_serialize_message(m) for m in reversed(rows)]
+    return ResponseModel(code=200, data={
+        "items": items,
+        "has_more": has_more,
+        "next_cursor": items[0]["id"] if items else None,
     })
 
 
@@ -246,7 +418,7 @@ def ai_generate_questions(
         f"简答题必须给出参考答案和踩分点。\n\n材料/需求:\n{data.material}"
     )
     try:
-        raw = ai_service.chat_completion(prompt, system=system, json_mode=True)
+        raw, _ = ai_service.chat_completion(prompt, system=system, json_mode=True)
         parsed = ai_service.extract_json(raw)
         questions = parsed.get("questions") if isinstance(parsed, dict) else parsed
         if not isinstance(questions, list) or not questions:
@@ -313,7 +485,7 @@ def ai_generate_exam(
         f"请严格按题型构成数量输出 items (合计 {total_expected} 项)。"
     )
     try:
-        raw = ai_service.chat_completion(prompt, system=system, json_mode=True, temperature=0.2)
+        raw, _ = ai_service.chat_completion(prompt, system=system, json_mode=True, temperature=0.2)
         parsed = ai_service.extract_json(raw)
         items = parsed.get("items") if isinstance(parsed, dict) else None
         if not isinstance(items, list) or not items:
@@ -349,6 +521,7 @@ def ai_generate_exam(
                 score=10,
                 source="ai",
                 category_id=first_category_id(db, "question"),
+                creator_id=admin.id,
             )
             db.add(q)
             db.flush()
@@ -383,6 +556,7 @@ def ai_generate_exam(
                 missing_total += 1
 
     title = data.title or (parsed.get("title") if isinstance(parsed, dict) else None) or "AI 智能组卷"
+    _has_short = any(s.q_type == "short" for s in data.specs)
     exam = Exam(
         title=title[:200],
         category_id=data.category_id,
@@ -392,7 +566,8 @@ def ai_generate_exam(
         end_time=data.end_time,
         pass_percent=data.pass_percent,
         status="draft",  # 强制草稿, 必须人工检查后手动上架
-        is_ai_auto_grade=any(s.q_type == "short" for s in data.specs),
+        is_ai_auto_grade=_has_short,
+        grading_mode=("ai_auto" if _has_short else "manual"),
         creator_id=admin.id,
     )
     db.add(exam)
@@ -422,7 +597,55 @@ def ai_generate_exam(
                                "questions": [QuestionResponse.model_validate(q) for q in detail_q]})
 
 
-# ---------------- AI Copilot (前端状态注入, 后端纯透传) ----------------
+# ---------------- AI Copilot (前端状态注入, 后端透传 + SSE 流式) ----------------
+
+def _build_chat_system(admin: Admin):
+    """Copilot System Prompt 单一来源 (/chat 与 /chat/stream 共用, 含 Action 协议与精简约束)."""
+    role_map = {"super_admin": "超级管理员", "admin": "管理员", "teacher": "出题人", "creator": "出题人", "ai": "AI员工"}
+    role_name = role_map.get(admin.role, "未知角色")
+    allowed_tools = get_allowed_tools(admin.role)
+
+    system_prompt = f"你是智题库平台的 AI 智能助管, 熟悉题库/组卷/阅卷业务。\n"
+    system_prompt += f"当前跟你对话的用户是【{admin.username}】，其在系统中的角色为【{role_name}】。\n"
+    system_prompt += "作为系统 AI 助理，你不仅能陪聊，你还可以并且必须使用提供的工具去操作或查询数据库。\n"
+    system_prompt += "如果用户询问你能做什么，或者让你帮他操作，你需要查阅你当前的 tools 列表并告知用户你可以做哪些事。不要编造你没有的工具能力。\n"
+    system_prompt += "如果用户让你执行越权操作，请礼貌地拒绝并说明这是因为其角色权限不足。\n"
+    # v1.2 Step5 Action Card 协议 (与前端 AiAssistantView.vue 联动, 不得破坏已有 Function Calling 链路)
+    system_prompt += (
+        "【人机协同 Action Card 协议】涉及敏感写操作 (如向出题人划拨 AI 额度、批量入库) 时, "
+        "必须在回答末尾附带一个 ```action_card JSON 代码块, 格式: "
+        '{"actionType": "TRANSFER_QUOTA", "title": "划拨 AI 额度", "riskLevel": "medium", '
+        '"details": [{"label": "目标出题人", "value": "用户名"}, {"label": "划拨数量", "value": "50次"}], '
+        '"payload": {"target_username": "对方登录用户名", "amount": 50}}。'
+        "用户在前端卡片点击确认后才会真正执行, 你不得直接落库。\n"
+    )
+    system_prompt += (
+        "【交互式操作路由 action_list 协议】当用户询问待办 (如待批阅试卷) 时, 在回答末尾附带一个 "
+        "```action_list JSON 代码块, 格式为数组: "
+        '[{"title": "试卷名", "badge": "3 份待批改", '
+        '"action": {"type": "in_app", "label": "去批改", "target": "open_grading_drawer", "params": {"exam_id": 试卷ID}}}]。'
+        "只列出该用户自己名下的试卷 (出题人仅可见自己创建的)。出题人无权触发人员/额度/全局看板动作, 不要为其生成这类卡片。\n"
+    )
+    system_prompt += (
+        "【脱敏与降级】全程自称「AI 智能助管」(或「AI 智算引擎」), 严禁透露底层模型供应商商业名称; "
+        "遇到超出题库知识库范畴的问题, 诚实告知超出范畴并给出 3 个业务内推荐提问, 杜绝幻觉编造。\n"
+    )
+    system_prompt += (
+        "【精简约束】回答务必专业精炼、直奔主题, 普通问答长度严格控制在 150-200 字以内, 严禁冗长铺垫。\n"
+    )
+    system_prompt += (
+        "【意图防误触】当用户提出咨询、使用方法类问题 (如“怎么做…”、“如何…”、“介绍…”) 时, "
+        "只给操作指引说明, 严禁直接触发 create_question_draft 等创建类工具; "
+        "只有用户明确要求“创建/出题/新增/生成题目”时才调用创建类工具。\n"
+    )
+    system_prompt += (
+        "【意图精准分流】\n"
+        "1. 当用户要求创建或出一道特定题目时，调用 create_question_draft；\n"
+        "2. 当用户要求生成一份试卷/测试卷/多题组卷时，必须调用 create_exam_draft，"
+        "并在 questions 参数中一次性原创生成指定题型与数量的完整题目列表，严禁用 create_question_draft 只创建一道题！\n"
+    )
+    return system_prompt, allowed_tools, role_name
+
 
 @router.post("/chat")
 def ai_chat(
@@ -435,15 +658,7 @@ def ai_chat(
         raise HTTPException(status_code=400, detail="AI 服务未配置（缺少 SENSENOVA_API_KEY）")
     deduct_quota(db, admin, "chat", {"length": len(data.message)})
 
-    role_map = {"super_admin": "超级管理员", "admin": "管理员", "teacher": "出题人"}
-    role_name = role_map.get(admin.role, "未知角色")
-    allowed_tools = get_allowed_tools(admin.role)
-    
-    system_prompt = f"你是智题库平台的 AI 助手, 熟悉题库/组卷/阅卷业务。\n"
-    system_prompt += f"当前跟你对话的用户是【{admin.username}】，其在系统中的角色为【{role_name}】。\n"
-    system_prompt += "作为系统 AI 助理，你不仅能陪聊，你还可以并且必须使用提供的工具去操作或查询数据库。\n"
-    system_prompt += "如果用户询问你能做什么，或者让你帮他操作，你需要查阅你当前的 tools 列表并告知用户你可以做哪些事。不要编造你没有的工具能力。\n"
-    system_prompt += "如果用户让你执行越权操作，请礼貌地拒绝并说明这是因为其角色权限不足。\n"
+    system_prompt, allowed_tools, role_name = _build_chat_system(admin)
 
     try:
         content, tool_calls = ai_service.chat_completion(
@@ -510,7 +725,7 @@ def ai_chat(
                     "arguments": t_args,
                     "tool_call_id": tc_id,
                     "risk_level": tool_reg['definition'].risk_level,
-                    "message": f"即将执行{ '高' if tool_reg['definition'].risk_level == 'high' else '低' }风险操作: {tool_reg['definition'].description}",
+                    "message": f"即将执行{ {'high': '高', 'medium': '中'}.get(tool_reg['definition'].risk_level, '低') }风险操作: {tool_reg['definition'].description}",
                     "quota_remaining": q_remaining
                 })
 
@@ -519,6 +734,217 @@ def ai_chat(
 
     except AiServiceError as e:
         raise HTTPException(status_code=502, detail=f"AI 助手暂时不可用: {e}")
+
+@router.post("/chat/stream")
+def ai_chat_stream(
+    data: ChatRequest,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """SSE 流式对话 (打字机逐字输出) + 流水落库闭环: 事件协议
+    - {"type": "delta", "text": "..."} 增量文本
+    - {"type": "action_required", ...} 中高风险工具二次确认 (同 /chat 字段)
+    - {"type": "done", "quota_remaining": N, "user_message_id": ID, "assistant_message_id": ID} 结束
+    - {"type": "error", "message": "..."} 失败
+    额度扣减与工具执行语义与 /chat 完全一致；User 提问发起即落库，
+    Assistant 全文在生成器结束时随请求会话原子落库 (依赖清理在流结束后才执行，
+    与工具执行共用同一会话，天生可测，无测试污染生产库风险)。
+    """
+    if not ai_service.ai_available():
+        raise HTTPException(status_code=400, detail="AI 服务未配置")
+    deduct_quota(db, admin, "chat", {"length": len(data.message), "stream": True})
+
+    system_prompt, allowed_tools, role_name = _build_chat_system(admin)
+    tools_arg = allowed_tools if allowed_tools else None
+    history = data.history or []
+    message = data.message[:6000]
+    display = (data.display_text or "").strip() or message
+    quote = (display[:30] + "…") if len(display) > 30 else display
+
+    # 会话归属解析 (未传自动新建) + User 提问即时落库
+    if data.session_id is not None:
+        session = _get_owned_session(db, admin, data.session_id)
+    else:
+        session = AiChatSession(admin_id=admin.id, title="新对话")
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+    session_id = session.id
+    user_msg = AiChatMessage(session_id=session_id, role="user", content=display)
+    db.add(user_msg)
+    session.updated_at = datetime.now()
+    if session.title == "新对话" and display:
+        session.title = display[:15]
+    db.commit()
+    db.refresh(user_msg)
+    user_message_id = user_msg.id
+    flow = {"done_persisted": False}
+
+    def _persist_assistant(content: str, card, lst) -> Optional[int]:
+        """随请求会话原子落库 Assistant 全文 + 卡片数据 (流结束前依赖不关闭，可测无污染)"""
+        try:
+            s = db.query(AiChatSession).filter(AiChatSession.id == session_id).first()
+            if not s:
+                return None
+            m = AiChatMessage(
+                session_id=session_id, role="assistant",
+                content=content or "", quote=quote,
+                action_card_data=card, action_list_data=lst,
+            )
+            db.add(m)
+            s.updated_at = datetime.now()
+            db.commit()
+            db.refresh(m)
+            flow["done_persisted"] = True
+            return m.id
+        except Exception:
+            db.rollback()
+            return None
+
+    def event_stream():
+        def sse(payload: dict) -> str:
+            return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+
+        def quota_now() -> int:
+            return 99999999 if admin.role == "super_admin" else (admin.daily_ai_quota or 0)
+
+        def run_turn(prompt_text: str, hist: list):
+            """流式跑一轮: 转发 delta, 返回 {"failed", "tool_calls", "text"}（返回值驱动，无闭包累加器）。"""
+            full_text = ""
+            pending_tool_calls: Optional[list] = None
+            try:
+                for ev in ai_service.chat_completion_stream(
+                    prompt=prompt_text, system=system_prompt, history=hist,
+                    temperature=0.5, tools=tools_arg,
+                ):
+                    et = ev.get("type")
+                    if et == "delta":
+                        piece = ev.get("text", "")
+                        full_text += piece
+                        yield sse({"type": "delta", "text": piece})
+                    elif et == "tool_calls":
+                        pending_tool_calls = ev.get("tool_calls")
+                    elif et == "error":
+                        print(f"[ai_chat_stream] provider error: {ev.get('message')}")
+                        yield sse({"type": "error", "message": "AI 助手暂时不可用，请稍后重试"})
+                        return {"failed": True, "tool_calls": None, "text": full_text}
+            except Exception as e:
+                import traceback as _tb
+                _tb.print_exc()
+                yield sse({"type": "error", "message": "AI 助手暂时不可用，请稍后重试"})
+                return {"failed": True, "tool_calls": None, "text": full_text}
+            return {"failed": False, "tool_calls": pending_tool_calls, "text": full_text}
+
+        def done_ids(assistant_id: Optional[int]) -> dict:
+            return {
+                "type": "done", "quota_remaining": quota_now(),
+                "user_message_id": user_message_id, "assistant_message_id": assistant_id,
+                "session_id": session_id,
+            }
+
+        full_first = ""
+        full_second = ""
+        try:
+            res1 = yield from run_turn(message, history)
+            full_first = res1["text"]
+            if res1["failed"]:
+                return
+            tool_calls = res1["tool_calls"]
+            if tool_calls:
+                tc = tool_calls[0]
+                tc_id = tc.get("id")
+                func_obj = tc.get("function", {})
+                t_name = func_obj.get("name")
+                try:
+                    t_args = json.loads(func_obj.get("arguments", "{}"))
+                except Exception:
+                    t_args = {}
+                tool_reg = REGISTRY.get(t_name)
+                if not tool_reg:
+                    err_text = f"系统错误：未找到工具 {t_name}"
+                    yield sse({"type": "delta", "text": err_text})
+                    aid = _persist_assistant(err_text, None, None)
+                    yield sse(done_ids(aid))
+                    return
+                risk_level = tool_reg["definition"].risk_level
+                if admin.role not in tool_reg["definition"].allowed_roles:
+                    deny_text = f"权限拦截：你的角色({role_name})无权使用 {t_name}"
+                    yield sse({"type": "delta", "text": deny_text})
+                    aid = _persist_assistant(deny_text, None, None)
+                    yield sse(done_ids(aid))
+                    return
+                if risk_level == "low":
+                    result_data = tool_reg["handler"](db, admin, t_args)
+                    second_history = history + [{"role": "user", "content": message}]
+                    second_history.append({"role": "assistant", "content": "", "tool_calls": [tc]})
+                    second_history.append({
+                        "role": "tool", "tool_call_id": tc_id, "name": t_name,
+                        "content": json.dumps(result_data, ensure_ascii=False),
+                    })
+                    res2 = yield from run_turn("", second_history)
+                    full_second = res2["text"]
+                    if res2["failed"]:
+                        return
+                    # 极少数第二轮又调工具: 直接转文本兜底, 不再递归
+                    final_text = res2["text"]
+                    if res2["tool_calls"]:
+                        fallback = "已获取业务数据，请继续追问细化。"
+                        yield sse({"type": "delta", "text": fallback})
+                        final_text += fallback
+                    # 空包兜底：归纳轮返回空时按工具结果拼装，绝不落空
+                    if not final_text.strip():
+                        final_text = _format_tool_result_fallback(t_name, result_data)
+                        yield sse({"type": "delta", "text": final_text})
+                    card2, list2 = _parse_action_blocks(final_text)
+                    aid = _persist_assistant(final_text, card2, list2)
+                    yield sse(done_ids(aid))
+                else:
+                    action_msg = f"即将执行{ {'high': '高', 'medium': '中'}.get(tool_reg['definition'].risk_level, '低') }风险操作: {tool_reg['definition'].description}"
+                    tool_card = {
+                        "kind": "tool",
+                        "tool_name": t_name,
+                        "arguments": t_args,
+                        "tool_call_id": tc_id,
+                        "risk_level": tool_reg["definition"].risk_level,
+                        "message": action_msg,
+                        "status": "pending",
+                    }
+                    aid = _persist_assistant(action_msg, tool_card, None)
+                    yield sse({
+                        "type": "action_required",
+                        "tool_name": t_name,
+                        "arguments": t_args,
+                        "tool_call_id": tc_id,
+                        "risk_level": tool_reg["definition"].risk_level,
+                        "message": action_msg,
+                        "quota_remaining": quota_now(),
+                        "assistant_message_id": aid,
+                    })
+                    yield sse(done_ids(aid))
+            else:
+                card, lst = _parse_action_blocks(full_first)
+                if not full_first.strip() and not card and not lst:
+                    full_first = "AI 本次未返回有效内容，请换个问法或稍后重试。"
+                    yield sse({"type": "delta", "text": full_first})
+                aid = _persist_assistant(full_first, card, lst)
+                yield sse(done_ids(aid))
+        except Exception:
+            import traceback as _tb
+            _tb.print_exc()
+            yield sse({"type": "error", "message": "AI 助手暂时不可用，请稍后重试"})
+        finally:
+            # 首尾兜底：流被掐断（关页/断网/异常）且正常落库未发生时，把已吐出的半截文本落库，杜绝有问无答
+            try:
+                if not flow["done_persisted"]:
+                    partial = (full_first + full_second).strip()
+                    if partial:
+                        card, lst = _parse_action_blocks(partial)
+                        _persist_assistant(partial, card, lst)
+            except Exception:
+                pass
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @router.post("/chat/execute_tool")
 def ai_chat_execute_tool(
@@ -536,7 +962,19 @@ def ai_chat_execute_tool(
         
     handler = tool_reg["handler"]
     result = handler(db, admin, data.arguments)
-    
+
+    # 卡片状态持久化: 执行成功即标 executed, 防刷新/漫游回退导致重复执行
+    if data.message_id is not None:
+        card_msg = db.query(AiChatMessage).filter(AiChatMessage.id == data.message_id).first()
+        if card_msg is not None:
+            sess = db.query(AiChatSession).filter(
+                AiChatSession.id == card_msg.session_id, AiChatSession.admin_id == admin.id).first()
+            if sess is not None and isinstance(card_msg.action_card_data, dict):
+                updated = dict(card_msg.action_card_data)
+                updated["status"] = "executed"
+                card_msg.action_card_data = updated
+                db.commit()
+
     # 写入双重审计日志
     write_audit(db, "execute_tool", "ai_gateway", admin.id,
                 summary=f"AI Agent 执行工具: {data.tool_name}",

@@ -145,7 +145,8 @@ def create_question(
         difficulty=data.difficulty or "medium",
         score=data.score if data.score is not None else 10,
         source=data.source if data.source in ("manual", "ai") else "manual",
-        category_id=category_id
+        category_id=category_id,
+        creator_id=admin.id
     )
     db.add(question)
     db.commit()
@@ -195,7 +196,8 @@ def batch_create_questions(
             difficulty=item.difficulty or "medium",
             score=item.score if item.score is not None else 10,
             source=item.source if item.source in ("manual", "ai") else "manual",
-            category_id=category_id
+            category_id=category_id,
+            creator_id=admin.id
         )
         db.add(q)
         db.flush()
@@ -231,6 +233,7 @@ def copy_question(
         source="manual",
         is_deleted=False,
         category_id=question.category_id,
+        creator_id=admin.id,
     )
     db.add(clone)
     db.commit()
@@ -414,7 +417,8 @@ async def import_questions_excel(
             explanation=explanation,
             difficulty=difficulty,
             score=score,
-            category_id=row_cat_id
+            category_id=row_cat_id,
+            creator_id=admin.id
         ))
         imported_count += 1
 

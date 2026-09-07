@@ -162,7 +162,7 @@ def mock_ai(monkeypatch):
         fulls = re.findall(r'"full_score": (\d+)', prompt)
         results = [{"question_id": int(q), "score": int(f), "comment": "AI评语: 踩点全中"}
                    for q, f in zip(qids, fulls)]
-        return json.dumps({"results": results}, ensure_ascii=False)
+        return json.dumps({"results": results}, ensure_ascii=False), None
 
     monkeypatch.setattr(ai_service, "chat_completion", fake_chat)
     monkeypatch.setattr(ai_service, "ai_available", lambda: True)
@@ -347,7 +347,7 @@ def test_ai_question_generation_with_quota(client, mock_ai):
         "answer": ["A"], "explanation": "解析", "difficulty": "easy", "score": 10}]}, ensure_ascii=False)
 
     def fake_gen(prompt, system="", json_mode=False, temperature=0.3, timeout=90.0):
-        return fake_payload
+        return fake_payload, None
     ai_service.chat_completion = fake_gen
 
     # 老师额度 5
@@ -395,7 +395,7 @@ def test_ai_exam_generation_forces_draft(client, mock_ai):
                 {"new_question": {"type": "judge", "title": "AI新生成判断题?", "options": [],
                                   "answer": ["A"], "explanation": "", "difficulty": "easy"}},
             ],
-        }, ensure_ascii=False)
+        }, ensure_ascii=False), None
     ai_service.chat_completion = fake_gen
 
     r = client.post("/api/v1/admin/ai/exams/generate", json={

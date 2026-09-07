@@ -4,8 +4,11 @@
 修改时间: 2026-09-06 17:00:00
 AI模型: ZCode (GLM)
 修改内容: [v1.2 RBAC 与 AI 额度资产化: Admin 增加 status/ai_quota_limit/daily_ai_quota/quota_reset_date]
+修改时间: 2026-09-07
+AI模型: Muse Spark
+修改内容: [v1.2 Step1: Admin 增加 created_by_id 层级追溯列; role 兼容 creator(指南)/teacher(历史别名)]
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date, ForeignKey
 from datetime import datetime
 from app.core.database import Base
 
@@ -36,8 +39,9 @@ class Admin(Base):
     name = Column(String(50), nullable=True, comment="真实姓名/名字")
     phone = Column(String(20), nullable=True, comment="手机号")
     password_hash = Column(String(255), nullable=False, comment="密码哈希")
-    role = Column(String(20), default="teacher", comment="角色 (super_admin, admin, teacher, ai)")
+    role = Column(String(20), default="teacher", comment="角色 (super_admin, admin, teacher/creator 出题人, ai)")
     status = Column(Boolean, default=True, comment="账号状态 (True=正常, False=禁用)")
+    created_by_id = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True, comment="创建上级ID (层级追溯: 记录由谁创建)")
     ai_quota_limit = Column(Integer, default=0, comment="每日 AI 额度配置值")
     daily_ai_quota = Column(Integer, default=0, comment="今日 AI 额度余额")
     quota_reset_date = Column(Date, nullable=True, comment="额度所属日期")

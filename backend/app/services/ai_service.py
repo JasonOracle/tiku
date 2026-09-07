@@ -3,15 +3,23 @@
 修改时间：2026-09-06 17:30:00
 AI模型：ZCode (GLM)
 修改内容：[v1.2 新增 SenseNova (商汤日日新) 大模型客户端: OpenAI 兼容协议 + JSON 输出鲁棒解析 + 优雅降级]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[AI 网关切换: 默认首选高速模型 (OpenAI 兼容, 环境变量 XIAO_HONG_SHU_API_KEY[_2]), 保留原有供应商作故障转移; 新增 chat_completion_stream SSE 流式复用]
+修改时间：2026-09-07
+AI模型：Muse Spark
+修改内容：[流式解析加固: 兼容内容块数组形态 + 空包诊断日志(delta 字段形状)]
 """
 import os
 import re
 import json
 import httpx
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Generator, Any
 
-# 开发期统一使用商汤日日新大模型 (免费)。凭证读取宿主机用户系统环境变量, 不落盘 .env
-# OpenAI 兼容网关: https://token.sensenova.cn/v1 (模型如 sensenova-6.7-flash-lite)
+# 高速主力模型 (OpenAI 兼容协议)。凭证读取宿主机用户系统环境变量, 不落盘 .env
+DEFAULT_DOTS_API_URL = "https://note3-prev-api.askdiandian.com/v1/chat/completions"
+DEFAULT_DOTS_MODEL = "dots3-note-prev"
+# 历史供应商网关 (仅作故障转移兜底)
 DEFAULT_API_URL = "https://token.sensenova.cn/v1/chat/completions"
 DEFAULT_MODEL = "sensenova-6.8-flash-lite"
 
@@ -20,14 +28,50 @@ class AiServiceError(Exception):
     """AI 调用失败 (网络/鉴权/格式), 上层捕获后走人工兜底流程"""
 
 
+_shared_client: Optional["httpx.Client"] = None
+
+
+def _get_shared_client() -> "httpx.Client":
+    """进程级共享连接池 (Keep-Alive 复用 TLS/TCP, 首字延迟优化)。"""
+    global _shared_client
+    if _shared_client is None:
+        _shared_client = httpx.Client(
+            http2=False,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _shared_client
+
+
 def get_ai_providers() -> List[Dict[str, str]]:
     """获取所有已配置的 AI 提供商候选列表，按优先顺序排序:
-    1. SenseNova (KEY1): SENSENOVA_API_KEY
-    2. SenseNova (KEY2): SENSENOVA_API_KEY2
-    3. Agnes 2.5 Flash (KEY1): AGNES_API_KEY
-    4. Agnes 2.5 Flash (KEY2): AGNES_API_KEY2
+    1. 高速主力模型 (KEY1): XIAO_HONG_SHU_API_KEY
+    2. 高速主力模型 (KEY2): XIAO_HONG_SHU_API_KEY2
+    3. SenseNova (KEY1): SENSENOVA_API_KEY (故障转移兜底)
+    4. SenseNova (KEY2): SENSENOVA_API_KEY2
+    5. Agnes 2.5 Flash (KEY1): AGNES_API_KEY
+    6. Agnes 2.5 Flash (KEY2): AGNES_API_KEY2
     """
     providers = []
+
+    # 1-2. 高速主力模型 (OpenAI 兼容)
+    dots_url = os.getenv("XIAO_HONG_SHU_API_URL") or DEFAULT_DOTS_API_URL
+    dots_model = os.getenv("XIAO_HONG_SHU_MODEL") or DEFAULT_DOTS_MODEL
+    dk1 = os.getenv("XIAO_HONG_SHU_API_KEY") or None
+    if dk1:
+        providers.append({
+            "name": "Dots (Key 1)",
+            "api_url": dots_url,
+            "api_key": dk1,
+            "model": dots_model,
+        })
+    dk2 = os.getenv("XIAO_HONG_SHU_API_KEY2") or None
+    if dk2:
+        providers.append({
+            "name": "Dots (Key 2)",
+            "api_url": dots_url,
+            "api_key": dk2,
+            "model": dots_model,
+        })
     
     # 1. SenseNova KEY 1
     sk1 = os.getenv("SENSENOVA_API_KEY") or None
@@ -135,7 +179,7 @@ def chat_completion(
         
         for attempt in range(retries + 1):
             try:
-                resp = httpx.post(provider["api_url"], json=payload, headers=headers, timeout=timeout)
+                resp = _get_shared_client().post(provider["api_url"], json=payload, headers=headers, timeout=timeout)
                 if resp.status_code in (429, 500, 502, 503, 504) and attempt < retries:
                     time.sleep(2 * (attempt + 1))  # 内部微小退避重试
                     continue
@@ -161,6 +205,127 @@ def chat_completion(
                 break  # 切下一个 provider
 
     raise AiServiceError("所有配置的 AI 服务均调用失败: " + " | ".join(last_errors))
+
+
+def _build_messages(prompt: str, system: str, history: Optional[List[dict]], json_mode: bool = False) -> List[dict]:
+    messages = [{"role": "system", "content": system}]
+    if history:
+        messages.extend(history)
+    if json_mode:
+        messages[-1]["content"] += "\n strictly output valid JSON only, without any extra text."
+    if prompt:
+        messages.append({"role": "user", "content": prompt})
+    return messages
+
+
+def chat_completion_stream(
+    prompt: str,
+    system: str = "你是一名严谨、专业的中文助理。",
+    temperature: float = 0.5,
+    timeout: float = 120.0,
+    tools: Optional[List[dict]] = None,
+    tool_choice: Optional[str] = "auto",
+    history: Optional[List[dict]] = None,
+) -> Generator[Dict[str, Any], None, None]:
+    """SSE 流式调用 (OpenAI stream 协议), 按优先顺序故障转移。
+
+    yield 事件:
+    - {"type": "delta", "text": "..."} 增量文本
+    - {"type": "tool_calls", "tool_calls": [...]} 模型请求工具调用 (同非流式返回结构)
+    - {"type": "done"} 本轮流结束 (无工具调用时)
+    - {"type": "error", "message": "..."} 本轮失败 (上层可切下一个 provider, 此处已内聚处理)
+    """
+    providers = get_ai_providers()
+    if not providers:
+        yield {"type": "error", "message": "未配置任何有效的 AI API Key"}
+        return
+
+    messages = _build_messages(prompt, system, history)
+    last_error = ""
+    for provider in providers:
+        payload = {
+            "model": provider["model"],
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = tool_choice
+        headers = {
+            "Authorization": f"Bearer {provider['api_key']}",
+            "Content-Type": "application/json",
+        }
+        try:
+            with _get_shared_client().stream("POST", provider["api_url"], json=payload, headers=headers,
+                              timeout=httpx.Timeout(connect=10.0, read=timeout, write=10.0, pool=10.0)) as resp:
+                if resp.status_code != 200:
+                    last_error = f"{provider['name']} 接口返回 {resp.status_code}"
+                    continue  # 切下一个 provider
+                saw_any = False
+                saw_text = False
+                delta_keys: set = set()
+                tool_frags: Dict[int, dict] = {}
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
+                    text_line = line.decode("utf-8") if isinstance(line, bytes) else line
+                    if not text_line.startswith("data:"):
+                        continue
+                    data_str = text_line[5:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                    except Exception:
+                        continue
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    delta = (choices[0].get("delta") or {})
+                    try:
+                        delta_keys.update(delta.keys())
+                    except Exception:
+                        pass
+                    content_piece = delta.get("content")
+                    # 兼容内容块数组形态 ([{"type": "text", "text": "..."}])
+                    if isinstance(content_piece, list):
+                        parts = []
+                        for p in content_piece:
+                            if isinstance(p, dict):
+                                parts.append(str(p.get("text") or p.get("content") or ""))
+                            else:
+                                parts.append(str(p))
+                        content_piece = "".join(parts)
+                    if content_piece:
+                        saw_any = True
+                        saw_text = True
+                        yield {"type": "delta", "text": content_piece}
+                    for tc in (delta.get("tool_calls") or []):
+                        idx = tc.get("index", 0)
+                        frag = tool_frags.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+                        if tc.get("id"):
+                            frag["id"] = tc["id"]
+                        func = tc.get("function") or {}
+                        if func.get("name"):
+                            frag["name"] = func["name"]
+                        if func.get("arguments"):
+                            frag["arguments"] += func["arguments"]
+                if tool_frags:
+                    normalized = [
+                        {"id": frag["id"], "function": {"name": frag["name"], "arguments": frag["arguments"]}}
+                        for _, frag in sorted(tool_frags.items())
+                    ]
+                    yield {"type": "tool_calls", "tool_calls": normalized}
+                else:
+                    if not saw_text:
+                        print(f"[ai_stream] empty completion provider={provider['name']} delta_keys={sorted(delta_keys)}")
+                    yield {"type": "done"}
+                return
+        except Exception as e:
+            last_error = f"{provider['name']} 调用异常: {e}"
+            continue  # 切下一个 provider
+    yield {"type": "error", "message": "所有配置的 AI 服务均调用失败: " + last_error}
 
 
 def extract_json(text: str):

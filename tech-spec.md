@@ -273,4 +273,61 @@ class PageResponse(BaseModel, Generic[T]):
     3. 点击调出抽屉后，后端接口执行二次身份校验（非本人试卷返回 403）。
 - **知识盲区优雅降级**：
   - 超出题库系统上下文的问题，大模型遵循系统提示词诚实拒答，并附带快捷提问建议气泡（Suggested Prompts）。
+
+### Step 5.5: 企业级会话持久化与仿微信向上游标分页规约
+
+1. **数据库模型拓展 (`backend/app/models/ai_chat.py`)**：
+   - `AiChatSession` 表 (`ai_chat_sessions`)：
+     - `id`: INT 主键自增
+     - `admin_id`: INT 外键关联 `admins.id`，建立索引，支持级联删除
+     - `title`: VARCHAR(120) NOT NULL，默认 `'新对话'`
+     - `created_at`: DATETIME，默认当前时间
+     - `updated_at`: DATETIME，默认当前时间，建立索引（用于侧边栏按最近活跃倒序排列）
+   - `AiChatMessage` 表 (`ai_chat_messages`)：
+     - `id`: INT 主键自增（天然单调递增游标 Cursor）
+     - `session_id`: INT 外键关联 `ai_chat_sessions.id`，建立索引，级联删除
+     - `role`: VARCHAR(20) NOT NULL ('user' | 'assistant' | 'system')
+     - `content`: TEXT NOT NULL
+     - `quote`: TEXT NULL（回复引用内容）
+     - `action_card_data`: JSON NULL（三档确认卡数据，含 tool_name, arguments, status 等）
+     - `action_list_data`: JSON NULL（操作路由待办卡数据）
+     - `created_at`: DATETIME，建立索引
+
+2. **核心 API 接口契约 (`backend/app/api/admin/admin_ai.py`)**：
+   - `GET /api/v1/admin/ai/sessions`：
+     - 权限：当前登录 Admin
+     - 逻辑：按 `updated_at DESC` 返回当前用户的所有会话列表。
+   - `POST /api/v1/admin/ai/sessions`：
+     - 逻辑：创建新会话，初始标题为 `"新对话"`，返回新建 session 对象。
+   - `DELETE /api/v1/admin/ai/sessions/{session_id}`：
+     - 逻辑：校验归属权，删除指定会话及旗下所有消息流水。
+   - `PUT /api/v1/admin/ai/sessions/{session_id}`：
+     - 请求体：`{ "title": "新标题" }`
+     - 逻辑：重命名会话标题。
+   - `GET /api/v1/admin/ai/sessions/{session_id}/messages?before_id={cursor}&limit=20`：
+     - 核心游标分页：
+       - 不传 `before_id`：查询 `WHERE session_id = :sid ORDER BY id DESC LIMIT 20`，服务端反转为时间升序返回。
+       - 传 `before_id`：查询 `WHERE session_id = :sid AND id < :before_id ORDER BY id DESC LIMIT 20`，服务端反转后返回。
+       - 响应体格式：`{ "items": [...], "has_more": bool, "next_cursor": int | null }`。
+   - `POST /api/v1/admin/ai/chat/stream` 与持久化流水联动：
+     - 请求体增加入参 `session_id: int`。
+     - 发起时：立即持久化 User 提问记录入库。
+     - 流式完成（done / action_required）：使用安全独立会话将 Assistant 完整内容原子化落库，并更新 session 的 `updated_at`；若会话标题仍为默认，则截取前 15 字符自动更新标题。
+
+3. **前端防跳屏视口高度无感锚定算法 (`tob/src/views/ai/AiAssistantView.vue`)**：
+   - 彻底移除 `localStorage` 本地存储会话逻辑，实现多端数据漫游。
+   - 监听消息容器滚动 `@scroll="handleScroll"`：
+     - 触发条件：`scrollTop < 60 && hasMore && !loadingHistory`。
+     - 高度差补偿公式：
+       ```ts
+       const oldScrollHeight = chatBox.scrollHeight;
+       const oldScrollTop = chatBox.scrollTop;
+       const res = await fetchMessages(activeSessionId, minMessageId);
+       messages.value.unshift(...res.items);
+       hasMore.value = res.has_more;
+       await nextTick();
+       // 补偿滚动条位置，使得当前视口内容绝对静止，零抖动
+       chatBox.scrollTop = chatBox.scrollHeight - oldScrollHeight + oldScrollTop;
+       ```
+   - 切换会话或发送新消息：直接平滑滚动到底部 `scrollToBottom()`。
 ```

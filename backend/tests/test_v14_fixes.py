@@ -69,7 +69,7 @@ def _fake_n(captured, n):
     """构造返回 n 道题的 chat_completion 替身, 并捕获 prompt 供断言"""
     def fake_chat(prompt, system="", json_mode=False, temperature=0.3, timeout=90.0):
         captured["prompt"] = prompt
-        return json.dumps({"questions": [_mk_q(i) for i in range(n)]}, ensure_ascii=False)
+        return json.dumps({"questions": [_mk_q(i) for i in range(n)]}, ensure_ascii=False), None
     return fake_chat
 
 

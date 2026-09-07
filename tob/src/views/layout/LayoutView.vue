@@ -1,16 +1,19 @@
 <!--
- * [变更日志]
- * 修改时间：2026-09-06 21:00:00
- * AI模型：ZCode (GLM)
- * 修改内容：[v1.2: RBAC 角色化菜单(成员/审计仅超管) + 新增阅卷大厅/消息中心入口 + 消息未读红点轮询 +
- *          头部今日AI额度展示 + 全局 AI Copilot 助手抽屉入口]
--->
+  * [变更日志]
+  * 修改时间：2026-09-06 21:00:00
+  * AI模型：ZCode (GLM)
+  * 修改内容：[v1.2: RBAC 角色化菜单(成员/审计仅超管) + 新增阅卷大厅/消息中心入口 + 消息未读红点轮询 +
+  *          头部今日AI额度展示 + 全局 AI Copilot 助手抽屉入口]
+  * 修改时间：2026-09-07
+  * AI模型：Muse Spark
+  * 修改内容：[v1.7: Dashboard 首位/AI助理最末菜单重排 + 移除 TiKu 文字品牌 + 头像个人信息弹窗入口]
+  -->
 <template>
   <el-container class="layout-container">
     <el-aside width="240px" class="aside">
       <div class="brand">
-        <span class="brand-badge">TiKu</span>
-        <span class="brand-text">管理后台</span>
+        <span class="brand-badge">智</span>
+        <span class="brand-text">智题库</span>
       </div>
       <el-menu
         :default-active="activePath"
@@ -20,47 +23,59 @@
         text-color="#475569"
         active-text-color="#0284c7"
       >
-        <el-menu-item index="/ai-assistant">
-          <el-icon><Cpu /></el-icon>
-          <span><el-icon style="vertical-align: middle; margin-right: 2px;"><MagicStick /></el-icon>AI 助理</span>
-        </el-menu-item>
-        <el-menu-item index="/categories">
-          <el-icon><Folder /></el-icon>
-          <span>分类配置</span>
-        </el-menu-item>
-        <el-menu-item index="/questions">
-          <el-icon><Document /></el-icon>
-          <span>题海管理</span>
+        <el-menu-item index="/dashboard">
+          <el-icon><HomeFilled /></el-icon>
+          <span>首页</span>
         </el-menu-item>
         <el-menu-item index="/exams">
           <el-icon><Reading /></el-icon>
           <span>试卷与组卷</span>
         </el-menu-item>
+        <el-menu-item index="/questions">
+          <el-icon><Document /></el-icon>
+          <span>题海管理</span>
+        </el-menu-item>
         <el-menu-item index="/grading">
           <el-icon><EditPen /></el-icon>
           <span>阅卷大厅</span>
         </el-menu-item>
-        <el-menu-item index="/users">
-          <el-icon><User /></el-icon>
-          <span>学员列表</span>
-        </el-menu-item>
-        <el-menu-item index="/banners">
-          <el-icon><Picture /></el-icon>
-          <span>首页Banner</span>
+        <el-menu-item index="/categories">
+          <el-icon><Folder /></el-icon>
+          <span>分类配置</span>
         </el-menu-item>
         <template v-if="userStore.isSuper() || userStore.role === 'admin'">
-          <el-menu-item index="/members">
-            <el-icon><Avatar /></el-icon>
+          <el-menu-item index="/users">
+            <el-icon><User /></el-icon>
             <span>用户管理</span>
           </el-menu-item>
         </template>
         <template v-if="userStore.isSuper()">
+          <el-menu-item index="/banners">
+            <el-icon><Picture /></el-icon>
+            <span>首页Banner</span>
+          </el-menu-item>
           <el-menu-item index="/audit">
             <el-icon><List /></el-icon>
             <span>审计日志</span>
           </el-menu-item>
         </template>
+        <template v-if="userStore.isSuper() || userStore.role === 'admin'">
+          <el-menu-item index="/ai-config">
+            <el-icon><Setting /></el-icon>
+            <span>AI 模型配置</span>
+          </el-menu-item>
+        </template>
+        <el-menu-item index="/ai-assistant">
+          <el-icon><MagicStick /></el-icon>
+          <span>✨ AI 助理</span>
+        </el-menu-item>
       </el-menu>
+      <!-- v1.7: 侧边栏底部 AI 推广卡 -->
+      <div class="side-promo">
+        <img class="promo-img" :src="promoUrl" alt="AI 赋能教育" />
+        <div class="promo-title">AI 赋能教育</div>
+        <div class="promo-sub">让每一次考试都有价值</div>
+      </div>
     </el-aside>
 
     <el-container>
@@ -76,7 +91,7 @@
           <el-button type="primary" plain size="small" class="ai-copilot-head-btn" @click="router.push('/ai-assistant')">
             <el-icon style="margin-right: 4px;"><MagicStick /></el-icon> AI 助理
           </el-button>
-          <div class="user-info">
+          <div class="user-info" @click="profileVisible = true" style="cursor: pointer" title="个人信息">
             <el-avatar :size="32" class="avatar">{{ username.substring(0, 1).toUpperCase() }}</el-avatar>
             <span class="name">{{ username }}</span>
             <el-tag size="small" :type="userStore.isSuper() ? 'danger' : (userStore.role === 'admin' ? 'warning' : 'primary')" effect="plain">
@@ -101,20 +116,26 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <!-- v1.7: 头像个人信息弹窗 -->
+    <ProfileDialog v-model="profileVisible" />
   </el-container>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Document, Reading, Folder, User, Picture, SwitchButton, Bell, Avatar, List, EditPen, Cpu, MagicStick } from '@element-plus/icons-vue';
+import { Document, Reading, Folder, User, Picture, SwitchButton, Bell, List, EditPen, MagicStick, HomeFilled, Setting } from '@element-plus/icons-vue';
 import { useUserStore } from '../../store/user';
 import request from '../../utils/request';
+import ProfileDialog from './components/ProfileDialog.vue';
 
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 const copilotRef = ref<any>(null);
+const profileVisible = ref(false);
+const promoUrl = `${import.meta.env.BASE_URL}images/ai-edu.png`;
 
 const activePath = computed(() => route.path);
 const currentTitle = computed(() => (route.meta.title as string) || '仪表盘');
@@ -158,6 +179,38 @@ onUnmounted(() => {
   border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
+}
+
+.aside .menu {
+  flex: 1;
+}
+
+.side-promo {
+  margin: 12px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #eef4ff, #e0ecff);
+  border: 1px solid #dbeafe;
+  padding: 12px;
+  text-align: center;
+}
+
+.promo-img {
+  width: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+.promo-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 8px;
+}
+
+.promo-sub {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
 }
 
 .menu-badge {
