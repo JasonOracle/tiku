@@ -180,17 +180,33 @@ class PageResponse(BaseModel, Generic[T]):
 > **⚠️ 致接手此项目的 AI 或人类开发者**：
 > 下方是严格按照 MVP（最小可行性产品）和“AI平权”原则拆解的技术落地步骤。若遇技术瓶颈，请严格参考下方的**【平替方案/兜底逻辑】**，切勿自行增加过度复杂的设计。
 
-### Step 1: 数据库核心表结构扩展 (MySQL / SQLAlchemy)
-- **`admins` 表**：新增 `role` (enum: 'super_admin', 'admin', 'ai') 和 `daily_ai_quota` (int, default: 0)。
-  - *兜底方案*：如果不写定时任务恢复每天的额度，可直接改存 `quota_reset_date`，每次扣减前校验日期并重置。
-- **`questions` 表**：
-  - 新增 `is_deleted` (bool, default: false) 实现软删除。
-  - 修改 `answer` 字段：必须兼容 JSON 数组（供填空题使用）。
-- **`exams` 表**：新增 `start_time` (datetime), `end_time` (datetime), `is_ai_auto_grade` (bool, default: false)。
-- **`exam_records` 表**：
-  - 修改 `status` 枚举，新增 `pending_grading`（待批阅）。
-  - 新增字段 `ai_grading_result` (JSON, 存储 AI 预批改的详情与建议分数)。
-- **新增 `audit_logs` 表**：记录双域留痕（id, admin_id, action_type, before_data, after_data, created_at）。
+### Step 1: 数据库物理列拓展与数据迁移
+修改 ORM 文件（`backend/app/models/`）：
+- `user.py` (Admin 模型)：
+  - 增加 `role` 字符串列（`'super_admin'`, `'admin'`, `'creator'`，默认 `'admin'`）。
+  - 增加 `created_by_id` 整数外键列（指向 `admins.id`，表示该管理员/出题人由谁创建，实现层级追溯）。
+  - 增加 `daily_ai_quota` 整数列（默认 `100`，表示每日主动 AI 额度）。
+- `question.py` (Question 模型)：
+  - 增加 `is_deleted` 布尔列（默认 `False`，实现安全软删除，避免直接物理删除导致组卷外键断裂）。
+- `exam.py` (Exam 模型)：
+  - 增加 `start_time` 与 `end_time`（`DATETIME`，必须满足 `time_limit <= end_time - start_time` 强校验）。
+  - 增加 `grading_mode` 字符串列（枚举：`'manual'`-人工全权, `'ai_pre'`-AI辅助预审, `'ai_auto'`-AI代管直出，默认 `'manual'`）。
+- `record.py` (ExamRecord 模型)：
+  - 扩展状态枚举：增加 `'pending_grading'`（待批阅）。
+  - 增加 `ai_grading_result` JSON 列（记录 AI 建议分与各题评语快照）。
+- `audit_log.py` (新增 AuditLog 模型)：
+  - 字段：`id`, `operator_id`, `operator_role`, `action_type`, `target_entity`, `before_payload`, `after_payload`, `created_at`。
+
+### Step 1.5: 组卷列表题目透亮渲染与 AI 弹窗轻量化规范
+1. **试卷题目列表（普通新建与 AI 审阅共用）**：
+   - 题干下方渲染选项容器，单选/多选的正确选项强制添加样式：
+     `background-color: #f0fdf4; border: 1px solid #86efac; color: #166534; font-weight: 600;` 并前置 `✔` 标识。
+   - 判断题高亮挂出绿色 `[✔ 正确]` 或橙红 `[✖ 错误]`。
+   - 仅保留 `▲/▼` 排序与 `🗑️` 移出，**剔除快速编辑**。
+2. **AI 一键组卷弹窗**：
+   - 默认视图收敛至：`需求输入 (Prompt)` + `起止时间窗口` 两项。其余参数默认并折叠至 `<el-collapse>`。
+   - 生成题目为大模型实时原创生成，保存试卷时自动同步入库共享题海。
+3. **模型名称隐藏**：界面统一使用「AI 智能助管」/「AI 智算引擎」，不露出底层 API 供应商厂商名。
 
 ### Step 2: 题库重构与客观题/填空题引擎升级
 - **填空题多空校验**：
@@ -198,10 +214,11 @@ class PageResponse(BaseModel, Generic[T]):
 - **多选题半对机制**：
   - 修改原交卷接口 `/api/v1/records/submit` 的评分引擎。多选题的判断逻辑变为：`如果 user_answer 是 correct_answer 的真子集，得 50% 分；只要存在交集以外的元素，得 0 分`。
 
-### Step 3: 僵尸卷子“懒惰求值” (Lazy Evaluation)
-- **技术实现**：在获取 C 端试卷列表 (`GET /api/v1/exams`) 和 B 端阅卷大厅时，拦截查询前置动作。
+### Step 3: 僵尸卷子“懒惰求值”与行内批阅下钻 (Lazy Evaluation & Inline Drawer)
+- **技术实现**：在获取 C 端试卷列表 (`GET /api/v1/exams`) 和 B 端拉取试卷列表 (`GET /api/v1/admin/exams`) 时，拦截查询前置动作。
   - `UPDATE exam_records SET status = 'submitted' WHERE status = 'in_progress' AND now() > start_time + time_limit`。
-  - *平替方案*：绝不能用 Celery/Redis。哪怕只在 `POST /api/v1/records/submit` 被别的接口碰巧触发时清理，也比部署定时任务强。必须保持 0 运维基建。
+  - *平替方案*：绝不能用 Celery/Redis。必须保持 0 运维基建。
+- **B 端交互架构**：废除独立阅卷大厅页面，在 `ExamsView.vue` 试卷列表行内增加待批阅徽章 `[N份待批阅]`。点击原地唤出 `GradingDrawer.vue` 抽屉，支持基于试卷维度的集中快速人机协同复核。
 
 ### Step 4: AI 全托管阅卷底层调度 (FastAPI BackgroundTasks)
 - **开发期指定大模型 (SenseNova)**：
@@ -215,8 +232,28 @@ class PageResponse(BaseModel, Generic[T]):
   - 成功则写库。如果抛出超时或解析异常，则回滚并将记录置为 `pending_grading` 抛给人工大厅。
   - *平替方案*：如果大模型 JSON 返回一直格式错乱，可要求大模型使用最简单的 Markdown 代码块输出，后端用正则提取。
 
-### Step 5: B 端 AI Copilot 的“前端状态注入” (Preamble Injection)
-- **前端工作**：在发出 `/api/v1/admin/ai/chat` 请求时，Vue/Pinia 取出当前 Dashboard 的 `pending_count` 等数据，硬拼在用户输入的 text 前面：`[System: 待批阅10份, 余量15] 用户说: xxxx`。
-- **后端工作**：纯透传给大模型大模型接口，不涉及任何 RAG 或数据库查表。
-  - *兜底方案*：若前端状态难以抓取，就发送一个空的 `[System: 您是题库助手]`，让模型纯做泛知识问答。坚决不写复杂的 Text-to-SQL。
+### Step 5: B 端 AI Copilot 工业级交互与 Action Card 协议
+- **前端状态快照注入 (Preamble Injection)**：
+  - 发送 `/api/v1/admin/ai/chat` 前，Vue/Pinia 取出当前上下文拼装前置隐藏系统信息：`[系统状态快照: 登录人=xxx, 角色=xxx, 待阅试卷=X份, 剩余额度=Y] \n\n 用户提问: ...`。
+- **消息气泡视觉与脱敏**：
+  - 全站隐去大模型供应商（SenseNova/DeepSeek等），统一标识为「AI 智能助管」/「AI 智算引擎」。
+  - AI 消息气泡统一采用浅灰底（`#f8fafc`）+ 细边框（`1px solid #e2e8f0`）+ 大圆角（`12px~16px`）。
+  - 顶部带引述条：`| 回复 全Ai系统: [用户提问摘要]`。
+- **人机协同确认卡片 (Action Card 协议)**：
+  - 当大模型识别到高危管理意图（如划拨额度、批量生成入库）时，回答末尾附带：
+    ```markdown
+    ```action_card
+    {
+      "actionType": "TRANSFER_QUOTA",
+      "title": "划拨 AI 额度",
+      "riskLevel": "medium",
+      "details": [{"label": "目标出题人", "value": "陈思源"}, {"label": "划拨数量", "value": "50次"}],
+      "payload": {"target_email": "creator.chen@tiku.io", "amount": 50}
+    }
+    ```
+    ```
+  - 前端流式捕获该代码块，动态挂载渲染为红调卡片（带 `[确认执行]` 红色按钮与 `[取消]` 按钮）。
+  - 人类点击确认后调后端真实业务接口，卡片状态转为绿色 `已执行`，按钮自动隐藏防重复执行。
+- **知识盲区优雅降级**：
+  - 超出题库系统上下文的问题，大模型遵循系统提示词诚实拒答，并附带快捷提问建议气泡（Suggested Prompts）。
 ```

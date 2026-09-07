@@ -379,9 +379,23 @@
   ```
 - **Response 200**: 将记录状态流转为 `submitted`（或 `passed`/`failed`），成绩正式对外发布。
 
-### 4.3 基础数据结构变更
-- **Exams 表单扩展**：`POST / PUT /api/v1/admin/exams` 需增加 `start_time`, `end_time` 和 `is_ai_auto_grade` (bool) 参数。时间校验逻辑（`time_limit <= end_time - start_time`）在前端和后端均需拦截。
-- **Records 交卷逻辑扩展**：交卷接口如遇主观题，则返回 `status: "pending_grading"`，而非原先的即刻结算总分。
+### 4.3 基础数据结构与管理接口变更
+- **Exams 表单扩展**：`POST / PUT /api/v1/admin/exams` 需增加 `start_time`, `end_time` 和 `grading_mode` (枚举：`'manual'`, `'ai_pre'`, `'ai_auto'`) 参数。
+  - 时间校验逻辑（`time_limit <= end_time - start_time`）在前端和后端均需强制拦截。
+  - 试卷权限隔离：出题人 (`creator`) 仅能查询和编辑 `creator_id == current_user.id` 的私有试卷。
+- **Records 交卷逻辑扩展**：
+  - 交卷接口如遇主观简答题：
+    - 若 `grading_mode == 'ai_auto'`：后台大模型自动判分并计算总分，记录直接转为 `submitted` 并对外公布。
+    - 若 `grading_mode == 'ai_pre'` 或 `'manual'`：返回 `status: "pending_grading"`，进入阅卷大厅待复核发布。
+- **POST `/api/v1/admin/users/transfer-quota` — 管理员向下级划拨 AI 额度**：
+  - **Request Body**: `{ "target_email": "creator.chen@tiku.io", "amount": 50 }`
+  - **权限校验**：
+    - 超管可向任何人划拨额度。
+    - 管理员仅能向自己创建的/归属的下级出题人 (`creator`) 划拨额度；**向同级管理员或超管划拨直接返回 `403 Forbidden`**。
+    - 出题人无权调用此接口。
+- **POST `/api/v1/admin/users` — 创建管理成员**：
+  - **Request Body**: `{ "username": "creator.chen@tiku.io", "nickname": "陈思源", "role": "creator", "password": "..." }`
+  - **溯源绑定**：系统自动记录 `created_by_id = current_admin.id`，实现全链溯源。
 
 
 ---
