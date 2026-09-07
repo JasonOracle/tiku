@@ -88,7 +88,7 @@
   ```
 * **Start Command**:
   ```bash
-  uvicorn app.main:app --host 0.0.0.0 --port 10000
+  uvicorn app.main:app --host 0.0.0.0 --port $PORT
   ```
 * **Instance Type**: 选择 **Free**
 
@@ -197,17 +197,20 @@ python seed_rbac_users.py
 ## 常见排错指南 (FAQ)
 
 ### Q1: Render 首次部署提示缺少依赖报错怎么办？
-* 确保 `backend/requirements.txt` 中包含所有必需依赖，特别是 `cryptography`、`pymysql`、`pydantic-settings`：
+* 确保 `backend/requirements.txt` 中包含所有必需依赖（由于项目升级到了 v1.7 版本，部分依赖已替换如 pyjwt、bcrypt）：
   ```txt
-  fastapi>=0.100.0
-  uvicorn[standard]>=0.22.0
-  sqlalchemy>=2.0.0
-  pymysql>=1.0.0
-  cryptography>=41.0.0
-  pydantic>=2.0.0
-  python-jose[cryptography]>=3.3.0
-  passlib[bcrypt]>=1.7.4
-  requests>=2.31.0
+  fastapi>=0.110.0
+  uvicorn[standard]>=0.28.0
+  sqlalchemy>=2.0.28
+  pymysql>=1.1.0
+  pydantic>=2.6.4
+  pydantic-settings>=2.2.1
+  pyjwt>=2.8.0
+  bcrypt>=4.1.0
+  python-multipart>=0.0.9
+  openpyxl>=3.1.2
+  pytest>=8.1.1
+  httpx>=0.27.0
   ```
 
 ### Q2: 访问前端时提示 API 网络超时或 502？
