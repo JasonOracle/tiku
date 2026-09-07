@@ -66,36 +66,28 @@
 
 ---
 
-## 第二步：云端部署 Python FastAPI 后端 (Koyeb - 100% 免绑卡推荐)
+## 第二步：云端部署 Python FastAPI 后端 (Zeabur - 100% 免绑卡极速推荐)
 
-> **为什么首选 Koyeb？**  
-> 1. **完全免绑信用卡**：支持 GitHub 账号一键授权登录，永久免费额度无需任何银行卡验证，彻底避开 Stripe/外币卡 3DS 拦截风险；  
-> 2. **原生支持 Buildpack & Docker**：自动识别 Python 3.10+ / FastAPI 项目；  
-> 3. **全球边缘加速 & HTTPS**：自动分配 `.koyeb.app` 免费域名与 SSL 证书；  
-> *(备选：如果已有海外信用卡且通过了 Stripe 验证，也可以使用 Render.com)*
+> **为什么首选 Zeabur？**  
+> 1. **真正免绑卡**：GitHub 账号一键登录，无需任何信用卡/外币卡；  
+> 2. **亚太节点极低延迟**：提供东京 (Tokyo) / 新加坡 (Singapore) 优质节点，国内直连响应飞快；  
+> 3. **全自动化识别**：自动识别 Python 项目，一键分配 `.zeabur.app` 免费 SSL 域名。
 
-### 2.1 注册并创建 Koyeb Service
-1. 打开官网：[https://app.koyeb.com/](https://app.koyeb.com/)，点击 **Sign in with GitHub** 直接登录。
-2. 登录后进入控制台，点击右上角 **Create Service**。
-3. 部署来源选择 **GitHub**。
-4. 在仓库列表中找到并选中你的 `tiku` 仓库（首次使用点击授权 Install Koyeb GitHub App）。
+### 2.1 注册并创建 Project
+1. 打开官网：[https://zeabur.com/](https://zeabur.com/)，点击右上角 **Login** $\rightarrow$ **Sign in with GitHub**。
+2. 登录后进入控制台，点击 **Create Project**（新建项目）。
+3. 区域 (Region) 选择 **Asia-Pacific**（例如 `Tokyo` 或 `Singapore`）。
 
-### 2.2 填写构建与运行参数 (App Configuration)
-* **Branch**: `master`
-* **Work Directory (工作目录)**: 点击展开高级选项，填写 `backend` （**关键：必须指向后端目录**）
-* **Builder**: 保持默认的 **Buildpack**（会自动识别 requirements.txt 并安装 Python 依赖）
-* **Build Command**: 留空（Buildpack 会自动执行 `pip install -r requirements.txt`）
-* **Run Command**:
-  ```bash
-  uvicorn app.main:app --host 0.0.0.0 --port 8000
-  ```
-  *(或者 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`)*
-* **Instance Type (实例规格)**: 选择 **Free (Nano)**（$0/month，512MB 内存，免绑卡可用）
-* **Regions**: 默认通常分配 `Frankfurt (fra)` 或 `Washington D.C. (was)`，选默认即可。
-* **Exposed Port (暴露端口)**: 默认是 `8000`（与 Run Command 端口一致），Path 为 `/`，协议选 `HTTP`。
+### 2.2 部署后端服务
+1. 进入刚创建的项目，点击 **Deploy New Service** $\rightarrow$ 选择 **Git**。
+2. 选中你的 `tiku` 仓库（首次使用授权 GitHub 仓库权限）。
+3. 选择分支：`master`。
+4. **配置工作目录 (Root Directory)**：
+   - 在部署弹窗中，将 **Root Directory** 设置为：`backend` （**非常关键：指向后端目录**）。
+   - Zeabur 会自动识别到 `requirements.txt` 并完成依赖安装与启动。
 
 ### 2.3 配置环境变量 (Environment Variables)
-在 **Environment variables** 区域逐个添加：
+在服务详情页中，点击 **Variables**（环境变量）标签页，逐个添加：
 
 | Key (变量名) | Value 示例 | 说明 |
 | :--- | :--- | :--- |
@@ -104,17 +96,17 @@
 | `SECRET_KEY` | `tiku-prod-secret-key-random-token-2026` | 32位随机密钥 |
 | `CORS_ORIGINS` | `*` | 跨域放行 |
 
-### 2.4 点击 Deploy 并获取公网地址
-1. 点击最底部的 **Deploy** 按钮。
-2. 等待 1~2 分钟，页面上方会显示构建与运行日志，状态变为绿色的 **Healthy**。
-3. 复制 Koyeb 分配的公网访问网址，格式类似于：
-   `https://tiku-api-xxxx.koyeb.app`
-4. 验证后端：在浏览器打开 `https://tiku-api-xxxx.koyeb.app/docs`，若能正常打开 Swagger 接口文档，说明后端与 TiDB 云数据库已经 100% 连通上线！
+### 2.4 生成公网域名与验证
+1. 环境变量添加后，服务会自动触发重新部署。
+2. 点击 **Networking**（网络）标签页，在 **Public Networking** 下点击 **Generate Domain**（生成域名）。
+3. 系统会立即为你生成一个免费的公网网址，例如：
+   `https://tiku-api.zeabur.app`
+4. 验证接口：在浏览器中访问 `https://tiku-api.zeabur.app/docs`，若能正常打开 Swagger 交互文档，后端即正式大功告成！
 
 ---
 
 ### 💡 备选方案：Render.com (适合已有外币信用卡用户)
-如果已有支持海外消费的信用卡并通过了 Stripe 验证，也可以在 [render.com](https://render.com/) 创建 Web Service：
+如果已有海外信用卡，也可以在 [render.com](https://render.com/) 创建 Web Service：
 - **Root Directory**: `backend`
 - **Build Command**: `pip install -r requirements.txt`
 - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
