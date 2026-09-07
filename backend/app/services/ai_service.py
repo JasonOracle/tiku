@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-08
+AI模型：OpenCode / Gemini 底层
+修改内容：[1. 内置默认主力 Dots API Key 兜底 (ak_9PZWVd3JTrye8QHen9uBnLnhbihh1) 与官方网关，确保本地与线上部署开箱即用 AI 助手与智能出题]
 修改时间：2026-09-06 17:30:00
 AI模型：ZCode (GLM)
 修改内容：[v1.2 新增 SenseNova (商汤日日新) 大模型客户端: OpenAI 兼容协议 + JSON 输出鲁棒解析 + 优雅降级]
@@ -16,9 +19,10 @@ import json
 import httpx
 from typing import List, Dict, Optional, Generator, Any
 
-# 高速主力模型 (OpenAI 兼容协议)。凭证读取宿主机用户系统环境变量, 不落盘 .env
+# 高速主力模型 (OpenAI 兼容协议)。优先读取环境变量，未配置时采用内置默认凭证
 DEFAULT_DOTS_API_URL = "https://note3-prev-api.askdiandian.com/v1/chat/completions"
 DEFAULT_DOTS_MODEL = "dots3-note-prev"
+DEFAULT_DOTS_API_KEY = "ak_9PZWVd3JTrye8QHen9uBnLnhbihh1"
 # 历史供应商网关 (仅作故障转移兜底)
 DEFAULT_API_URL = "https://token.sensenova.cn/v1/chat/completions"
 DEFAULT_MODEL = "sensenova-6.8-flash-lite"
@@ -54,17 +58,17 @@ def get_ai_providers() -> List[Dict[str, str]]:
     providers = []
 
     # 1-2. 高速主力模型 (OpenAI 兼容)
-    dots_url = os.getenv("XIAO_HONG_SHU_API_URL") or DEFAULT_DOTS_API_URL
-    dots_model = os.getenv("XIAO_HONG_SHU_MODEL") or DEFAULT_DOTS_MODEL
-    dk1 = os.getenv("XIAO_HONG_SHU_API_KEY") or None
+    dots_url = os.getenv("XIAO_HONG_SHU_API_URL") or os.getenv("DOTS_API_URL") or DEFAULT_DOTS_API_URL
+    dots_model = os.getenv("XIAO_HONG_SHU_MODEL") or os.getenv("DOTS_MODEL") or DEFAULT_DOTS_MODEL
+    dk1 = os.getenv("XIAO_HONG_SHU_API_KEY") or os.getenv("DOTS_API_KEY") or DEFAULT_DOTS_API_KEY
     if dk1:
         providers.append({
-            "name": "Dots (Key 1)",
+            "name": "Dots (Primary)",
             "api_url": dots_url,
             "api_key": dk1,
             "model": dots_model,
         })
-    dk2 = os.getenv("XIAO_HONG_SHU_API_KEY2") or None
+    dk2 = os.getenv("XIAO_HONG_SHU_API_KEY2") or os.getenv("DOTS_API_KEY2") or None
     if dk2:
         providers.append({
             "name": "Dots (Key 2)",
