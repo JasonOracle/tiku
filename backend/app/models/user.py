@@ -28,15 +28,17 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.now, comment="注册时间")
 
 class Admin(Base):
-    """B端管理员模型 (super_admin 超管 / admin 老师 / ai AI员工)"""
+    """B端管理员模型 (super_admin 超级管理员 / admin 管理员 / teacher 出题人 / ai AI员工)"""
     __tablename__ = "admins"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     username = Column(String(50), unique=True, index=True, nullable=False, comment="管理员账号")
+    name = Column(String(50), nullable=True, comment="真实姓名/名字")
+    phone = Column(String(20), nullable=True, comment="手机号")
     password_hash = Column(String(255), nullable=False, comment="密码哈希")
-    role = Column(String(20), default="admin", comment="角色 (super_admin, admin, ai)")
+    role = Column(String(20), default="teacher", comment="角色 (super_admin, admin, teacher, ai)")
     status = Column(Boolean, default=True, comment="账号状态 (True=正常, False=禁用)")
-    ai_quota_limit = Column(Integer, default=0, comment="每日 AI 额度配置值 (超管分配)")
-    daily_ai_quota = Column(Integer, default=0, comment="今日 AI 额度余额 (主动生成型扣减)")
-    quota_reset_date = Column(Date, nullable=True, comment="额度所属日期 (跨天自动重置)")
+    ai_quota_limit = Column(Integer, default=0, comment="每日 AI 额度配置值")
+    daily_ai_quota = Column(Integer, default=0, comment="今日 AI 额度余额")
+    quota_reset_date = Column(Date, nullable=True, comment="额度所属日期")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")

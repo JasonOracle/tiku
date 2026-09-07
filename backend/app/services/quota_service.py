@@ -14,6 +14,10 @@ from app.models.ai_usage import AiUsageLog
 
 def refresh_daily_quota(admin: Admin) -> Admin:
     """跨天惰性重置: 首次在新的一天调用时, 将余额回满为配置的每日额度 (无需定时任务)"""
+    if admin.role == "super_admin":
+        admin.daily_ai_quota = 99999999
+        return admin
+
     today = date.today()
     if admin.quota_reset_date != today:
         admin.quota_reset_date = today
@@ -23,6 +27,9 @@ def refresh_daily_quota(admin: Admin) -> Admin:
 
 def ensure_quota(db: Session, admin: Admin) -> int:
     """校验并惰性刷新今日额度余额, 返回当前余额; 不足则 400 拦截"""
+    if admin.role == "super_admin":
+        return 99999999
+        
     refresh_daily_quota(admin)
     db.commit()
     if (admin.daily_ai_quota or 0) <= 0:
@@ -35,6 +42,11 @@ def ensure_quota(db: Session, admin: Admin) -> int:
 
 def deduct_quota(db: Session, admin: Admin, action: str, detail: Optional[dict] = None) -> int:
     """扣减一次主动创造型 AI 额度并记录流水 (出题/组卷/聊天)"""
+    if admin.role == "super_admin":
+        db.add(AiUsageLog(admin_id=admin.id, action=action, quota_delta=0, detail=detail or {}))
+        db.commit()
+        return 99999999
+
     refresh_daily_quota(admin)
     if (admin.daily_ai_quota or 0) <= 0:
         raise HTTPException(status_code=400, detail="今日 AI 额度已用尽，请联系超级管理员分配额度")

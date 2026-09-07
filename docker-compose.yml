@@ -31,6 +31,10 @@ services:
     environment:
       DATABASE_URL: "mysql+pymysql://root:rootpassword@tiku_mysql:3306/tiku_db?charset=utf8mb4"
       SECRET_KEY: "tiku_super_secret_key_2026_change_in_production"
+      SENSENOVA_API_KEY: "${SENSENOVA_API_KEY}"
+      SENSENOVA_API_KEY2: "${SENSENOVA_API_KEY2}"
+      AGNES_API_KEY: "${AGNES_API_KEY}"
+      AGNES_API_KEY2: "${AGNES_API_KEY2}"
     ports:
       - "8000:8000"
     depends_on:

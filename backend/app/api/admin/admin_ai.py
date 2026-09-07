@@ -23,6 +23,8 @@ from app.services.ai_service import AiServiceError
 from app.services.quota_service import deduct_quota
 from app.services.exam_service import first_category_id, recalc_exam_totals
 from app.services.audit_service import write_audit, push_notification
+from app.services.ai_tools_registry import get_allowed_tools, REGISTRY
+import json
 
 router = APIRouter()
 
@@ -51,6 +53,7 @@ class ExamGenRequest(BaseModel):
     title: Optional[str] = Field(None, description="试卷标题 (AI 可补全)")
     description: str = Field(..., min_length=5, description="组卷自然语言需求")
     specs: List[ExamSpecItem] = Field(..., description="题型构成要求")
+    difficulty: Optional[str] = Field("medium", description="难度: easy, medium, hard")
     category_id: Optional[int] = Field(None, description="试卷分类")
     is_timed: bool = Field(True)
     time_limit: int = Field(30)
@@ -59,8 +62,21 @@ class ExamGenRequest(BaseModel):
     end_time: Optional[datetime] = None
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, description="老师提问 (前端已注入状态快照前导)")
+    message: str = Field(..., min_length=1, description="老师提问")
     history: Optional[List[dict]] = Field(default=[], description="轻量历史 [{role, content}]")
+
+class ExecuteToolRequest(BaseModel):
+    tool_name: str
+    arguments: dict
+    tool_call_id: str
+
+class ChatFeedbackRequest(BaseModel):
+    message_content: str
+    rating: str = Field(..., description="'up' or 'down'")
+
+class ChatFeedbackRequest(BaseModel):
+    message_content: str
+    rating: str = Field(..., description="'up' or 'down'")
 
 
 # ---------------- 状态 ----------------
@@ -75,11 +91,16 @@ def ai_status(
     refresh_daily_quota(admin)
     db.commit()
     cfg = ai_service.get_ai_config()
+    
+    # 针对 super_admin 返回无限制
+    q_remaining = 99999999 if admin.role == "super_admin" else (admin.daily_ai_quota or 0)
+    q_limit = 99999999 if admin.role == "super_admin" else (admin.ai_quota_limit or 0)
+    
     return ResponseModel(code=200, data={
         "available": ai_service.ai_available(),
         "model": cfg["model"],
-        "quota_remaining": admin.daily_ai_quota or 0,
-        "quota_limit": admin.ai_quota_limit or 0,
+        "quota_remaining": q_remaining,
+        "quota_limit": q_limit,
     })
 
 
@@ -101,11 +122,29 @@ def _normalize_options(options) -> list:
 def _normalize_generated_question(q: dict, default_type: str, default_difficulty: str) -> dict:
     """规范化 AI 生成的题目结构 (大模型常把 answer/options 返回成字符串或错位结构, 统一纠正)"""
     q_type = q.get("type", default_type)
+    title = str(q.get("title", ""))
     answer = q.get("answer")
     if q_type == "fill":
-        if not isinstance(answer, list):
-            answer = []
-        answer = [b if isinstance(b, list) else [str(b)] for b in answer]
+        if not isinstance(answer, list) or not answer:
+            answer = [["参考答案"]]
+        else:
+            answer = [b if isinstance(b, list) else [str(b)] for b in answer]
+        # 自动强对齐: 确保题干中的 ___ 占位符数量与 answer 二维数组空数一致
+        blank_count = title.count("___")
+        if blank_count == 0:
+            # 题干中若 AI 忘记写 ___ 占位符，自动补充在题干末尾
+            needed_blanks = len(answer)
+            title = title.rstrip() + " " + " ".join(["___"] * needed_blanks)
+            blank_count = title.count("___")
+        
+        # 如果 blank_count != len(answer)，以题干占位符数量为准裁剪或补齐答案
+        if blank_count > len(answer):
+            diff = blank_count - len(answer)
+            for _ in range(diff):
+                answer.append(["参考答案"])
+        elif blank_count < len(answer):
+            answer = answer[:blank_count]
+
     elif q_type == "short":
         if isinstance(answer, str):
             answer = [answer]
@@ -114,12 +153,22 @@ def _normalize_generated_question(q: dict, default_type: str, default_difficulty
         if isinstance(answer, str):
             answer = [a.strip().upper() for a in answer.replace(",", "").replace("；", "").replace(";", "") if a.strip()]
         answer = [str(a) for a in (answer or [])]
+    gp = q.get("grading_points")
+    if isinstance(gp, str):
+        grading_points = [gp]
+    elif isinstance(gp, list):
+        grading_points = [str(x) for x in gp]
+    elif gp is not None and not isinstance(gp, (list, dict)):
+        grading_points = [str(gp)]
+    else:
+        grading_points = []
+
     return {
         "type": q_type,
-        "title": str(q.get("title", "")),
+        "title": title,
         "options": _normalize_options(q.get("options")),
         "answer": answer,
-        "grading_points": q.get("grading_points") or [],
+        "grading_points": grading_points,
         "explanation": str(q.get("explanation", "")),
         "difficulty": q.get("difficulty", default_difficulty),
         "score": 10,
@@ -146,10 +195,19 @@ def ai_generate_questions(
         if t not in ("single", "multiple", "judge", "fill", "short"):
             raise HTTPException(status_code=400, detail=f"不支持的题型: {t}")
 
-    provided = [bool(types), count is not None, bool(difficulty)]
-    if any(provided) and not all(provided):
-        raise HTTPException(status_code=400, detail="高级选项需完整填写（题型、数量、难度），或全部留空由 AI 自主决定")
-    if not types:
+    # 高级选项(types, count, difficulty) 要么全空, 要么全填 (兼容单题型旧参数)
+    filled_count = sum(1 for x in [types, count, difficulty] if x is not None)
+    if filled_count > 0 and filled_count < 3:
+        raise HTTPException(status_code=400, detail="高级选项(题型组合、题目数量、难度)请完整填写，或全部留空由 AI 自主决定")
+
+    # 当指定了数量 N 且选了多个题型，若 N < len(types)，以数量为准，截取前 N 个题型
+    if types and count and count < len(types):
+        types = types[:count]
+
+    if not count:
+        count = 5
+    if not difficulty:
+        difficulty = "medium"
         count = count or 5
         difficulty = difficulty or "medium"
 
@@ -161,7 +219,7 @@ def ai_generate_questions(
         if len(types) == 1:
             type_line = f"所有题目必须为【{type_names[types[0]]}】, 不得混入其他题型。"
         else:
-            type_line = ("题目必须严格按以下题型构成输出(合计恰好 "
+            type_line = ("题目必须按以下题型构成输出(合计恰好 "
                          + f"{count} 题): " + "、".join(f"{type_names[t]}若干" for t in types)
                          + f"。总题数必须正好 {count} 题。")
         constraint = (
@@ -246,9 +304,11 @@ def ai_generate_exam(
         '只输出 JSON: {"title": "试卷标题", "items": [{"question_id": 题库id} 或 {"new_question": {'
         '"type","title","options","answer","grading_points","explanation","difficulty"}}]}'
     )
+    difficulty = data.difficulty or "medium"
     prompt = (
         f"老师需求: {data.description}\n"
         f"题型构成: {[(s.q_type, s.count) for s in data.specs]}\n"
+        f"题目难度: {difficulty}\n"
         f"题库摘要(共{len(bank_digest)}题): {bank_digest}\n"
         f"请严格按题型构成数量输出 items (合计 {total_expected} 项)。"
     )
@@ -272,7 +332,7 @@ def ai_generate_exam(
             if q:
                 question_ids.append(q.id)
         elif isinstance(item.get("new_question"), dict):
-            nq = _normalize_generated_question(item["new_question"], "single", "medium")
+            nq = _normalize_generated_question(item["new_question"], "single", difficulty)
             try:
                 from app.api.admin.questions import _validate_question_payload
                 _validate_question_payload(nq["type"], nq["title"], nq["answer"])
@@ -370,18 +430,135 @@ def ai_chat(
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
-    """AI 助手: 前端把 Pinia 状态快照硬拼在 message 前导, 后端纯透传大模型 (无 RAG/无查表), 扣个人额度"""
+    """AI 网关: 角色权限继承, 支持 Function Calling"""
     if not ai_service.ai_available():
         raise HTTPException(status_code=400, detail="AI 服务未配置（缺少 SENSENOVA_API_KEY）")
     deduct_quota(db, admin, "chat", {"length": len(data.message)})
 
+    role_map = {"super_admin": "超级管理员", "admin": "管理员", "teacher": "出题人"}
+    role_name = role_map.get(admin.role, "未知角色")
+    allowed_tools = get_allowed_tools(admin.role)
+    
+    system_prompt = f"你是智题库平台的 AI 助手, 熟悉题库/组卷/阅卷业务。\n"
+    system_prompt += f"当前跟你对话的用户是【{admin.username}】，其在系统中的角色为【{role_name}】。\n"
+    system_prompt += "作为系统 AI 助理，你不仅能陪聊，你还可以并且必须使用提供的工具去操作或查询数据库。\n"
+    system_prompt += "如果用户询问你能做什么，或者让你帮他操作，你需要查阅你当前的 tools 列表并告知用户你可以做哪些事。不要编造你没有的工具能力。\n"
+    system_prompt += "如果用户让你执行越权操作，请礼貌地拒绝并说明这是因为其角色权限不足。\n"
+
     try:
-        reply = ai_service.chat_completion(
-            data.message[:6000],
-            system="你是智题库平台的 AI 助手, 熟悉题库/组卷/阅卷业务。回答简洁专业, 使用中文。",
+        content, tool_calls = ai_service.chat_completion(
+            prompt=data.message[:6000],
+            system=system_prompt,
+            history=data.history,
             temperature=0.5,
+            tools=allowed_tools if allowed_tools else None
         )
+        
+        if tool_calls:
+            # 简化处理，目前只处理第一个工具调用
+            tc = tool_calls[0]
+            tc_id = tc.get("id")
+            func_obj = tc.get("function", {})
+            t_name = func_obj.get("name")
+            try:
+                t_args = json.loads(func_obj.get("arguments", "{}"))
+            except:
+                t_args = {}
+            
+            tool_reg = REGISTRY.get(t_name)
+            if not tool_reg:
+                return ResponseModel(code=200, data={"reply": f"系统错误：未找到工具 {t_name}", "quota_remaining": admin.daily_ai_quota})
+            
+            risk_level = tool_reg["definition"].risk_level
+            if admin.role not in tool_reg["definition"].allowed_roles:
+                return ResponseModel(code=200, data={"reply": f"权限拦截：你的角色({role_name})无权使用 {t_name}", "quota_remaining": admin.daily_ai_quota})
+
+            if risk_level == "low":
+                # 低风险，直接由网关在后台替 AI 执行，并将结果喂回给大模型进行归纳
+                handler = tool_reg["handler"]
+                result_data = handler(db, admin, t_args)
+                
+                # 第二轮对话
+                second_history = data.history + [{"role": "user", "content": data.message}]
+                second_history.append({
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [tc]
+                })
+                second_history.append({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "name": t_name,
+                    "content": json.dumps(result_data, ensure_ascii=False)
+                })
+                
+                final_content, _ = ai_service.chat_completion(
+                    prompt="",
+                    system=system_prompt,
+                    history=second_history,
+                    temperature=0.5,
+                    tools=allowed_tools if allowed_tools else None
+                )
+                q_remaining = 99999999 if admin.role == "super_admin" else admin.daily_ai_quota
+                return ResponseModel(code=200, data={"reply": final_content, "quota_remaining": q_remaining})
+            else:
+                # 高风险，要求前端显示二次确认卡片
+                q_remaining = 99999999 if admin.role == "super_admin" else admin.daily_ai_quota
+                return ResponseModel(code=200, data={
+                    "type": "action_required",
+                    "tool_name": t_name,
+                    "arguments": t_args,
+                    "tool_call_id": tc_id,
+                    "risk_level": tool_reg['definition'].risk_level,
+                    "message": f"即将执行{ '高' if tool_reg['definition'].risk_level == 'high' else '低' }风险操作: {tool_reg['definition'].description}",
+                    "quota_remaining": q_remaining
+                })
+
+        q_remaining = 99999999 if admin.role == "super_admin" else admin.daily_ai_quota
+        return ResponseModel(code=200, data={"reply": content, "quota_remaining": q_remaining})
+
     except AiServiceError as e:
         raise HTTPException(status_code=502, detail=f"AI 助手暂时不可用: {e}")
 
-    return ResponseModel(code=200, data={"reply": reply, "quota_remaining": admin.daily_ai_quota})
+@router.post("/chat/execute_tool")
+def ai_chat_execute_tool(
+    data: ExecuteToolRequest,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """网关拦截后，人工审批通过的高风险 Tool 执行接口"""
+    tool_reg = REGISTRY.get(data.tool_name)
+    if not tool_reg:
+        raise HTTPException(status_code=400, detail="非法工具")
+    
+    if admin.role not in tool_reg["definition"].allowed_roles:
+        raise HTTPException(status_code=403, detail="越权调用拦截")
+        
+    handler = tool_reg["handler"]
+    result = handler(db, admin, data.arguments)
+    
+    # 写入双重审计日志
+    write_audit(db, "execute_tool", "ai_gateway", admin.id,
+                summary=f"AI Agent 执行工具: {data.tool_name}",
+                after_data={"arguments": data.arguments, "result": result}, admin=admin, operator_type="ai")
+    db.commit()
+    
+    return ResponseModel(code=200, message="操作已执行", data=result)
+
+
+@router.post("/chat/feedback")
+def ai_chat_feedback(
+    data: ChatFeedbackRequest,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """大模型回答反馈 (MVP: 纯记录 AuditLog)"""
+    # The current write_audit signature: write_audit(db, action, module, user_id, summary, after_data=None, before_data=None, admin=None, operator_type="user")
+    write_audit(db, "chat_feedback", "ai_gateway", admin.id,
+                summary=f"用户对大模型的回复进行了评价。评价: {'👍 赞' if data.rating == 'up' else '👎 踩'}",
+                after_data={
+                    "rating": data.rating,
+                    "message_snippet": data.message_content[:500]
+                }, admin=admin)
+    db.commit()
+    return ResponseModel(code=200, message="反馈已记录，感谢您的评价！")

@@ -170,6 +170,19 @@ def batch_create_questions(
 
     created_ids = []
     for item in data:
+        if item.type == "fill" and isinstance(item.answer, list):
+            blank_count = item.title.count("___")
+            normalized = [b if isinstance(b, list) else [str(b)] for b in item.answer]
+            if blank_count == 0:
+                item.title = item.title.rstrip() + " " + " ".join(["___"] * len(normalized))
+                blank_count = item.title.count("___")
+            if blank_count > len(normalized):
+                for _ in range(blank_count - len(normalized)):
+                    normalized.append(["参考答案"])
+            elif blank_count < len(normalized):
+                normalized = normalized[:blank_count]
+            item.answer = normalized
+
         _validate_question_payload(item.type, item.title, item.answer)
         category_id = item.category_id or first_category_id(db, "question")
         q = Question(

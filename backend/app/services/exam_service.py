@@ -387,7 +387,7 @@ def validate_fill_question(title: str, answer) -> None:
     blank_count = title.count("___")
     if not isinstance(answer, list) or not answer:
         raise HTTPException(status_code=400, detail="填空题必须配置答案（二维数组，如 [[\"北京\",\"北京市\"]]）")
-    normalized = answer if isinstance(answer[0], list) else [answer]
+    normalized = [b if isinstance(b, list) else [str(b)] for b in answer]
     if blank_count != len(normalized):
         raise HTTPException(
             status_code=400,

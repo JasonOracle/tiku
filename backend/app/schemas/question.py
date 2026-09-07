@@ -4,7 +4,7 @@
 AI模型：ZCode (GLM)
 修改内容：[v1.2 Schema 扩展: 题型支持 fill/short, 新增 grading_points/source/locked 字段]
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from typing import List, Optional, Any, Dict
 
@@ -51,6 +51,17 @@ class QuestionResponse(BaseModel):
     locked: bool = False
     category_id: Optional[int] = None
     created_at: datetime
+
+    @field_validator("grading_points", mode="before")
+    @classmethod
+    def _coerce_grading_points(cls, v: Any) -> List[str]:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(item) for item in v]
+        if isinstance(v, str):
+            return [v] if v else []
+        return [str(v)]
 
     class Config:
         from_attributes = True

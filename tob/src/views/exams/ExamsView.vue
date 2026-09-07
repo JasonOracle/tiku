@@ -1,9 +1,8 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-06 21:30:00
- * AI模型：ZCode (GLM)
- * 修改内容：[v1.2: 组卷时间锁 start_time/end_time+时长校验 / is_ai_auto_grade AI全托管开关(含简答题才显示) /
- *          列表双维状态(上架switch+时间窗badge) / 待批阅红点按钮跳阅卷大厅 / ✨AI智能一键组卷(强制草稿)]
+ * 修改时间：2026-09-07 00:05:00
+ * AI模型：Gemini 系列
+ * 修改内容：[1. AI 智能一键组卷弹窗 UI 对齐普通新建试卷: 增加题目难度单选框(默认简单)、限时作答开关+输入框、及格比例 Slider 滑块；2. 说明 AI 组卷及格线在题目生成后进入查看与确认页动态向上取整计算]
 -->
 <template>
   <div class="page-card">
@@ -485,9 +484,9 @@
     </el-dialog>
 
     <!-- ✨ AI 智能一键组卷 Dialog -->
-    <el-dialog v-model="aiExamVisible" title="✨ AI 智能一键组卷" width="640px" destroy-on-close>
+    <el-dialog v-model="aiExamVisible" title="✨ AI 智能一键组卷" width="660px" destroy-on-close>
       <el-alert type="info" :closable="false" show-icon style="margin-bottom: 14px"
-                title="AI 优先从共享题库检索复用；不足时自动生成新题。生成的试卷强制为草稿，必须人工检查后手动上架。" />
+                title="AI 优先从共享题库检索复用；不足时自动生成新题。生成的试卷强制为草稿，生成后点击「去检查并上架」可查看与挑选调整最终题目及算分及格线。" />
       <el-form label-width="100px">
         <el-form-item label="组卷需求" required>
           <el-input v-model="aiExamForm.description" type="textarea" :rows="3"
@@ -496,26 +495,58 @@
         <el-form-item label="试卷标题">
           <el-input v-model="aiExamForm.title" placeholder="留空则由 AI 命名" />
         </el-form-item>
+
         <el-form-item label="试卷分类">
           <el-select v-model="aiExamForm.category_id" placeholder="选择试卷分类" style="width: 100%">
             <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
           </el-select>
         </el-form-item>
-        <el-row :gutter="12">
-          <el-col :span="8">
-            <el-form-item label="限时(分)">
-              <el-input-number v-model="aiExamForm.time_limit" :min="5" :max="300" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="及格比">
-              <el-input-number v-model="aiExamForm.pass_percent" :min="10" :max="100" :step="5" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <div v-if="aiExamResult" class="ai-result-tip">
+
+        <el-form-item label="题目难度">
+          <el-radio-group v-model="aiExamForm.difficulty">
+            <el-radio label="easy">简单</el-radio>
+            <el-radio label="medium">中等</el-radio>
+            <el-radio label="hard">困难</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="限时作答">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <el-switch v-model="aiExamForm.is_timed" />
+            <div v-if="aiExamForm.is_timed" style="display: flex; align-items: center; gap: 6px">
+              <el-input-number v-model="aiExamForm.time_limit" :min="5" :max="300" size="default" style="width: 130px" />
+              <span style="font-size: 13px; color: #64748b">分钟</span>
+            </div>
+            <span v-else style="font-size: 13px; color: #94a3b8">不限时长</span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="考试时间窗">
+          <div style="display: flex; align-items: center; gap: 10px; width: 100%">
+            <el-date-picker v-model="aiExamForm.start_time" type="datetime" placeholder="开始时间(可选)" format="YYYY-MM-DD HH:mm"
+                            value-format="YYYY-MM-DDTHH:mm:ss" style="flex: 1" />
+            <span style="color: #94a3b8">至</span>
+            <el-date-picker v-model="aiExamForm.end_time" type="datetime" placeholder="结束时间(可选)" format="YYYY-MM-DD HH:mm"
+                            value-format="YYYY-MM-DDTHH:mm:ss" style="flex: 1" />
+          </div>
+          <div class="score-calc-tip" style="margin-top: 4px; color: #64748b; font-size: 12px">
+            不设置则长期开放（可选）；设置后 C 端按「未开始/进行中/已结束」流转
+          </div>
+        </el-form-item>
+
+        <el-form-item label="及格比例">
+          <div style="display: flex; align-items: center; width: 100%; gap: 16px">
+            <el-slider v-model="aiExamForm.pass_percent" :min="10" :max="100" :step="5" style="flex: 1" />
+            <span style="font-weight: 700; width: 50px; color: #0284c7">{{ aiExamForm.pass_percent }}%</span>
+          </div>
+          <div class="score-calc-tip" style="margin-top: 4px; color: #64748b; font-size: 12px">
+            💡 及格分数将在 AI 生成题目并进入修改界面选定最终试题及分值后自动向上取整计算
+          </div>
+        </el-form-item>
+
+        <div v-if="aiExamResult" class="ai-result-tip" style="margin-top: 12px; padding: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534">
           ✅ {{ aiExamResult }}
-          <div style="margin-top: 6px">
+          <div style="margin-top: 8px">
             <el-button type="primary" size="small" @click="goNewExam">去检查并上架</el-button>
           </div>
         </div>
@@ -914,7 +945,11 @@ const aiExamForm = reactive({
   description: '',
   title: '',
   category_id: null as number | null,
+  difficulty: 'easy',
+  is_timed: true,
   time_limit: 30,
+  start_time: null as string | null,
+  end_time: null as string | null,
   pass_percent: 60
 });
 let aiExamId: number | null = null;
@@ -930,9 +965,12 @@ const generateAiExam = async () => {
       title: aiExamForm.title || undefined,
       description: aiExamForm.description,
       specs: parseSpecs(aiExamForm.description),
+      difficulty: aiExamForm.difficulty,
       category_id: aiExamForm.category_id || undefined,
-      is_timed: true,
-      time_limit: aiExamForm.time_limit,
+      is_timed: aiExamForm.is_timed,
+      time_limit: aiExamForm.is_timed ? aiExamForm.time_limit : 0,
+      start_time: aiExamForm.start_time || undefined,
+      end_time: aiExamForm.end_time || undefined,
       pass_percent: aiExamForm.pass_percent
     }, { timeout: 180000 }); // 真实大模型组卷较慢, 覆盖全局 10s 超时
     aiExamId = res.exam_id;
@@ -945,7 +983,7 @@ const generateAiExam = async () => {
   }
 };
 
-// 从自然语言需求中粗提取题型构成 ("3道单选、2道判断、1道简答")
+// 从自然语言需求中粗提取题型构成 ("3道单选、2道判断、1道简答" 或 "生成6道题目")
 const parseSpecs = (text: string) => {
   const specs: Array<{ q_type: string; count: number }> = [];
   const patterns: Array<[RegExp, string]> = [
@@ -959,7 +997,12 @@ const parseSpecs = (text: string) => {
     const m = text.match(re);
     if (m) specs.push({ q_type: t, count: parseInt(m[1]) });
   }
-  if (specs.length === 0) specs.push({ q_type: 'single', count: 5 });
+  if (specs.length === 0) {
+    // 匹配如 "6道题目", "生成6题", "共6道" 等泛指数量
+    const totalMatch = text.match(/(\d+)\s*(?:道|个|条)?(?:题|题目|试题)/);
+    const count = totalMatch ? parseInt(totalMatch[1]) : 5;
+    specs.push({ q_type: 'single', count: count });
+  }
   return specs;
 };
 

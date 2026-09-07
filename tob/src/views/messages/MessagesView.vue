@@ -11,7 +11,7 @@
       <el-button text type="primary" @click="markAllRead">全部标记已读</el-button>
     </div>
 
-    <el-table :data="items" v-loading="loading" style="width: 100%; margin-top: 14px">
+    <el-table :data="items" v-loading="loading" style="width: 100%; margin-top: 14px" @row-click="handleRowClick">
       <el-table-column width="50">
         <template #default="{ row }">
           <span class="dot" :class="{ unread: !row.is_read }"></span>
@@ -86,11 +86,21 @@ const markAllRead = async () => {
 };
 
 const goLink = async (row: any) => {
-  if (!row.is_read) await request.post('/api/v1/admin/notifications/read', { ids: [row.id] });
+  if (!row.is_read) {
+    row.is_read = true; // Optimistic update
+    await request.post('/api/v1/admin/notifications/read', { ids: [row.id] });
+  }
   if (row.link && row.link.startsWith('/admin/')) {
     router.push(row.link.replace('/admin', ''));
   }
   loadList();
+};
+
+const handleRowClick = async (row: any) => {
+  if (!row.is_read) {
+    row.is_read = true; // Optimistic update to make red dot disappear immediately
+    await request.post('/api/v1/admin/notifications/read', { ids: [row.id] });
+  }
 };
 
 onMounted(loadList);
@@ -126,5 +136,9 @@ onMounted(loadList);
 
 .dot.unread {
   background: #ef4444;
+}
+
+.el-table__row {
+  cursor: pointer;
 }
 </style>

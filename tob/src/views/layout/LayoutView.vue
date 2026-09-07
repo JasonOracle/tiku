@@ -20,6 +20,10 @@
         text-color="#475569"
         active-text-color="#0284c7"
       >
+        <el-menu-item index="/ai-assistant">
+          <el-icon><Cpu /></el-icon>
+          <span><el-icon style="vertical-align: middle; margin-right: 2px;"><MagicStick /></el-icon>AI 助理</span>
+        </el-menu-item>
         <el-menu-item index="/categories">
           <el-icon><Folder /></el-icon>
           <span>分类配置</span>
@@ -38,24 +42,19 @@
         </el-menu-item>
         <el-menu-item index="/users">
           <el-icon><User /></el-icon>
-          <span>用户与明细</span>
+          <span>学员列表</span>
         </el-menu-item>
         <el-menu-item index="/banners">
           <el-icon><Picture /></el-icon>
           <span>首页Banner</span>
         </el-menu-item>
-        <el-menu-item index="/messages">
-          <el-icon><Bell /></el-icon>
-          <template #title>
-            <span>消息中心</span>
-            <el-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="menu-badge" />
-          </template>
-        </el-menu-item>
-        <template v-if="userStore.isSuper()">
+        <template v-if="userStore.isSuper() || userStore.role === 'admin'">
           <el-menu-item index="/members">
             <el-icon><Avatar /></el-icon>
-            <span>成员与AI额度</span>
+            <span>用户管理</span>
           </el-menu-item>
+        </template>
+        <template v-if="userStore.isSuper()">
           <el-menu-item index="/audit">
             <el-icon><List /></el-icon>
             <span>审计日志</span>
@@ -70,16 +69,26 @@
           <h3 class="page-title">{{ currentTitle }}</h3>
         </div>
         <div class="header-right">
-          <div class="quota-chip" title="今日 AI 出题/组卷/聊天剩余次数">
-            <span class="quota-icon">✨</span>
+          <div class="quota-chip" title="今日 AI 出题/组卷/聊天剩余次数" @click="router.push('/ai-assistant')" style="cursor: pointer">
+            <span class="quota-icon"><el-icon><MagicStick /></el-icon></span>
             <span>AI 额度 <strong>{{ userStore.quotaRemaining }}</strong></span>
           </div>
+          <el-button type="primary" plain size="small" class="ai-copilot-head-btn" @click="router.push('/ai-assistant')">
+            <el-icon style="margin-right: 4px;"><MagicStick /></el-icon> AI 助理
+          </el-button>
           <div class="user-info">
             <el-avatar :size="32" class="avatar">{{ username.substring(0, 1).toUpperCase() }}</el-avatar>
             <span class="name">{{ username }}</span>
-            <el-tag size="small" :type="userStore.isSuper() ? 'danger' : 'primary'" effect="plain">
-              {{ userStore.isSuper() ? '超管' : '老师' }}
+            <el-tag size="small" :type="userStore.isSuper() ? 'danger' : (userStore.role === 'admin' ? 'warning' : 'primary')" effect="plain">
+              {{ userStore.isSuper() ? '超级管理员' : (userStore.role === 'admin' ? '管理员' : '出题人') }}
             </el-tag>
+          </div>
+          <div class="msg-btn-wrap" title="消息中心" @click="router.push('/messages')">
+            <el-badge :value="unreadCount" :max="99" :hidden="unreadCount === 0">
+              <el-button circle size="default">
+                <el-icon><Bell /></el-icon>
+              </el-button>
+            </el-badge>
           </div>
           <el-button type="danger" text plain @click="handleLogout">
             <el-icon><SwitchButton /></el-icon>
@@ -92,21 +101,14 @@
         <router-view />
       </el-main>
     </el-container>
-
-    <!-- 全局 AI 助手悬浮按钮 -->
-    <div class="ai-fab" title="AI 助手" @click="copilotRef?.open()">
-      <span>✨</span>
-    </div>
-    <AiCopilot ref="copilotRef" />
   </el-container>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Document, Reading, Folder, User, Picture, SwitchButton, Bell, Avatar, List, EditPen } from '@element-plus/icons-vue';
+import { Document, Reading, Folder, User, Picture, SwitchButton, Bell, Avatar, List, EditPen, Cpu, MagicStick } from '@element-plus/icons-vue';
 import { useUserStore } from '../../store/user';
-import AiCopilot from '../../components/AiCopilot.vue';
 import request from '../../utils/request';
 
 const route = useRoute();
@@ -196,6 +198,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.msg-btn-wrap {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 
 .ai-fab {

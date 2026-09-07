@@ -62,10 +62,16 @@ const routes: Array<RouteRecordRaw> = [
         meta: { title: '消息中心' }
       },
       {
+        path: 'ai-assistant',
+        name: 'AiAssistant',
+        component: () => import('../views/ai/AiAssistantView.vue'),
+        meta: { title: '✨ AI 助理' }
+      },
+      {
         path: 'members',
         name: 'Members',
         component: () => import('../views/members/MembersView.vue'),
-        meta: { title: '成员与AI额度' }
+        meta: { title: '用户管理' }
       },
       {
         path: 'audit',
