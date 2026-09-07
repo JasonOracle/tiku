@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-08
+AI模型：OpenCode / Gemini 底层
+修改内容：[1. 移除顶层硬编码建表逻辑，转入 lifespan 安全延迟初始化；2. 新增根路径 GET / 状态探针，适配 Vercel Serverless 环境]
 修改时间：2026-09-06 19:00:00
 AI模型：ZCode (GLM)
 修改内容：[v1.3: auto_patch 新增 users 注册资料列 (nickname/gender/position/phone 唯一/email)]
@@ -13,12 +16,16 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 import os
 
+from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.models import *  # 导入所有模型以触发自动建表
 
-# 初始化数据库表结构
-Base.metadata.create_all(bind=engine)
+def init_db_safely():
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"[Warning] DB init failed: {e}")
 
 def auto_patch_db_columns():
     """安全补全已有表中可能缺失的新物理列 (幂等: 列已存在时静默跳过)"""
@@ -69,7 +76,12 @@ def auto_patch_db_columns():
     except Exception:
         pass
 
-auto_patch_db_columns()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 服务启动时异步执行建表与补列
+    init_db_safely()
+    auto_patch_db_columns()
+    yield
 
 # C端路由
 from app.api.v1.auth import router as v1_auth_router
@@ -101,8 +113,18 @@ app = FastAPI(
     version=settings.VERSION,
     openapi_url="/openapi.json",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
+
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "message": "智题库 (TiKu) API 服务已就绪",
+        "docs": "/docs",
+        "version": settings.VERSION
+    }
 
 # 配置 CORS 跨域访问
 app.add_middleware(
