@@ -66,42 +66,58 @@
 
 ---
 
-## 第二步：云端部署 Python FastAPI 后端 (Zeabur - 100% 免绑卡极速推荐)
+## 第二步：云端部署 Python FastAPI 后端 (Hugging Face Spaces - 真正 100% 永久免费免绑卡)
 
-> **为什么首选 Zeabur？**  
-> 1. **真正免绑卡**：GitHub 账号一键登录，无需任何信用卡/外币卡；  
-> 2. **亚太节点极低延迟**：提供东京 (Tokyo) / 新加坡 (Singapore) 优质节点，国内直连响应飞快；  
-> 3. **全自动化识别**：自动识别 Python 项目，一键分配 `.zeabur.app` 免费 SSL 域名。
+> **为什么选 Hugging Face Spaces？**  
+> 1. **真正 100% 免任何银行卡**：只需要一个邮箱或 GitHub 登录，永久零扣费陷阱；  
+> 2. **极其强悍的免费配置**：免费提供 **2 核 CPU + 16GB 内存** 独立容器（比普通云平台大 32 倍！）；  
+> 3. **原生支持 Docker**：项目自带生产级 Dockerfile，直接拉取运行，免去各种构建依赖兼容问题；  
+> 4. **自带全球 HTTPS 域名**：分配永久的 `.hf.space` 免费公网接口地址。
 
-### 2.1 注册并创建 Project
-1. 打开官网：[https://zeabur.com/](https://zeabur.com/)，点击右上角 **Login** $\rightarrow$ **Sign in with GitHub**。
-2. 登录后进入控制台，点击 **Create Project**（新建项目）。
-3. 区域 (Region) 选择 **Asia-Pacific**（例如 `Tokyo` 或 `Singapore`）。
+### 2.1 注册并新建 Space
+1. 打开官网：[https://huggingface.co/](https://huggingface.co/)，点击右上角 **Sign Up**（用邮箱或 GitHub 授权直接注册）。
+2. 点击右上角个人头像 $\rightarrow$ 选择 **New Space**（新建空间）。
+3. 填写基本信息：
+   * **Space name**: `tiku-api`（自定义名字）
+   * **License**: 默认 `mit`
+   * **Select the Space SDK**: 必须选择 **`Docker`** 选项！
+   * **Choose a Docker template**: 选择 **`Blank`**（空白，使用代码里的 Dockerfile）
+   * **Space hardware**: 默认的 **`CPU basic · 2 vCPU · 16 GB · FREE`**（免费）
+   * **Public / Private**: 选择 **Public**
+4. 点击最下方的 **Create Space**。
 
-### 2.2 部署后端服务
-1. 进入刚创建的项目，点击 **Deploy New Service** $\rightarrow$ 选择 **Git**。
-2. 选中你的 `tiku` 仓库（首次使用授权 GitHub 仓库权限）。
-3. 选择分支：`master`。
-4. **配置工作目录 (Root Directory)**：
-   - 在部署弹窗中，将 **Root Directory** 设置为：`backend` （**非常关键：指向后端目录**）。
-   - Zeabur 会自动识别到 `requirements.txt` 并完成依赖安装与启动。
+### 2.2 关联你的 GitHub 仓库代码（或一键同步）
+创建成功后，你有两种最简单的方式导入代码：
+* **方式 1（最推荐）：直接在 Settings 里关联 GitHub 自动同步**
+  1. 进入该 Space 的 **Settings** 标签页。
+  2. 找到 **GitHub Repository** 绑定功能，关联你的 `JasonOracle/tiku` 仓库。
+* **方式 2：直接复制 backend 文件夹上传**
+  1. 在 Space 页面点击 **Files and versions** $\rightarrow$ **Add file** $\rightarrow$ **Upload files**。
+  2. 将本地 `backend` 目录下的所有文件拖拽进去，点击 Commit 即可。
 
-### 2.3 配置环境变量 (Environment Variables)
-在服务详情页中，点击 **Variables**（环境变量）标签页，逐个添加：
+### 2.3 配置安全环境变量 (Secrets)
+在 Space 页面点击 **Settings** 标签页，向下滚动找到 **Variables and secrets** $\rightarrow$ 点击 **New secret**：
 
-| Key (变量名) | Value 示例 | 说明 |
+| Secret Name (名称) | Secret Value (内容) | 说明 |
 | :--- | :--- | :--- |
-| `DATABASE_URL` | `mysql+pymysql://2kQ7...:4000/test?ssl_ca=/etc/ssl/certs/ca-certificates.crt&ssl_verify_cert=true&ssl_verify_identity=true` | 第一步获取的 TiDB 连接串 |
+| `DATABASE_URL` | `mysql+pymysql://2kQ7...:4000/test?ssl_ca=/etc/ssl/certs/ca-certificates.crt&ssl_verify_cert=true&ssl_verify_identity=true` | TiDB 连接串 |
 | `ENVIRONMENT` | `production` | 生产模式 |
-| `SECRET_KEY` | `tiku-prod-secret-key-random-token-2026` | 32位随机密钥 |
-| `CORS_ORIGINS` | `*` | 跨域放行 |
+| `SECRET_KEY` | `tiku-prod-secret-key-random-token-2026` | JWT 密钥 |
+| `CORS_ORIGINS` | `*` | 跨域全通 |
 
-### 2.4 生成公网域名与验证
-1. 环境变量添加后，服务会自动触发重新部署。
-2. 点击 **Networking**（网络）标签页，在 **Public Networking** 下点击 **Generate Domain**（生成域名）。
-3. 系统会立即为你生成一个免费的公网网址，例如：
-   `https://tiku-api.zeabur.app`
-4. 验证接口：在浏览器中访问 `https://tiku-api.zeabur.app/docs`，若能正常打开 Swagger 交互文档，后端即正式大功告成！
+### 2.4 获取后端公网 API 地址
+1. 点击 Space 右上角的 **三点图标 (⋮)** $\rightarrow$ 选择 **Embed this Space**。
+2. 里面有一项 **Direct URL**（例如 `https://jason-tiku-api.hf.space`），这个就是你的全球公网后端 API 根地址！
+3. 在浏览器中访问 `https://你的Space地址.hf.space/docs`，即可看到交互式 API 接口文档！
+
+---
+
+### 💡 备选方案：Render.com (适合已有海外信用卡通过验证的用户)
+如果在 [render.com](https://render.com/) 通过了绑卡验证，也可使用 Render Web Service：
+- **Root Directory**: `backend`
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **环境变量**: 同上表。
 
 ---
 

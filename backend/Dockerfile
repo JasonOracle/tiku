@@ -2,15 +2,17 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# bcrypt 官方发布了 manylinux 预编译 wheel，无需 gcc。
-# pymysql 是纯 Python，也无需 C 编译器。
-# 直接用 pip --only-binary :all: 强制使用预编译 wheel。
+# 安装 ca-certificates 确保访问 TiDB Cloud 等外部 SSL 安全连接
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir --only-binary bcrypt -r requirements.txt
 
 COPY . .
 
-EXPOSE 8000
+ENV PORT=7860
+EXPOSE 7860
 
-# 生产模式：4 worker 进程，关闭 reload
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# 启动命令使用 shell 形式读取 PORT 环境变量，默认兼容 HuggingFace(7860) 与常见云容器
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860} --workers 2"]
+
