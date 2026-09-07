@@ -1,11 +1,27 @@
+/**
+ * [变更日志]
+ * 修改时间：2026-09-08
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[1. baseURL 优化：支持环境变量 VITE_API_BASE_URL，在 Cloudflare Pages 静态托管域名下自动直连 Vercel 后端，解决 200 重写导致的 405 Method Not Allowed]
+ */
 import axios from 'axios';
 import type { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
 
-// 生产经 Nginx 同源代理 /api/v1/ → backend:8000；开发经 vite server.proxy 转发，统一用相对路径避免直连 8000 跨域/端口未映射
+// 环境自适应：线上 Cloudflare Pages 域名下直接请求 Vercel 后端（已开启完整 CORS）；本地开发或 Nginx 子路径走相对路径代理
+const getBaseURL = () => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('pages.dev')) {
+    return 'https://tiku-api.vercel.app';
+  }
+  return '';
+};
+
 const request: AxiosInstance = axios.create({
-  baseURL: '',
-  timeout: 10000,
+  baseURL: getBaseURL(),
+  timeout: 15000,
 });
 
 // 请求拦截器
