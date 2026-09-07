@@ -1,6 +1,6 @@
 # 智题库 (TiKu) 全栈项目超详细交接与进度的归档文档 (progress.md)
 
-> **最新更新时间**：`2026-09-04 22:55:00`
+> **最新更新时间**：`2026-09-08 02:46:00`
 > **文档目的**：本交接文档为接手的 AI 模型/开发人员提供 100% 细节落地指南，包含代码实现原理、文件目录树、命令清单、数据契约、测试操作步骤及具体避坑 SOP，确保无缝接续开发。
 
 ---
@@ -9,6 +9,7 @@
 
 | 更新时间 (YYYY-MM-DD HH:mm:ss) | 记录模型 / Agent | 本周期主要落地事项 | 当前整体进度 |
 | :--- | :--- | :--- | :--- |
+| `2026-09-08 02:46:00` | OpenCode / Gemini 底层 Agent | **云端全栈免卡部署与 AI 全面激活收口**：1. 后端成功部署至 Vercel Serverless (`tiku-api.vercel.app`)，连接 TiDB Cloud MySQL 8.0 兼容云数据库；2. 前端 B 端 (`tiku-tob.pages.dev`) 与 C 端 (`tiku-toc.pages.dev`) 成功部署至 Cloudflare Pages；3. 前端网络层实现 `pages.dev` 域名智能自适应直连 Vercel 后端，彻底解决静态反向代理下的 POST 405 Method Not Allowed 问题；4. 内置 Dots.ai API Key (`ak_9PZWVd3J...`) 兜底，本地与线上 AI 助手即开即用；5. agent.md 确立强制提交推送云端原则；代码全量推送到 GitHub 与 Gitee。 | **100% (v1.7 线上全通)** |
 | `2026-09-03 21:10:49` | Gemini 底层 Agent | 完成阶段一后端(FastAPI+Pytest)、阶段二B端(Vue3+ElementPlus)、阶段三C端(Vue3+H5)，全自动化验证通过 | **85%** |
 | `2026-09-03 21:13:15` | Gemini 底层 Agent | 补充全量交接细节：包含代码实现原理、运行命令、排错指南与阶段四 Docker/Nginx 精确落地方案 | **85%** |
 | `2026-09-03 23:40:00` | Gemini 底层 Agent | 落地方案 A 题目默认分值(score)、试卷分类绑定、el-slider 及格百分比向上取整与双层隔离组卷，后端 Pytest 100% 通过 | **95%** |
