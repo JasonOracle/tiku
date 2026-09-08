@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-09
+AI模型：OpenCode / Gemini 底层
+修改内容：[1. 支持 MEM0_API_KEY 官方云端 MemoryClient 与本地 fastembed/qdrant 双轨模式，实现云端 Serverless 免本地模型直连]
 修改时间：2026-09-08
 AI模型：Muse Spark
 修改内容：[v1.3 任务2: Mem0 长期记忆服务 (User_ID 画像提取/检索注入, 本地 fastembed+qdrant, 失败静默降级)]
@@ -8,6 +11,7 @@ import os
 from typing import List
 
 _client = None
+_client_mode = ""  # "cloud" 或 "local"
 _disabled_reason = ""
 
 
@@ -21,14 +25,26 @@ def user_key(admin_id: int) -> str:
 
 
 def get_client():
-    """懒加载单例；LLM 复用系统 AI 网关首选通道，embeddings 走本地 fastembed"""
-    global _client, _disabled_reason
+    """双轨模式客户端初始化：
+    1. 云端优先：若配置了 MEM0_API_KEY，使用官方 MemoryClient（Serverless 云端无本地模型依赖）
+    2. 本地开发：未配置时，使用本地 fastembed + 本地 qdrant
+    """
+    global _client, _client_mode, _disabled_reason
     if _client is not None:
         return _client
     if not is_enabled():
         _disabled_reason = "disabled by MEM0_ENABLED"
         return None
     try:
+        mem0_api_key = os.getenv("MEM0_API_KEY")
+        # 1. 存在云端 API Key，直接使用官方 MemoryClient
+        if mem0_api_key:
+            from mem0 import MemoryClient
+            _client = MemoryClient(api_key=mem0_api_key)
+            _client_mode = "cloud"
+            return _client
+
+        # 2. 本地模式：使用本地 fastembed + qdrant
         from mem0 import Memory
         from app.services import ai_service
 
@@ -57,6 +73,7 @@ def get_client():
             },
             "history_db_path": os.path.join(data_dir, "history.db"),
         })
+        _client_mode = "local"
         return _client
     except Exception as e:
         _disabled_reason = str(e)[:200]

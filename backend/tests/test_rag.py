@@ -59,7 +59,7 @@ def test_generate_with_doc_ids_attaches_source_ref(client, monkeypatch):
     monkeypatch.setattr(embedding_service, "embed_texts", lambda texts: [[1.0] for _ in texts])
 
     def fake_chat(prompt, system="", json_mode=False, temperature=0.3, timeout=90.0):
-        assert "私有资料" in prompt
+        assert "私有文库资料" in prompt
         import json as _json
         return _json.dumps({"questions": [{
             "type": "single", "title": "灭火器有几类？",
