@@ -39,6 +39,8 @@ def auto_patch_db_columns():
         "ALTER TABLE questions ADD COLUMN score INT DEFAULT 10",
         # ---- v1.2 RBAC / 题库治理 ----
         "ALTER TABLE admins ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'admin'",
+        "ALTER TABLE admins ADD COLUMN name VARCHAR(50) NULL",
+        "ALTER TABLE admins ADD COLUMN phone VARCHAR(20) NULL",
         "ALTER TABLE admins ADD COLUMN created_by_id INT NULL",
         "ALTER TABLE admins ADD COLUMN status BOOLEAN DEFAULT TRUE",
         "ALTER TABLE admins ADD COLUMN ai_quota_limit INT DEFAULT 0",
@@ -48,6 +50,7 @@ def auto_patch_db_columns():
         "ALTER TABLE questions ADD COLUMN creator_id INT NULL",
         "ALTER TABLE questions ADD COLUMN source VARCHAR(20) DEFAULT 'manual'",
         "ALTER TABLE questions ADD COLUMN grading_points JSON NULL",
+        "ALTER TABLE questions ADD COLUMN source_ref JSON NULL",
         # ---- v1.2 考试时间窗 / AI 全托管 / 试卷隔离 ----
         "ALTER TABLE exams ADD COLUMN start_time DATETIME NULL",
         "ALTER TABLE exams ADD COLUMN end_time DATETIME NULL",
@@ -64,6 +67,11 @@ def auto_patch_db_columns():
         "ALTER TABLE users ADD COLUMN phone VARCHAR(20) NULL",
         "ALTER TABLE users ADD COLUMN email VARCHAR(100) DEFAULT ''",
         "ALTER TABLE users ADD UNIQUE INDEX uix_users_phone (phone)",
+        # ---- v1.3 B端管理员个人资料 ----
+        "ALTER TABLE admins ADD COLUMN gender VARCHAR(10) NULL",
+        "ALTER TABLE admins ADD COLUMN email VARCHAR(100) DEFAULT ''",
+        "ALTER TABLE admins ADD COLUMN position VARCHAR(50) DEFAULT ''",
+        "ALTER TABLE admins ADD COLUMN bio VARCHAR(500) DEFAULT ''",
     ]
     try:
         with engine.connect() as conn:
@@ -105,6 +113,8 @@ from app.api.admin.admin_ai import router as admin_ai_router
 from app.api.admin.admin_members import router as admin_members_router
 from app.api.admin.admin_notifications import router as admin_notifications_router
 from app.api.admin.admin_audit import router as admin_audit_router
+from app.api.admin.admin_dashboard import router as admin_dashboard_router
+from app.api.admin.admin_rag import router as admin_rag_router
 
 
 
@@ -157,6 +167,8 @@ app.include_router(admin_ai_router, prefix=f"{settings.API_V1_STR}/admin/ai", ta
 app.include_router(admin_members_router, prefix=f"{settings.API_V1_STR}/admin/members", tags=["B端成员与额度管理"])
 app.include_router(admin_notifications_router, prefix=f"{settings.API_V1_STR}/admin/notifications", tags=["B端消息中心"])
 app.include_router(admin_audit_router, prefix=f"{settings.API_V1_STR}/admin/audit", tags=["B端审计日志"])
+app.include_router(admin_dashboard_router, prefix=f"{settings.API_V1_STR}/admin/dashboard", tags=["B端看板聚合"])
+app.include_router(admin_rag_router, prefix=f"{settings.API_V1_STR}/admin/rag", tags=["B端RAG私有库"])
 
 # 挂载静态文件目录
 uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")

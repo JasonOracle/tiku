@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv
+venv/
+ENV/
+env/
+.env
+.env.*
+data/
+qdrant_data/
+fastembed_cache/
+app/uploads/

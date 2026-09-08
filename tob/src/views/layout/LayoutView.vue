@@ -1,20 +1,27 @@
 <!--
   * [变更日志]
+  * 修改时间：2026-09-08
+  * AI模型：Gemini 系列
+  * 修改内容：[v1.4: 严格 RBAC 权限控制，仅超级管理员 (isSuper) 头像下拉菜单可见「模型中心」，普通管理员及出题人隐藏]
+  * 修改时间：2026-09-08
+  * AI模型：Gemini 系列
+  * 修改内容：[v1.3: 1. 侧边栏菜单重排(分类紧跟首页,移除旧AI模型配置,私有文库改名AI文库);
+  *          2. 顶栏头像改造为 el-dropdown 下拉菜单(个人资料/AI设置/退出登录);
+  *          3. 移除顶栏独立退出登录按钮]
   * 修改时间：2026-09-06 21:00:00
   * AI模型：ZCode (GLM)
   * 修改内容：[v1.2: RBAC 角色化菜单(成员/审计仅超管) + 新增阅卷大厅/消息中心入口 + 消息未读红点轮询 +
   *          头部今日AI额度展示 + 全局 AI Copilot 助手抽屉入口]
   * 修改时间：2026-09-07
   * AI模型：Muse Spark
-  * 修改内容：[v1.7: Dashboard 首位/AI助理最末菜单重排 + 移除 TiKu 文字品牌 + 头像个人信息弹窗入口]
+  * 修改内容：[v1.3: Dashboard 首位/AI助理最末菜单重排 + 移除 TiKu 文字品牌 + 头像个人信息弹窗入口]
+  * 修改时间：2026-09-08
+  * AI模型：Muse Spark
+  * 修改内容：[v1.3 任务1: 菜单新增模型中心入口]
   -->
 <template>
   <el-container class="layout-container">
     <el-aside width="240px" class="aside">
-      <div class="brand">
-        <span class="brand-badge">智</span>
-        <span class="brand-text">智题库</span>
-      </div>
       <el-menu
         :default-active="activePath"
         router
@@ -26,6 +33,10 @@
         <el-menu-item index="/dashboard">
           <el-icon><HomeFilled /></el-icon>
           <span>首页</span>
+        </el-menu-item>
+        <el-menu-item index="/categories">
+          <el-icon><Folder /></el-icon>
+          <span>分类配置</span>
         </el-menu-item>
         <el-menu-item index="/exams">
           <el-icon><Reading /></el-icon>
@@ -39,9 +50,9 @@
           <el-icon><EditPen /></el-icon>
           <span>阅卷大厅</span>
         </el-menu-item>
-        <el-menu-item index="/categories">
-          <el-icon><Folder /></el-icon>
-          <span>分类配置</span>
+        <el-menu-item index="/rag">
+          <el-icon><Collection /></el-icon>
+          <span>AI 文库</span>
         </el-menu-item>
         <template v-if="userStore.isSuper() || userStore.role === 'admin'">
           <el-menu-item index="/users">
@@ -59,18 +70,12 @@
             <span>审计日志</span>
           </el-menu-item>
         </template>
-        <template v-if="userStore.isSuper() || userStore.role === 'admin'">
-          <el-menu-item index="/ai-config">
-            <el-icon><Setting /></el-icon>
-            <span>AI 模型配置</span>
-          </el-menu-item>
-        </template>
         <el-menu-item index="/ai-assistant">
           <el-icon><MagicStick /></el-icon>
           <span>✨ AI 助理</span>
         </el-menu-item>
       </el-menu>
-      <!-- v1.7: 侧边栏底部 AI 推广卡 -->
+      <!-- 侧边栏底部 AI 推广卡 -->
       <div class="side-promo">
         <img class="promo-img" :src="promoUrl" alt="AI 赋能教育" />
         <div class="promo-title">AI 赋能教育</div>
@@ -91,13 +96,6 @@
           <el-button type="primary" plain size="small" class="ai-copilot-head-btn" @click="router.push('/ai-assistant')">
             <el-icon style="margin-right: 4px;"><MagicStick /></el-icon> AI 助理
           </el-button>
-          <div class="user-info" @click="profileVisible = true" style="cursor: pointer" title="个人信息">
-            <el-avatar :size="32" class="avatar">{{ username.substring(0, 1).toUpperCase() }}</el-avatar>
-            <span class="name">{{ username }}</span>
-            <el-tag size="small" :type="userStore.isSuper() ? 'danger' : (userStore.role === 'admin' ? 'warning' : 'primary')" effect="plain">
-              {{ userStore.isSuper() ? '超级管理员' : (userStore.role === 'admin' ? '管理员' : '出题人') }}
-            </el-tag>
-          </div>
           <div class="msg-btn-wrap" title="消息中心" @click="router.push('/messages')">
             <el-badge :value="unreadCount" :max="99" :hidden="unreadCount === 0">
               <el-button circle size="default">
@@ -105,10 +103,29 @@
               </el-button>
             </el-badge>
           </div>
-          <el-button type="danger" text plain @click="handleLogout">
-            <el-icon><SwitchButton /></el-icon>
-            退出登录
-          </el-button>
+          <!-- 头像 Dropdown 菜单 -->
+          <el-dropdown trigger="hover" @command="handleDropdown">
+            <div class="user-info" style="cursor: pointer">
+              <el-avatar :size="32" class="avatar">{{ username.substring(0, 1).toUpperCase() }}</el-avatar>
+              <span class="name">{{ username }}</span>
+              <el-tag size="small" :type="userStore.isSuper() ? 'danger' : (userStore.role === 'admin' ? 'warning' : 'primary')" effect="plain">
+                {{ userStore.isSuper() ? '超级管理员' : (userStore.role === 'admin' ? '管理员' : '出题人') }}
+              </el-tag>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">
+                  <el-icon><User /></el-icon>个人资料
+                </el-dropdown-item>
+                <el-dropdown-item v-if="userStore.isSuper()" command="model-center">
+                  <el-icon><Cpu /></el-icon>模型中心
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout" style="color: #ef4444;">
+                  <el-icon><SwitchButton /></el-icon>退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </el-header>
 
@@ -117,7 +134,7 @@
       </el-main>
     </el-container>
 
-    <!-- v1.7: 头像个人信息弹窗 -->
+    <!-- 头像个人信息弹窗 -->
     <ProfileDialog v-model="profileVisible" />
   </el-container>
 </template>
@@ -125,7 +142,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Document, Reading, Folder, User, Picture, SwitchButton, Bell, List, EditPen, MagicStick, HomeFilled, Setting } from '@element-plus/icons-vue';
+import { Document, Reading, Folder, User, Picture, SwitchButton, Bell, List, EditPen, MagicStick, HomeFilled, Cpu, Collection } from '@element-plus/icons-vue';
 import { useUserStore } from '../../store/user';
 import request from '../../utils/request';
 import ProfileDialog from './components/ProfileDialog.vue';
@@ -152,9 +169,15 @@ const loadUnread = async () => {
   }
 };
 
-const handleLogout = () => {
-  userStore.logout();
-  router.push('/login');
+const handleDropdown = (command: string) => {
+  if (command === 'profile') {
+    profileVisible.value = true;
+  } else if (command === 'model-center') {
+    router.push('/model-center');
+  } else if (command === 'logout') {
+    userStore.logout();
+    router.push('/login');
+  }
 };
 
 onMounted(() => {

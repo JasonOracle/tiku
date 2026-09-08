@@ -1,6 +1,9 @@
 """
 [变更日志]
 修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[强化 extract_json: 增加对大模型长输出末尾被截断时的括号/引号自动对齐补齐机制，保障大批题目组卷稳定性]
+修改时间：2026-09-08
 AI模型：OpenCode / Gemini 底层
 修改内容：[1. 内置默认主力 Dots API Key 兜底 (ak_9PZWVd3JTrye8QHen9uBnLnhbihh1) 与官方网关，确保本地与线上部署开箱即用 AI 助手与智能出题]
 修改时间：2026-09-06 17:30:00
@@ -394,5 +397,25 @@ def extract_json(text: str):
                             except Exception:
                                 break
             break
+
+        # 4. 针对长文本截断场景 (大模型生成多道大题时最后未完全闭合): 尝试贪婪寻找最后一个完整闭合项并补全闭合符号
+        for open_ch, close_ch in (("{", "}"),):
+            start = cand.find(open_ch)
+            if start != -1:
+                # 寻找最后出现 "}" 的位置
+                last_brace = cand.rfind("}")
+                if last_brace > start:
+                    truncated = cand[start : last_brace + 1]
+                    # 补齐未闭合的 ] 和 }
+                    open_brackets = truncated.count("[") - truncated.count("]")
+                    open_braces = truncated.count("{") - truncated.count("}")
+                    patch = ("]" * max(0, open_brackets)) + ("}" * max(0, open_braces))
+                    try:
+                        patched_cand = re.sub(r",\s*([\}\]])", r"\1", truncated + patch)
+                        res = json.loads(patched_cand)
+                        if isinstance(res, (dict, list)):
+                            return res
+                    except Exception:
+                        pass
 
     raise AiServiceError("大模型返回的 JSON 格式无法解析")

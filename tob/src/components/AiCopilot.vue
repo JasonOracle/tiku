@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-08
+ * AI模型：Gemini 系列
+ * 修改内容：[前端隐藏上下文 buildPreamble 注入用户个人资料画像(姓名/职务/背景)，使抽屉式AI助手同步具备个性化认知]
  * 修改时间：2026-09-06 21:00:00
  * AI模型：ZCode (GLM)
  * 修改内容：[v1.2 新增 AI Copilot 助手抽屉: 前端状态快照注入(Frontend State Preamble)——把当前老师身份/
@@ -59,11 +62,16 @@ const pageName = (path: string) =>
 // 前端状态快照注入: 拼装隐藏上下文前导, 让 AI 零成本获得"上帝视角"
 const buildPreamble = (userText: string) => {
   const roleText = userStore.role === 'super_admin' ? '超级管理员' : '普通教师(老师)';
+  const profileParts: string[] = [];
+  if (userStore.name) profileParts.push(`真实姓名=${userStore.name}`);
+  if (userStore.position) profileParts.push(`职务=${userStore.position}`);
+  if (userStore.bio) profileParts.push(`背景与学科介绍=${userStore.bio}`);
+
   return [
     `[系统隐藏上下文 | 用户不可见]:`,
-    `当前用户=${userStore.username}(${roleText}), 剩余AI额度=${userStore.quotaRemaining}次,`,
+    `当前用户=${userStore.username}(${roleText})${profileParts.length ? '，个人画像=[' + profileParts.join(', ') + ']' : ''}, 剩余AI额度=${userStore.quotaRemaining}次,`,
     `当前停留页面=${pageName(route.path)}。`,
-    `请基于以上身份与页面上下文回答老师的问题; 回答保持简洁、可执行。`,
+    `请基于以上身份、用户背景与页面上下文回答老师的问题; 称呼亲切自然，保持简洁、可执行。`,
     ``
   ].join('\n') + `\n老师提问: ${userText}`;
 };

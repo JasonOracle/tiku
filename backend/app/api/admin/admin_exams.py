@@ -1,5 +1,17 @@
 """
 [变更日志]
+修改时间：2026-09-09
+AI模型：Gemini 系列
+修改内容：[优化试卷删除与状态流转: 1. 允许未有人作答(graded=0)的已归档/下架试卷物理删除，消除下架后无法删除的逻辑死锁; 2. 允许零作答的已归档试卷重新切回草稿(draft)或再次上架(published)]
+修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[彻底修复 Word 试卷导出中文出现方框口口乱码与选项序号缺失 Bug: 1. 全局绑定中文字体 '微软雅黑' / '宋体' 并写入 OpenXML w:eastAsia 东亚字符集映射，彻底消除 Office/WPS 回退至未包含中文字形字体所致的豆腐块乱码; 2. 对选项 key 缺失或为空的题目按索引自动兜底补偿 'A'、'B'、'C'、'D']
+修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[实施方案A: 全面升级试卷导出为标准 Word 文档 (.docx) 格式；支持正规试卷排版（大标题/考生须知/装订线/大题分组/题干与选项网格/参考答案与详解附录），彻底替代粗糙的 .txt 文本]
+修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[修复试卷导出中文标题引发的 HTTP Header UnicodeEncodeError (latin-1) 导致的 500 Internal Server Error，依据 RFC 5987 采用 filename* = UTF-8'' 编码标准文件名]
 修改时间：2026-09-06 18:30:00
 AI模型：ZCode (GLM)
 修改内容：[v1.2 试卷管理: RBAC 试卷按创建者隔离(超管全览)/组卷时间锁强制校验/is_ai_auto_grade 全托管开关/
@@ -8,10 +20,11 @@ AI模型：ZCode (GLM)
 AI模型：Muse Spark
 修改内容：[v1.2 Step2: grading_mode 与 is_ai_auto_grade 双写兼容; 出题人(creator/teacher)查询隔离显式化]
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import math
+from urllib.parse import quote
 from app.core.database import get_db
 from app.api.deps import get_current_admin
 from app.models.user import Admin
@@ -214,14 +227,19 @@ def update_exam_status(
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
-    """B端切换试卷上下架状态（归档为终态，上架需分类并写快照）"""
+    """B端切换试卷上下架状态（零作答允许在草稿/上架/归档间流转；已有作答的归档为终态）"""
     exam = _get_owned_exam(db, admin, exam_id)
 
     if status_val not in ["draft", "published", "archived"]:
         raise HTTPException(status_code=400, detail="无效的状态参数")
 
     if exam.status == "archived":
-        raise HTTPException(status_code=400, detail="该试卷已归档冻结，不可变更状态")
+        graded = db.query(ExamRecord).filter(
+            ExamRecord.exam_id == exam_id,
+            ExamRecord.status.in_(["submitted", "timeout", "pending_grading"])
+        ).count()
+        if graded > 0:
+            raise HTTPException(status_code=400, detail="该试卷已有学员作答并归档，不可再变更状态")
     if status_val == "published":
         ensure_publishable(db, exam)
 
@@ -402,27 +420,257 @@ def delete_exam(
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
-    """B端删除试卷（仅draft零作答可删；其余一律下架归档）"""
+    """B端删除试卷（仅未上架且零作答可删；若已上架需先下架；有作答成绩则一律不可物理删除）"""
     exam = _get_owned_exam(db, admin, exam_id)
 
-    if exam.status == "archived":
-        raise HTTPException(status_code=400, detail="该试卷已归档冻结，不可删除")
     if exam.status == "published":
-        raise HTTPException(status_code=400, detail="该试卷已上架，请先下架后再删除")
+        raise HTTPException(status_code=400, detail="该试卷正在上架发布中，请先下架后再删除")
+
     graded = db.query(ExamRecord).filter(
         ExamRecord.exam_id == exam_id,
         ExamRecord.status.in_(["submitted", "timeout", "pending_grading"])
     ).count()
     if graded:
-        raise HTTPException(status_code=400, detail=f"该试卷已有{graded}人次作答，为保护成绩只能下架归档，不可删除")
+        raise HTTPException(status_code=400, detail=f"该试卷已有 {graded} 人次作答，为保护学员成绩只能下架归档，不可删除")
+
     # 清理无意义的未提交幽灵记录后删除
     db.query(ExamRecord).filter(
         ExamRecord.exam_id == exam_id, ExamRecord.status == "in_progress"
     ).delete()
+    # 清理试卷试题关联
+    db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam_id).delete()
+
     title = exam.title
     db.delete(exam)
     db.commit()
     write_audit(db, "delete", "exam", exam_id, summary=f"删除试卷《{title}》",
-                before_data={"title": title}, admin=admin)
+                before_data={"title": title, "status": exam.status}, admin=admin)
     db.commit()
-    return ResponseModel(code=200, message="删除成功", data={"id": exam_id})
+    return ResponseModel(code=200, message=f"试卷《{title}》已彻底物理删除", data={"id": exam_id})
+
+
+# ---- 试卷导出 (方案 A: 标准 Word .docx 正规试卷排版) ----
+from fastapi.responses import Response
+import io
+
+# 中文题型映射与大题序号映射
+_TYPE_LABEL = {
+    "single": "单项选择题", "multiple": "多项选择题", "judge": "判断题",
+    "fill": "填空题", "short": "简答题",
+}
+_BIG_NUMS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
+
+
+@router.get("/{exam_id}/export")
+def export_exam(
+    exam_id: int,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """导出试卷为标准 Word 文档 (docx)，支持纸质打印与本地编辑"""
+    exam = _get_owned_exam(db, admin, exam_id)
+    questions = _exam_questions_payload(db, exam)
+
+    total_score = sum(q.score or 10 for q in questions)
+    clean_title = (exam.title or f"试卷_{exam_id}").strip()
+
+    try:
+        from docx import Document as DocxDocument
+        from docx.shared import Pt, Inches, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.enum.table import WD_TABLE_ALIGNMENT
+        from docx.oxml.ns import qn
+
+        doc = DocxDocument()
+
+        # 全局默认字体绑定为通用中文字体 (微软雅黑 / 保证东亚字符集正常解析)
+        def _apply_chinese_font(run, font_name="微软雅黑"):
+            run.font.name = font_name
+            rPr = run._element.get_or_add_rPr()
+            rFonts = rPr.get_or_add_rFonts()
+            rFonts.set(qn("w:eastAsia"), font_name)
+            rFonts.set(qn("w:ascii"), font_name)
+            rFonts.set(qn("w:hAnsi"), font_name)
+
+        # 页面边距设为标准窄边距或适中边距 (左右各 2cm, 上下各 2cm)
+        sections = doc.sections
+        for section in sections:
+            section.top_margin = Inches(0.8)
+            section.bottom_margin = Inches(0.8)
+            section.left_margin = Inches(0.9)
+            section.right_margin = Inches(0.9)
+
+        # 1. 试卷大标题 (居中, 20pt, 粗体)
+        title_p = doc.add_paragraph()
+        title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_p.paragraph_format.space_before = Pt(0)
+        title_p.paragraph_format.space_after = Pt(6)
+        title_run = title_p.add_run(clean_title)
+        title_run.font.size = Pt(20)
+        title_run.font.bold = True
+        title_run.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
+        _apply_chinese_font(title_run, "微软雅黑")
+
+        # 2. 副信息条 (满分/题量/及格线/考试分类)
+        meta_p = doc.add_paragraph()
+        meta_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        meta_p.paragraph_format.space_after = Pt(14)
+        cat_info = f"  |  分类: {exam.category_name}" if exam.category_name else ""
+        meta_run = meta_p.add_run(
+            f"（满分：{total_score} 分    题量：{len(questions)} 题    合格线：{exam.pass_percent or 60}%{cat_info}）"
+        )
+        meta_run.font.size = Pt(10.5)
+        meta_run.font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
+        _apply_chinese_font(meta_run, "微软雅黑")
+
+        # 3. 考生信息填报栏 (姓名/考号/成绩/监考)
+        table = doc.add_table(rows=1, cols=4)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = True
+        row_cells = table.rows[0].cells
+        cols_text = ["姓名：________", "考号：________", "得分：________", "批阅：________"]
+        for i, text in enumerate(cols_text):
+            p = row_cells[i].paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            r = p.add_run(text)
+            r.font.size = Pt(10.5)
+            r.font.bold = True
+            r.font.color.rgb = RGBColor(0x33, 0x41, 0x55)
+            _apply_chinese_font(r, "微软雅黑")
+
+        doc.add_paragraph().paragraph_format.space_after = Pt(10)
+
+        # 4. 按题型分组
+        grouped: dict[str, list] = {}
+        for q in questions:
+            grouped.setdefault(q.type, []).append(q)
+
+        seq = 0
+        big_idx = 0
+        answers_list: list[dict] = []
+
+        for qtype, qs in grouped.items():
+            type_label = _TYPE_LABEL.get(qtype, qtype)
+            type_total = sum(q.score or 10 for q in qs)
+            big_num = _BIG_NUMS[big_idx] if big_idx < len(_BIG_NUMS) else str(big_idx + 1)
+            big_idx += 1
+
+            # 大题题目标题 (如: 一、单项选择题（共 10 题，共 100 分）)
+            sec_p = doc.add_paragraph()
+            sec_p.paragraph_format.space_before = Pt(14)
+            sec_p.paragraph_format.space_after = Pt(6)
+            sec_run = sec_p.add_run(f"{big_num}、{type_label}（共 {len(qs)} 题，满分 {type_total} 分）")
+            sec_run.font.size = Pt(12)
+            sec_run.font.bold = True
+            sec_run.font.color.rgb = RGBColor(0x0F, 0x17, 0x2A)
+            _apply_chinese_font(sec_run, "微软雅黑")
+
+            # 各小题渲染
+            for q in qs:
+                seq += 1
+                q_p = doc.add_paragraph()
+                q_p.paragraph_format.space_before = Pt(4)
+                q_p.paragraph_format.space_after = Pt(3)
+                q_run = q_p.add_run(f"{seq}. 【{q.score or 10}分】{q.title}")
+                q_run.font.size = Pt(11)
+                _apply_chinese_font(q_run, "微软雅黑")
+
+                # 选择题选项排列 (若 key 缺失则根据索引自动补 A, B, C, D)
+                if q.options and isinstance(q.options, list):
+                    for oi, opt in enumerate(q.options):
+                        fallback_key = chr(65 + oi) if oi < 26 else str(oi + 1)
+                        key = (opt.get("key", "") if isinstance(opt, dict) else "").strip() or fallback_key
+                        text = (opt.get("text", "") if isinstance(opt, dict) else str(opt)).strip()
+                        opt_p = doc.add_paragraph()
+                        opt_p.paragraph_format.left_indent = Inches(0.25)
+                        opt_p.paragraph_format.space_before = Pt(1)
+                        opt_p.paragraph_format.space_after = Pt(2)
+                        opt_run = opt_p.add_run(f"{key}. {text}")
+                        opt_run.font.size = Pt(10.5)
+                        opt_run.font.color.rgb = RGBColor(0x33, 0x41, 0x55)
+                        _apply_chinese_font(opt_run, "微软雅黑")
+
+                # 收集参考答案用于附录
+                ans_str = ""
+                if isinstance(q.answer, list):
+                    ans_str = "、".join(str(a) for a in q.answer)
+                elif q.answer is not None:
+                    ans_str = str(q.answer)
+                answers_list.append({
+                    "seq": seq,
+                    "title": q.title,
+                    "answer": ans_str,
+                    "explanation": q.explanation or ""
+                })
+
+        # 5. 试卷附录：参考答案与详细解析 (独立起段)
+        doc.add_page_break()
+        ans_title_p = doc.add_paragraph()
+        ans_title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        ans_title_p.paragraph_format.space_before = Pt(12)
+        ans_title_p.paragraph_format.space_after = Pt(12)
+        ans_title_run = ans_title_p.add_run(f"《{clean_title}》参考答案与名师解析")
+        ans_title_run.font.size = Pt(16)
+        ans_title_run.font.bold = True
+        ans_title_run.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
+        _apply_chinese_font(ans_title_run, "微软雅黑")
+
+        for a in answers_list:
+            ap = doc.add_paragraph()
+            ap.paragraph_format.space_before = Pt(6)
+            ap.paragraph_format.space_after = Pt(2)
+            
+            ar1 = ap.add_run(f"第 {a['seq']} 题参考答案：")
+            ar1.font.bold = True
+            ar1.font.size = Pt(10.5)
+            _apply_chinese_font(ar1, "微软雅黑")
+            
+            ar2 = ap.add_run(f"{a['answer'] or '（略）'}\n")
+            ar2.font.bold = True
+            ar2.font.size = Pt(10.5)
+            ar2.font.color.rgb = RGBColor(0x25, 0x63, 0xEB)
+            _apply_chinese_font(ar2, "微软雅黑")
+
+            if a["explanation"]:
+                exp_p = doc.add_paragraph()
+                exp_p.paragraph_format.left_indent = Inches(0.2)
+                exp_p.paragraph_format.space_before = Pt(0)
+                exp_p.paragraph_format.space_after = Pt(4)
+                er1 = exp_p.add_run("【解析】")
+                er1.font.size = Pt(10)
+                er1.font.bold = True
+                er1.font.color.rgb = RGBColor(0x05, 0x96, 0x69)
+                _apply_chinese_font(er1, "微软雅黑")
+                er2 = exp_p.add_run(a["explanation"])
+                er2.font.size = Pt(10)
+                er2.font.color.rgb = RGBColor(0x47, 0x55, 0x69)
+                _apply_chinese_font(er2, "微软雅黑")
+
+        # 保存到内存字节流
+        stream = io.BytesIO()
+        doc.save(stream)
+        stream.seek(0)
+        docx_bytes = stream.getvalue()
+
+        encoded_filename = quote(f"{clean_title}.docx")
+        return Response(
+            content=docx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"exam_{exam_id}.docx\"; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except Exception as e:
+        # 如环境异常则无缝降级为纯文本，保障 100% 可用性
+        clean_title = (exam.title or f"exam_{exam_id}").strip()
+        encoded_filename = quote(f"{clean_title}.txt")
+        fallback_text = f"【试卷名称】{clean_title}\n总分: {total_score} 分\n" + "\n".join(f"{i+1}. {q.title}" for i, q in enumerate(questions))
+        return Response(
+            content=fallback_text.encode("utf-8"),
+            media_type="text/plain; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"exam_{exam_id}.txt\"; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )

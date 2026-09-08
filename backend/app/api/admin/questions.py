@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[强化 normalize_options: 深度兼容大模型生成的 label/value/key 结构，且在 key 缺失时自动按序号赋予 A,B,C,D，彻底解决选项前缀缺失变成空括号问题]
 修改时间：2026-09-06 18:40:00
 AI模型：ZCode (GLM)
 修改内容：[v1.2 题海管理: 填空/简答题型 + 填空防崩溃校验 + 题目锁定防篡改(上架/归档卷引用即只读) +
@@ -27,15 +30,20 @@ SUPPORTED_TYPES = ("single", "multiple", "judge", "fill", "short")
 
 
 def normalize_options(options) -> list:
-    """规范化选项结构: 字符串数组 ["A. 甲","乙"] → [{"key":"A","text":"甲"},...] (AI 生成/历史数据双兼容)"""
+    """规范化选项结构: [{"label":"A","text":"甲"}] / ["A. 甲","乙"] → [{"key":"A","text":"甲"},...] (AI 生成/历史数据双兼容)"""
     import re as _re
     if not isinstance(options, list):
         return []
     normalized = []
-    for opt in options:
+    for idx, opt in enumerate(options):
         if isinstance(opt, dict):
-            if opt.get("key") is not None or opt.get("text") is not None:
-                normalized.append({"key": str(opt.get("key", "")), "text": str(opt.get("text", ""))})
+            # 兼容 key / label / value / option 等各种大模型常返回的键名
+            raw_key = opt.get("key") or opt.get("label") or opt.get("value") or opt.get("option")
+            raw_text = opt.get("text") or opt.get("content") or opt.get("title") or opt.get("desc") or ""
+            # 如果没有 key 或 key 为空，根据序号自动赋予 A, B, C, D...
+            if not raw_key:
+                raw_key = "ABCDEF"[len(normalized)] if len(normalized) < 6 else f"Opt{len(normalized)+1}"
+            normalized.append({"key": str(raw_key).strip().upper(), "text": str(raw_text).strip()})
             continue
         text = str(opt).strip()
         if not text:
@@ -146,7 +154,8 @@ def create_question(
         score=data.score if data.score is not None else 10,
         source=data.source if data.source in ("manual", "ai") else "manual",
         category_id=category_id,
-        creator_id=admin.id
+        creator_id=admin.id,
+        source_ref=data.source_ref or []
     )
     db.add(question)
     db.commit()
@@ -197,7 +206,8 @@ def batch_create_questions(
             score=item.score if item.score is not None else 10,
             source=item.source if item.source in ("manual", "ai") else "manual",
             category_id=category_id,
-            creator_id=admin.id
+            creator_id=admin.id,
+            source_ref=item.source_ref or []
         )
         db.add(q)
         db.flush()

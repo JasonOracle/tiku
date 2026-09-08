@@ -10,6 +10,11 @@ build/
 .agents/
 
 
+# 环境变量与安全密钥
+.env
+.env.*
+*.local
+
 # 日志
 *.log
 npm-debug.log*

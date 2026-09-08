@@ -36,6 +36,12 @@ class UserResponse(BaseModel):
 class AdminResponse(BaseModel):
     id: int
     username: str
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    gender: Optional[str] = None
+    email: Optional[str] = ""
+    position: Optional[str] = ""
+    bio: Optional[str] = ""
     role: str
     status: bool = True
     ai_quota_limit: int = 0
@@ -44,6 +50,15 @@ class AdminResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class AdminProfileUpdate(BaseModel):
+    """B端管理员个人信息修改（白名单，不允许修改 role/username/quota 等敏感字段）"""
+    name: Optional[str] = Field(None, max_length=50, description="真实姓名")
+    phone: Optional[str] = Field(None, max_length=20, description="手机号")
+    gender: Optional[str] = Field(None, description="性别 (male/female)")
+    email: Optional[str] = Field(None, max_length=100, description="邮箱")
+    position: Optional[str] = Field(None, max_length=50, description="职务")
+    bio: Optional[str] = Field(None, max_length=500, description="个人介绍")
 
 class LoginRequest(BaseModel):
     username: str = Field(..., description="用户名")

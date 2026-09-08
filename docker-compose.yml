@@ -41,6 +41,7 @@ services:
       mysql8:
         condition: service_healthy
     volumes:
+      - ./backend/app:/app/app
       - ./backend/app/uploads:/app/app/uploads
 
   # ─────────── Nginx 反向代理 + 静态托管 ───────────

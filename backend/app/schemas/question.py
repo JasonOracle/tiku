@@ -3,6 +3,9 @@
 修改时间：2026-09-06 17:30:00
 AI模型：ZCode (GLM)
 修改内容：[v1.2 Schema 扩展: 题型支持 fill/short, 新增 grading_points/source/locked 字段]
+修改时间：2026-09-08
+AI模型：Muse Spark
+修改内容：[v1.3 任务3: 新增 source_ref RAG 溯源引用 (创建/响应透传)]
 """
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
@@ -23,6 +26,7 @@ class QuestionCreate(BaseModel):
     score: Optional[int] = Field(10, description="题目默认分值")
     category_id: Optional[int] = Field(None, description="所属分类ID")
     source: Optional[str] = Field("manual", description="来源: manual 人工 / ai AI生成")
+    source_ref: Optional[List[Dict[str, Any]]] = Field(default=[], description="RAG 溯源引用 [{doc_id, chunk_id}]")
 
 class QuestionUpdate(BaseModel):
     type: Optional[str] = None
@@ -50,6 +54,7 @@ class QuestionResponse(BaseModel):
     is_deleted: bool = False
     locked: bool = False
     category_id: Optional[int] = None
+    source_ref: Optional[List[Dict[str, Any]]] = []
     created_at: datetime
 
     @field_validator("grading_points", mode="before")

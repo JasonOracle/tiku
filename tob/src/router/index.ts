@@ -5,8 +5,11 @@
  * 修改内容：[1. createWebHistory 绑定 import.meta.env.BASE_URL，彻底解决 /admin/ 子路径空白白屏问题]
  * 修改时间：2026-09-07
  * AI模型：Muse Spark
- * 修改内容：[v1.7: 新增 Dashboard 首页与 AI 模型配置路由，默认重定向改仪表盘；新增 meta.roles 角色守卫，越权跳转弹 Toast 拦截]
- */
+  * 修改内容：[v1.7: 新增 Dashboard 首页与 AI 模型配置路由，默认重定向改仪表盘；新增 meta.roles 角色守卫，越权跳转弹 Toast 拦截]
+  * 修改时间：2026-09-08
+  * AI模型：Muse Spark
+  * 修改内容：[v1.3 任务1: 新增模型中心路由]
+  */
 import { createRouter, createWebHistory, RouteRecordRaw, RouteLocationNormalized, NavigationGuardNext } from 'vue-router';
 import { ElMessage } from 'element-plus';
 
@@ -34,6 +37,12 @@ const routes: Array<RouteRecordRaw> = [
         name: 'Questions',
         component: () => import('../views/questions/QuestionsView.vue'),
         meta: { title: '题海管理' }
+      },
+      {
+        path: 'rag',
+        name: 'Rag',
+        component: () => import('../views/rag/RagView.vue'),
+        meta: { title: '私有文库' }
       },
       {
         path: 'exams',
@@ -82,6 +91,12 @@ const routes: Array<RouteRecordRaw> = [
         name: 'AiConfig',
         component: () => import('../views/ai-config/AiConfigView.vue'),
         meta: { title: 'AI 模型配置', roles: ['super_admin', 'admin'] }
+      },
+      {
+        path: 'model-center',
+        name: 'ModelCenter',
+        component: () => import('../views/model-center/ModelCenterView.vue'),
+        meta: { title: '模型中心', roles: ['super_admin'] }
       },
       {
         path: 'members',

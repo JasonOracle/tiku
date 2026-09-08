@@ -463,3 +463,22 @@
 - B端已接入：用户列表(users)、全站答题明细(users/records，响应新增 nickname 字段)、阅卷大厅列表与详情、考情看板 user_records。
 - C端已接入：登录响应 user、/users/me、个人中心 (昵称大字 + @用户名 + 性别/职务标签)。
 - users 表唯一索引: `uix_users_phone(phone)`；五列均经 main.py auto_patch 幂等补列。
+
+---
+
+## 7. v1.3 智能体与模型枢纽契约 (2026-09-08 落地)
+
+### 7.1 看板聚合 `GET /api/v1/admin/dashboard/stats`
+- **权限**：B端登录；出题人仅看本人试卷口径（与试卷列表隔离一致），超管/管理员全览。
+- **Response 200**: `{ kpi{exams, records, ai_usage, pending}, deltas{exams, records, ai_usage}, sparks{exams, records, ai}, trend[{day, count, avg}]×7, donut[{name, value}]（客观/主观/组合/实操/其他，按题型构成划分）, hot[{exam_id, title, count}]Top5, recent[{time, name, username, score, status}]×5, notices[{text, date}]×4（本人通知）, quota{used_today, remaining, limit} }`。
+
+### 7.2 RAG 私有库
+- `POST /api/v1/admin/rag/documents` (201, multipart, 10MB, txt/md/pdf/docx)：小文档同步向量化，大文档后台进行。
+- `GET /api/v1/admin/rag/documents`（超管全览，他人仅自传）、`GET /api/v1/admin/rag/documents/{id}`（进度）、`DELETE /api/v1/admin/rag/documents/{id}`（归属校验）。
+- `POST /api/v1/admin/rag/search` `{query, limit≤20, doc_ids?}`（出题人自动限定自传文档）。
+- `GET /api/v1/admin/rag/chunks?ids=`（溯源抽屉批量取块，越权块过滤）。
+- AI 出题新增 `doc_ids?` 参数：命中切片拼入 prompt，预览题目带 `source_ref[{doc_id, chunk_id}]`；`QuestionCreate/QuestionResponse` 新增 `source_ref`（批量入库透传）。
+
+### 7.3 Mem0 长期记忆 (静默，无独立端点)
+- `User_ID` 口径：`admin:{id}`；聊天/组卷入口后台提取偏好，新建对话与出题组卷 Prompt 自动注入。
+- 开关：`MEM0_ENABLED=0` 关闭；失败静默降级不阻断主流程；本地 Develop 用 fastembed + qdrant 本地路径。

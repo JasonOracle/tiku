@@ -213,7 +213,7 @@ python seed_rbac_users.py
 ## 常见排错指南 (FAQ)
 
 ### Q1: Render 首次部署提示缺少依赖报错怎么办？
-* 确保 `backend/requirements.txt` 中包含所有必需依赖（由于项目升级到了 v1.7 版本，部分依赖已替换如 pyjwt、bcrypt）：
+* 确保 `backend/requirements.txt` 中包含所有必需依赖（由于项目升级到了 v1.3 版本，部分依赖已替换如 pyjwt、bcrypt）：
   ```txt
   fastapi>=0.110.0
   uvicorn[standard]>=0.28.0

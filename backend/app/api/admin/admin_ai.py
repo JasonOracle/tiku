@@ -1,5 +1,17 @@
 """
 [变更日志]
+修改时间：2026-09-09
+AI模型：Gemini 系列
+修改内容：[强化试卷删除意图分流: 1. 单份试卷删除精准路由至 delete_exam 工具触发人机中风险确认卡; 2. 批量删除全部试卷意图严禁调用工具，直接回复暂不支持批量删除并附带 action_list 跳转试卷管理页面引导卡]
+修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[彻底修复试卷导出卡片丢失Bug: 强化系统提示词中exam_card格式范例，在低风险工具调用后确定性自动追加补齐exam_card代码块，确保前端100%渲染下载卡片]
+修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[AI智能组卷若未传入考试时间，默认自动补齐7天考试区间(now ~ now+7d)]
+修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[AI助管Prompt注入用户真实资料画像（姓名、性别、职务、个人介绍/教学背景），支持AI深度理解用户身份]
 修改时间：2026-09-06 22:30:00
 AI模型：ZCode (GLM)
 修改内容：[v1.5 修复用户反馈: AI出题材料指定数量被默认5覆盖(材料数量优先) / 单次生成上限10道(超出截断+提示) /
@@ -8,12 +20,12 @@ AI模型：ZCode (GLM)
 AI模型：Muse Spark
 修改内容：[v1.2 Step2: AI 组卷 grading_mode 与 is_ai_auto_grade 双写]
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.api.deps import get_current_admin
 from app.models.user import Admin
@@ -28,6 +40,7 @@ from app.services.quota_service import deduct_quota
 from app.services.exam_service import first_category_id, recalc_exam_totals
 from app.services.audit_service import write_audit, push_notification
 from app.services.ai_tools_registry import get_allowed_tools, REGISTRY
+from app.services import memory_service
 from app.models.ai_chat import AiChatSession, AiChatMessage
 import json
 import re
@@ -47,6 +60,7 @@ class QuestionGenRequest(BaseModel):
     count: Optional[int] = Field(None, ge=1, le=AI_GEN_MAX_COUNT, description=f"出题数量 1~{AI_GEN_MAX_COUNT}; 空则 AI 按材料指定数量(不超上限), 材料未指定默认 5")
     difficulty: Optional[str] = Field(None, description="难度 easy/medium/hard; 空则默认 medium")
     category_id: Optional[int] = Field(None, description="归入分类")
+    doc_ids: Optional[List[int]] = Field(None, description="RAG 私有文档范围 (v1.3: 基于资料出题并溯源)")
     # 兼容旧字段 (v1.2 单题型), 内部并入 types
     q_type: Optional[str] = Field(None, description="已废弃, 兼容旧前端: 单题型")
 
@@ -168,11 +182,47 @@ def _format_tool_result_fallback(t_name: str, result_data) -> str:
                     f"{cur.get('created_questions_count', 0)} 道、试卷 {cur.get('created_exams_count', 0)} 套。")
         if t_name == "get_user_stats":
             parts = [f"{k}: {v}" for k, v in data.items() if k != "role_distribution"]
-            return "用户统计：" + ("、".join(parts) if parts else "暂无数据")
+        if t_name == "export_my_latest_exam":
+            if data.get("found"):
+                exam_card = {
+                    "type": "exam_download",
+                    "exam_id": data.get("exam_id"),
+                    "title": data.get("title"),
+                    "total_score": data.get("total_score"),
+                    "question_count": data.get("question_count"),
+                    "download_url": data.get("download_url"),
+                    "created_at": data.get("created_at") or ""
+                }
+                card_str = json.dumps(exam_card, ensure_ascii=False)
+                return f"{data.get('message')}\n\n```exam_card\n{card_str}\n```"
+            return data.get("message", "未找到可导出的试卷")
+        if t_name == "get_my_questions_pass_rate":
+            return data.get("message", "暂无答卷通过率数据")
         s = json.dumps(data, ensure_ascii=False)
         return "已获取业务数据：" + (s[:500] + "…" if len(s) > 500 else (s or "暂无数据"))
     except Exception:
         return "已获取业务数据，请继续追问细化。"
+
+
+def _ensure_tool_action_blocks(t_name: str, result_data: dict, text: str) -> Optional[str]:
+    """检查并确定性返回需要追加到模型回答末尾的卡片代码块（防止模型归纳轮漏掉卡片协议）"""
+    if not text:
+        return None
+    data = result_data or {}
+    if t_name == "export_my_latest_exam" and data.get("found"):
+        if "```exam_card" not in text:
+            exam_card = {
+                "type": "exam_download",
+                "exam_id": data.get("exam_id"),
+                "title": data.get("title"),
+                "total_score": data.get("total_score"),
+                "question_count": data.get("question_count"),
+                "download_url": data.get("download_url"),
+                "created_at": data.get("created_at") or ""
+            }
+            card_str = json.dumps(exam_card, ensure_ascii=False)
+            return f"\n\n```exam_card\n{card_str}\n```\n"
+    return None
 
 
 def _parse_action_blocks(text: str):
@@ -385,6 +435,26 @@ def ai_generate_questions(
 
     deduct_quota(db, admin, "question_gen", {"count": count, "types": types})
 
+    # v1.3 任务2: 拼装长期记忆偏好 (静默, 无记忆时为空)
+    mem_ctx = memory_service.recall(admin.id, data.material)
+    material = ((mem_ctx + "\n") if mem_ctx else "") + data.material
+    # v1.3 任务3: RAG 私有资料检索 (限定自传文档, 超管全库), 命中则拼入 prompt 并溯源
+    rag_refs: List[dict] = []
+    rag_block = ""
+    hits: list = []
+    if data.doc_ids:
+        from app.api.admin.admin_rag import retrieve_chunks
+        from app.models.rag import DocLibrary
+        scope_ids = list(data.doc_ids)
+        if admin.role != "super_admin":
+            own = {r[0] for r in db.query(DocLibrary.id).filter(DocLibrary.admin_id == admin.id).all()}
+            scope_ids = [i for i in scope_ids if i in own]
+        hits = retrieve_chunks(db, data.material, doc_ids=scope_ids or [-1], limit=6) if scope_ids else []
+        if hits:
+            rag_refs = [{"doc_id": h["doc_id"], "chunk_id": h["id"]} for h in hits]
+            rag_block = "【私有资料(出题必须优先依据, 每题须能从中找到出处)】\n" + "\n---\n".join(
+                f"[资料{h['id']}] {h['text']}" for h in hits) + "\n"
+
     # ---- Prompt: 高级选项是硬性指令 (与 material 文字冲突时以指令为准) ----
     type_names = {"single": "单选题", "multiple": "多选题", "judge": "判断题", "fill": "填空题", "short": "简答题"}
     if types:
@@ -415,7 +485,7 @@ def ai_generate_questions(
     prompt = (
         f"{constraint}\n\n"
         f"出题要求: 每题 score=10, 带解析。填空题题干中 ___ 的数量必须与 answer 二维数组长度一致; "
-        f"简答题必须给出参考答案和踩分点。\n\n材料/需求:\n{data.material}"
+        f"简答题必须给出参考答案和踩分点。\n\n{rag_block}材料/需求:\n{material}"
     )
     try:
         raw, _ = ai_service.chat_completion(prompt, system=system, json_mode=True)
@@ -437,6 +507,8 @@ def ai_generate_questions(
             continue  # AI 越出题型构成, 丢弃
         item["category_id"] = data.category_id
         item["source"] = "ai"
+        if rag_refs:
+            item["source_ref"] = rag_refs
         safe_items.append(item)
     if not safe_items:
         raise HTTPException(status_code=502, detail="AI 未生成有效题目，请调整描述后重试")
@@ -465,33 +537,64 @@ def ai_generate_exam(
     total_expected = sum(s.count for s in data.specs)
     deduct_quota(db, admin, "exam_gen", {"title": data.title, "specs": [s.model_dump() for s in data.specs]})
 
-    # 题库摘要 (供 AI 检索复用; 截断防 prompt 过长超时)
-    bank = db.query(Question).filter(Question.is_deleted == False).order_by(Question.id.desc()).limit(120).all()  # noqa: E712
-    bank_digest = [{"id": q.id, "type": q.type, "title": (q.title or "")[:30]} for q in bank]
+    # 题库摘要 (精简为前 20 题典型题目, 避免 Prompt 膨胀导致大模型输出长度受限截断 JSON)
+    bank = db.query(Question).filter(Question.is_deleted == False).order_by(Question.id.desc()).limit(20).all()  # noqa: E712
+    bank_digest = [{"id": q.id, "type": q.type, "title": (q.title or "")[:25]} for q in bank]
 
     system = (
-        "你是智能组卷助理。你会收到: 老师需求、题型构成要求、当前共享题库摘要。"
-        "请优先复用题库中的题目 (引用 id); 数量不足或无合适题目时生成新题 (short 题需 grading_points, "
-        "fill 题题干用___且数量与 answer 二维数组长度一致)。"
-        '只输出 JSON: {"title": "试卷标题", "items": [{"question_id": 题库id} 或 {"new_question": {'
-        '"type","title","options","answer","grading_points","explanation","difficulty"}}]}'
+        "你是智题库的专业出题与组卷引擎。你会收到: 组卷需求、题型构成、现有共享题库小样。\n"
+        "【输出严格规范】只输出符合格式的单个合法 JSON 对象，严禁包裹任何额外文字解释或 Markdown 外壳！\n"
+        'JSON 格式标准:\n'
+        '{\n'
+        '  "title": "试卷标题",\n'
+        '  "items": [\n'
+        '    {"question_id": 现有题目id},\n'
+        '    {\n'
+        '      "new_question": {\n'
+        '        "type": "single",\n'
+        '        "title": "题目题干",\n'
+        '        "options": [{"key": "A", "text": "选项A"}, {"key": "B", "text": "选项B"}, {"key": "C", "text": "选项C"}, {"key": "D", "text": "选项D"}],\n'
+        '        "answer": ["A"],\n'
+        '        "explanation": "解析内容",\n'
+        '        "difficulty": "medium"\n'
+        '      }\n'
+        '    }\n'
+        '  ]\n'
+        '}'
     )
     difficulty = data.difficulty or "medium"
+    # v1.3 任务2: 拼装长期记忆偏好 (静默, 无记忆时为空)
+    mem_ctx = memory_service.recall(admin.id, data.description)
+    need_text = ((mem_ctx + "\n") if mem_ctx else "") + data.description
     prompt = (
-        f"老师需求: {data.description}\n"
-        f"题型构成: {[(s.q_type, s.count) for s in data.specs]}\n"
-        f"题目难度: {difficulty}\n"
-        f"题库摘要(共{len(bank_digest)}题): {bank_digest}\n"
-        f"请严格按题型构成数量输出 items (合计 {total_expected} 项)。"
+        f"组卷需求: {need_text}\n"
+        f"题型构成要求: {[(s.q_type, s.count) for s in data.specs]}\n"
+        f"题目难度倾向: {difficulty}\n"
+        f"现有题库参考(共{len(bank_digest)}题): {bank_digest}\n"
+        f"请严格按题型构成输出 items 列表（合计恰好 {total_expected} 道题），优先复用题库，无合适题则完整生成 new_question。"
     )
-    try:
-        raw, _ = ai_service.chat_completion(prompt, system=system, json_mode=True, temperature=0.2)
-        parsed = ai_service.extract_json(raw)
-        items = parsed.get("items") if isinstance(parsed, dict) else None
-        if not isinstance(items, list) or not items:
-            raise AiServiceError("未返回组卷明细")
-    except (AiServiceError, ValueError) as e:
-        raise HTTPException(status_code=502, detail=f"AI 组卷失败: {e}")
+    
+    parsed = None
+    last_err = None
+    for attempt in range(2):
+        try:
+            raw, _ = ai_service.chat_completion(
+                prompt,
+                system=system,
+                json_mode=True,
+                temperature=0.2 if attempt == 0 else 0.4,
+                timeout=120.0
+            )
+            parsed = ai_service.extract_json(raw)
+            if isinstance(parsed, dict) and isinstance(parsed.get("items"), list) and len(parsed["items"]) > 0:
+                break
+        except Exception as e:
+            last_err = e
+            continue
+
+    items = parsed.get("items") if isinstance(parsed, dict) else None
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=502, detail=f"AI 组卷失败: 大模型生成内容格式异常，请稍后重试 ({last_err or '未返回有效题目列表'})")
 
     # ---- 落库: 新题 source=ai; 试卷强制 Draft ----
     question_ids: List[int] = []
@@ -557,13 +660,19 @@ def ai_generate_exam(
 
     title = data.title or (parsed.get("title") if isinstance(parsed, dict) else None) or "AI 智能组卷"
     _has_short = any(s.q_type == "short" for s in data.specs)
+
+    # 考试时间默认兜底：若未提供则默认当前时间起 7 天有效区间
+    now = datetime.now()
+    eff_start_time = data.start_time if data.start_time is not None else now
+    eff_end_time = data.end_time if data.end_time is not None else (eff_start_time + timedelta(days=7))
+
     exam = Exam(
         title=title[:200],
         category_id=data.category_id,
         is_timed=data.is_timed,
         time_limit=data.time_limit,
-        start_time=data.start_time,
-        end_time=data.end_time,
+        start_time=eff_start_time,
+        end_time=eff_end_time,
         pass_percent=data.pass_percent,
         status="draft",  # 强制草稿, 必须人工检查后手动上架
         is_ai_auto_grade=_has_short,
@@ -606,7 +715,28 @@ def _build_chat_system(admin: Admin):
     allowed_tools = get_allowed_tools(admin.role)
 
     system_prompt = f"你是智题库平台的 AI 智能助管, 熟悉题库/组卷/阅卷业务。\n"
-    system_prompt += f"当前跟你对话的用户是【{admin.username}】，其在系统中的角色为【{role_name}】。\n"
+    system_prompt += f"当前跟你对话的用户登录账号是【{admin.username}】，其在系统中的角色为【{role_name}】。\n"
+    
+    # 注入用户完整的真实个人背景与资料画像
+    profile_items = []
+    if getattr(admin, "name", None):
+        profile_items.append(f"真实姓名：{admin.name}")
+    if getattr(admin, "gender", None) and admin.gender != "保密":
+        gender_cn = "男" if admin.gender == "male" or admin.gender == "男" else ("女" if admin.gender == "female" or admin.gender == "女" else admin.gender)
+        profile_items.append(f"性别：{gender_cn}")
+    if getattr(admin, "position", None):
+        profile_items.append(f"职务/头衔：{admin.position}")
+    if getattr(admin, "phone", None):
+        profile_items.append(f"手机号：{admin.phone}")
+    if getattr(admin, "email", None):
+        profile_items.append(f"电子邮箱：{admin.email}")
+    if getattr(admin, "bio", None):
+        profile_items.append(f"个人介绍/教学背景：{admin.bio}")
+
+    if profile_items:
+        system_prompt += f"【当前用户的个人真实档案画像】\n" + "；".join(profile_items) + "。\n"
+        system_prompt += "重要交互规范：你已经充分掌握用户的个人资料与背景。当用户询问“你了解我吗/你了解我不”或探讨其个人教学业务时，请亲切称呼用户（如“张斌老师”或其职务），并主动结合其所在地区、学科（如英语）、教龄年资和个人背景作答，展现你对他的深刻了解与贴心支持，切勿仅冷冰冰地回复账号或用户名！\n"
+
     system_prompt += "作为系统 AI 助理，你不仅能陪聊，你还可以并且必须使用提供的工具去操作或查询数据库。\n"
     system_prompt += "如果用户询问你能做什么，或者让你帮他操作，你需要查阅你当前的 tools 列表并告知用户你可以做哪些事。不要编造你没有的工具能力。\n"
     system_prompt += "如果用户让你执行越权操作，请礼貌地拒绝并说明这是因为其角色权限不足。\n"
@@ -643,6 +773,16 @@ def _build_chat_system(admin: Admin):
         "1. 当用户要求创建或出一道特定题目时，调用 create_question_draft；\n"
         "2. 当用户要求生成一份试卷/测试卷/多题组卷时，必须调用 create_exam_draft，"
         "并在 questions 参数中一次性原创生成指定题型与数量的完整题目列表，严禁用 create_question_draft 只创建一道题！\n"
+        "3. 当用户要求导出或下载试卷时，必须调用 export_my_latest_exam 工具；获取到工具结果后，必须在回复末尾附带 ```exam_card 代码块提供下载试卷卡片，格式严格如下:\n"
+        "```exam_card\n"
+        '{"type": "exam_download", "exam_id": 试卷ID, "title": "试卷标题", "total_score": 总分, "question_count": 题数, "download_url": "/api/v1/admin/exams/试卷ID/export"}\n'
+        "```\n"
+        "4. 当用户询问统计最近一周（或指定周期）出过的试题通过率/及格率时，必须调用 get_my_questions_pass_rate 工具进行数据统计分析。\n"
+        "5. 【单份试卷删除】当用户说“我想删除这份试卷”、“帮我把这套试卷删了”、“删除试卷”等指代某份具体试卷时，必须调用 delete_exam 工具（参数 exam_id 或 keyword 匹配，未指明时默认取最近一份名下试卷）。调用后系统会弹出确认卡片，待老师确认后执行安全删除。\n"
+        "6. 【批量删除全部试卷拦截】当用户表达“想删除我出的所有试卷”、“清空我出的全部试卷”、“把我的试卷全部删掉”等批量全量删除意图时，严禁调用任何删除工具！必须明确礼貌地回复：出于数据安全与防误触考虑，系统暂不支持一次性批量清空或删除您名下的所有试卷；并告知其可在试卷管理页面中对未上架且无作答记录的草稿逐一处理或下架归档。并在回复末尾附带跳转试卷管理的 action_list 操作代码块，格式严格如下:\n"
+        "```action_list\n"
+        '[{"title": "前往试卷管理", "badge": "快捷入口", "action": {"type": "in_app", "label": "进入试卷管理", "target": "go_exams"}}]\n'
+        "```\n"
     )
     return system_prompt, allowed_tools, role_name
 
@@ -650,6 +790,7 @@ def _build_chat_system(admin: Admin):
 @router.post("/chat")
 def ai_chat(
     data: ChatRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
@@ -659,6 +800,10 @@ def ai_chat(
     deduct_quota(db, admin, "chat", {"length": len(data.message)})
 
     system_prompt, allowed_tools, role_name = _build_chat_system(admin)
+    raw_user = (data.display_text or "").strip() or data.message
+    mem_ctx = memory_service.recall(admin.id, raw_user)
+    if mem_ctx:
+        system_prompt += "\n" + mem_ctx
 
     try:
         content, tool_calls = ai_service.chat_completion(
@@ -714,7 +859,11 @@ def ai_chat(
                     temperature=0.5,
                     tools=allowed_tools if allowed_tools else None
                 )
+                extra_block = _ensure_tool_action_blocks(t_name, result_data, final_content or "")
+                if extra_block:
+                    final_content = (final_content or "") + extra_block
                 q_remaining = 99999999 if admin.role == "super_admin" else admin.daily_ai_quota
+                background_tasks.add_task(memory_service.remember, admin.id, raw_user, final_content or "")
                 return ResponseModel(code=200, data={"reply": final_content, "quota_remaining": q_remaining})
             else:
                 # 高风险，要求前端显示二次确认卡片
@@ -730,6 +879,7 @@ def ai_chat(
                 })
 
         q_remaining = 99999999 if admin.role == "super_admin" else admin.daily_ai_quota
+        background_tasks.add_task(memory_service.remember, admin.id, raw_user, content or "")
         return ResponseModel(code=200, data={"reply": content, "quota_remaining": q_remaining})
 
     except AiServiceError as e:
@@ -738,6 +888,7 @@ def ai_chat(
 @router.post("/chat/stream")
 def ai_chat_stream(
     data: ChatRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
@@ -760,6 +911,9 @@ def ai_chat_stream(
     message = data.message[:6000]
     display = (data.display_text or "").strip() or message
     quote = (display[:30] + "…") if len(display) > 30 else display
+    mem_ctx = memory_service.recall(admin.id, display)
+    if mem_ctx:
+        system_prompt += "\n" + mem_ctx
 
     # 会话归属解析 (未传自动新建) + User 提问即时落库
     if data.session_id is not None:
@@ -796,6 +950,7 @@ def ai_chat_stream(
             db.commit()
             db.refresh(m)
             flow["done_persisted"] = True
+            flow["assistant_text"] = content or ""
             return m.id
         except Exception:
             db.rollback()
@@ -895,6 +1050,12 @@ def ai_chat_stream(
                     if not final_text.strip():
                         final_text = _format_tool_result_fallback(t_name, result_data)
                         yield sse({"type": "delta", "text": final_text})
+                    else:
+                        # 确定性补充卡片协议代码块（如模型漏输出 ```exam_card 等）
+                        extra_block = _ensure_tool_action_blocks(t_name, result_data, final_text)
+                        if extra_block:
+                            yield sse({"type": "delta", "text": extra_block})
+                            final_text += extra_block
                     card2, list2 = _parse_action_blocks(final_text)
                     aid = _persist_assistant(final_text, card2, list2)
                     yield sse(done_ids(aid))
@@ -942,6 +1103,11 @@ def ai_chat_stream(
                         _persist_assistant(partial, card, lst)
             except Exception:
                 pass
+
+    def _remember_after_stream():
+        memory_service.remember(admin.id, display, flow.get("assistant_text") or "")
+
+    background_tasks.add_task(_remember_after_stream)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -1000,3 +1166,77 @@ def ai_chat_feedback(
                 }, admin=admin)
     db.commit()
     return ResponseModel(code=200, message="反馈已记录，感谢您的评价！")
+
+
+class ModelProbeRequest(BaseModel):
+    base_url: str = Field(..., description="目标通道 BaseURL")
+    api_key: Optional[str] = Field(None, description="API Key")
+
+
+@router.post("/models/probe", response_model=ResponseModel[dict])
+def probe_channel_models(
+    data: ModelProbeRequest,
+    admin: Admin = Depends(get_current_admin)
+):
+    """B端后台模型通道探测与拉取接口 (后端中继，彻底解决前端直连浏览器 CORS 跨域限制与路径拼装差异)"""
+    raw_base = data.base_url.strip().rstrip("/")
+    if not raw_base:
+        raise HTTPException(status_code=400, detail="BaseURL 不能为空")
+
+    import httpx
+    # 智能规范化路径: 若已带有 /v1 则请求 /v1/models，否则补全 /v1/models
+    if raw_base.endswith("/v1"):
+        target_url = f"{raw_base}/models"
+    else:
+        target_url = f"{raw_base}/v1/models"
+
+    headers = {}
+    actual_key = data.api_key.strip() if data.api_key else ""
+    # 若针对内置云端主力通道且未填 Key，自动采用系统内置官方 Key 兜底
+    if not actual_key and "askdiandian.com" in raw_base:
+        actual_key = "ak_9PZWVd3JTrye8QHen9uBnLnhbihh1"
+    if actual_key:
+        headers["Authorization"] = f"Bearer {actual_key}"
+
+    start_time = datetime.now()
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(target_url, headers=headers)
+            latency_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+
+            if resp.status_code != 200:
+                # 尝试备用路径 (如果用户填的是根路径且没带 /v1)
+                if not raw_base.endswith("/v1"):
+                    alt_url = f"{raw_base}/models"
+                    alt_resp = client.get(alt_url, headers=headers)
+                    if alt_resp.status_code == 200:
+                        resp = alt_resp
+
+            if resp.status_code != 200:
+                err_detail = resp.text[:200]
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"通道返回 HTTP {resp.status_code}: {err_detail or '路由未找到'}"
+                )
+
+            res_json = resp.json()
+            data_list = res_json.get("data") if isinstance(res_json, dict) else None
+            if not isinstance(data_list, list):
+                raise HTTPException(status_code=400, detail="通道响应未包含标准的 data 模型数组")
+
+            models = [str(m.get("id") or m.get("name") or "") for m in data_list if isinstance(m, dict)]
+            models = [m for m in models if m]
+            if not models:
+                raise HTTPException(status_code=400, detail="通道已响应但返回的模型列表为空")
+
+            return ResponseModel(code=200, message=f"成功获取 {len(models)} 个可用模型", data={
+                "models": models,
+                "latency_ms": latency_ms
+            })
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=400, detail=f"无法连接目标通道: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"探测失败: {str(e)}")
+

@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 [变更日志]
+修改时间: 2026-09-08
+AI模型: Gemini 系列
+修改内容: [v1.3: Admin 扩充个人信息字段 gender/email/position/bio，支持 B 端管理员完善个人资料]
 修改时间: 2026-09-06 17:00:00
 AI模型: ZCode (GLM)
 修改内容: [v1.2 RBAC 与 AI 额度资产化: Admin 增加 status/ai_quota_limit/daily_ai_quota/quota_reset_date]
@@ -38,6 +41,10 @@ class Admin(Base):
     username = Column(String(50), unique=True, index=True, nullable=False, comment="管理员账号")
     name = Column(String(50), nullable=True, comment="真实姓名/名字")
     phone = Column(String(20), nullable=True, comment="手机号")
+    gender = Column(String(10), nullable=True, comment="性别 (male/female)")
+    email = Column(String(100), nullable=True, default="", comment="邮箱")
+    position = Column(String(50), nullable=True, default="", comment="职务")
+    bio = Column(String(500), nullable=True, default="", comment="个人介绍")
     password_hash = Column(String(255), nullable=False, comment="密码哈希")
     role = Column(String(20), default="teacher", comment="角色 (super_admin, admin, teacher/creator 出题人, ai)")
     status = Column(Boolean, default=True, comment="账号状态 (True=正常, False=禁用)")

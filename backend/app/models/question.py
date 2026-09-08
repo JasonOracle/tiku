@@ -34,4 +34,5 @@ class Question(Base):
     is_deleted = Column(Boolean, default=False, comment="软删除标记 (防牵连: 已引用试卷仍可拉取原题)")
     category_id = Column(Integer, ForeignKey("exam_categories.id", ondelete="SET NULL"), nullable=True, comment="所属分类ID")
     creator_id = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True, comment="创建出题人ID (个人统计依据, 历史数据可空)")
+    source_ref = Column(JSON, nullable=True, comment="RAG 溯源引用 [{doc_id, chunk_id}] (AI 基于私有资料生成时写入)")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")

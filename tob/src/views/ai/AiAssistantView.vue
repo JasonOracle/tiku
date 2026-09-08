@@ -1,5 +1,26 @@
 <!--
   * [变更日志]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
+  * 修改内容：[优化 executeAction/cancelAction 系统回执数据流: 采用独立参数发送系统执行回执给 AI，杜绝直接将 [系统消息] 写入用户界面输入框 input.value，保障输入框纯净]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
+  * 修改内容：[1. ACTION_WHITELIST 增加 go_exams 路由动作权限，支持一键无缝跳转 /exams 试卷管理; 2. actionRequired 卡片针对 delete_exam 呈现专属结构化风险删除确认卡与危险警示，点击执行物理删除]
+  * 修改时间：2026-09-08
+  * AI模型：Gemini 系列
+  * 修改内容：[全面对接方案A标准 Word 试卷导出: 1. 浮岛提示更新为「下载试卷 (Word 文档)」; 2. downloadExamCard 自动解析后端 RFC 5987 标准 Content-Disposition 文件名，默认保存为 .docx; 3. 增强支持 Word 二次排版与打印]
+  * 修改时间：2026-09-08
+  * AI模型：Gemini 系列
+  * 修改内容：[精简豆包文档卡片: 移除冗余不稳定的在线预览抽屉，右下角专注于极简一键下载按钮(Download)，点击直接下载UTF-8试卷，体验极致顺畅稳定]
+  * 修改时间：2026-09-08
+  * AI模型：Gemini 系列
+  * 修改内容：[深度对齐豆包极简文档卡片风格: 1. 微拟物纸张折角+网格底纹+文档icon; 2. 标题居左+创建时间; 3. 右下角集成开窗新标签预览(TopRight)与一键下载(Download)双轻量按钮; 4. 新增试卷在线轻量预览抽屉]
+  * 修改时间：2026-09-08
+  * AI模型：Gemini 系列
+  * 修改内容：[优化试卷导出卡片: 1. 图标替换为优质SVG图标(Document)，杜绝emoji; 2. 流式delta接收时实时解析examCard保证流式期间即可渲染下载卡片]
+  * 修改时间：2026-09-08
+  * AI模型：Gemini 系列
+  * 修改内容：[v1.3: 新增 exam_card 试卷导出下载卡片(展示试卷名称/分值/题数/一键导出按钮) 与通过率统计卡片交互联动]
   * 修改时间：2026-09-07 01:10:00
   * AI模型：Gemini 系列
   * 修改内容：[新建独立 Tab 页 AI 助理组件 (现代交互工作台风格): 支持多会话切换/新建对话/前端状态快照注入/Markdown 风格回复与快捷复制]
@@ -231,11 +252,29 @@
                     <div class="draft-row"><span class="draft-label">正确答案：</span>{{ draftPreview(m.arguments).answerText }}</div>
                     <div v-if="draftPreview(m.arguments).explanation" class="draft-row"><span class="draft-label">解析：</span>{{ draftPreview(m.arguments).explanation }}</div>
                   </div>
+                  <!-- 删除试卷专属安全确认卡：清晰展示删除目标与风控提示 -->
+                  <div v-else-if="m.toolName === 'delete_exam'" class="exam-draft-card" style="border-color: #fed7aa; background: #fffaf5;">
+                    <div class="exam-draft-title" style="color: #c2410c; display: flex; align-items: center; gap: 6px;">
+                      <el-icon><Delete /></el-icon>
+                      <span>试卷删除确认（不可逆操作）</span>
+                    </div>
+                    <div style="font-size: 13px; color: #475569; margin-bottom: 8px;">
+                      您正在通过 AI 助理申请物理删除试卷。
+                      <span v-if="m.arguments?.keyword">（匹配关键词：<strong>{{ m.arguments.keyword }}</strong>）</span>
+                      <span v-else-if="m.arguments?.exam_id">（指定试卷 ID：<strong>{{ m.arguments.exam_id }}</strong>）</span>
+                      <span v-else>（默认操作：您名下最近创建的一份试卷）</span>
+                    </div>
+                    <div style="background: #fff; border: 1px dashed #fdba74; border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #9a3412; line-height: 1.6;">
+                      ⚠️ <strong>风控安全准则</strong>：仅允许删除<strong>您本人创建</strong>、处于<strong>未上架草稿(draft)或已下架(archived)</strong>状态且<strong>零学员作答</strong>的试卷。若试卷正在上架中需先下架；若已有学员提交考试，系统将拒绝删除以保护成绩数据安全。
+                    </div>
+                  </div>
                   <div v-else class="action-code">
                     <pre>{{ JSON.stringify(m.arguments, null, 2) }}</pre>
                   </div>
                   <div class="action-footer" v-if="!m.actionResolved && m.toolName !== 'create_exam_draft'">
-                    <button :class="m.riskLevel === 'high' ? 'btn-confirm' : 'btn-confirm-medium'" @click="executeAction(m)">确认执行</button>
+                    <button :class="m.toolName === 'delete_exam' ? 'btn-confirm' : (m.riskLevel === 'high' ? 'btn-confirm' : 'btn-confirm-medium')" @click="executeAction(m)">
+                      {{ m.toolName === 'delete_exam' ? '确认删除试卷' : '确认执行' }}
+                    </button>
                     <button class="btn-cancel" @click="cancelAction(m)">取消</button>
                   </div>
                 </div>
@@ -276,6 +315,50 @@
                   >
                     {{ item.action.label || '去批改' }}
                   </el-button>
+                </div>
+              </div>
+
+              <!-- v1.3: 豆包风格极简文档卡片 (exam_card 协议) -->
+              <div class="doubao-doc-card" v-if="m.examCard">
+                <!-- 拟物化纸张底层视觉装饰 -->
+                <div class="doubao-doc-sheet">
+                  <div class="sheet-line sheet-line-1"></div>
+                  <div class="sheet-line sheet-line-2"></div>
+                  <div class="sheet-box"></div>
+                </div>
+
+                <!-- 左上角蓝色文件图标 -->
+                <div class="doubao-doc-icon-wrap">
+                  <svg class="doubao-doc-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                  </svg>
+                </div>
+
+                <!-- 标题与时间信息 -->
+                <div class="doubao-doc-main">
+                  <div class="doubao-doc-title" :title="m.examCard.title">
+                    {{ m.examCard.title }}
+                  </div>
+                  <div class="doubao-doc-sub">
+                    <span>创建时间: {{ m.examCard.created_at || '刚刚' }}</span>
+                    <span class="sub-dot">·</span>
+                    <span>{{ m.examCard.question_count }} 题 / {{ m.examCard.total_score }} 分</span>
+                    <span class="sub-dot">·</span>
+                    <span class="doc-format-badge">Word 文档</span>
+                  </div>
+                </div>
+
+                <!-- 右下角操作浮岛 (豆包风格一键下载) -->
+                <div class="doubao-doc-actions">
+                  <el-tooltip content="点击下载试卷 (Word 文档)" placement="top">
+                    <button class="doubao-action-btn" @click="downloadExamCard(m.examCard)">
+                      <el-icon><Download /></el-icon>
+                    </button>
+                  </el-tooltip>
                 </div>
               </div>
             </div>
@@ -319,7 +402,7 @@
 import { ref, computed, nextTick, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Plus, ChatDotRound, Delete, MagicStick, DocumentCopy } from '@element-plus/icons-vue';
+import { Plus, ChatDotRound, Delete, MagicStick, DocumentCopy, Download, Document } from '@element-plus/icons-vue';
 import { marked } from 'marked';
 import request from '../../utils/request';
 import { useUserStore } from '../../store/user';
@@ -340,6 +423,16 @@ interface ActionListItem {
   action?: { type: string; label: string; target: string; params?: any };
 }
 
+interface ExamCardData {
+  type: string;
+  exam_id: number;
+  title: string;
+  total_score: number;
+  question_count: number;
+  download_url: string;
+  created_at?: string;
+}
+
 interface ChatMessage {
   id?: number;
   role: 'user' | 'assistant';
@@ -354,6 +447,7 @@ interface ChatMessage {
   actionResolved?: boolean;
   actionCard?: ActionCard | null;
   actionList?: ActionListItem[] | null;
+  examCard?: ExamCardData | null;
 }
 
 interface CloudSession {
@@ -388,6 +482,7 @@ const stripActionBlocks = (t: string): string =>
   (t || '')
     .replace(/```action_card\s*[\s\S]*?```/g, '')
     .replace(/```action_list\s*[\s\S]*?```/g, '')
+    .replace(/```exam_card\s*[\s\S]*?```/g, '')
     .trim();
 
 // 服务端行 -> 本地消息（含卡片状态还原；无落库卡片时回退解析正文）
@@ -422,6 +517,7 @@ const normalizeServerMessage = (item: any): ChatMessage => {
     msg.content = parsed.text || msg.content;
     msg.actionCard = parsed.card;
     msg.actionList = parsed.list;
+    msg.examCard = parsed.examCard;
   }
   return msg;
 };
@@ -702,9 +798,10 @@ const confirmExamDraft = async (m: ChatMessage): Promise<void> => {
 
 // ---- v1.2 Step5: Action Card / Action List 协议解析 ----
 
-// 前端动作白名单：出题人仅允许唤起站内批阅抽屉，严禁人员/额度/全局看板动作
+// 前端动作白名单：出题人仅允许唤起站内批阅抽屉与跳转试卷管理，严禁人员/额度/全局看板动作
 const ACTION_WHITELIST: Record<string, string[]> = {
   open_grading_drawer: ['super_admin', 'admin', 'creator', 'teacher'],
+  go_exams: ['super_admin', 'admin', 'creator', 'teacher'],
   TRANSFER_QUOTA: ['super_admin', 'admin'],
 };
 
@@ -714,10 +811,17 @@ const isActionAllowed = (target: string): boolean => {
   return roles.includes(userStore.role);
 };
 
-const extractActionBlocks = (text: string): { text: string; card: ActionCard | null; list: ActionListItem[] | null } => {
+const extractActionBlocks = (text: string): {
+  text: string;
+  card: ActionCard | null;
+  list: ActionListItem[] | null;
+  examCard: ExamCardData | null;
+} => {
   let clean = text || '';
   let card: ActionCard | null = null;
   let list: ActionListItem[] | null = null;
+  let examCard: ExamCardData | null = null;
+
   const cardMatch = clean.match(/```action_card\s*([\s\S]*?)```/);
   if (cardMatch) {
     try {
@@ -728,6 +832,7 @@ const extractActionBlocks = (text: string): { text: string; card: ActionCard | n
     }
     clean = clean.replace(cardMatch[0], '').trim();
   }
+
   const listMatch = clean.match(/```action_list\s*([\s\S]*?)```/);
   if (listMatch) {
     try {
@@ -738,7 +843,61 @@ const extractActionBlocks = (text: string): { text: string; card: ActionCard | n
     }
     clean = clean.replace(listMatch[0], '').trim();
   }
-  return { text: clean, card, list };
+
+  const examMatch = clean.match(/```exam_card\s*([\s\S]*?)```/);
+  if (examMatch) {
+    try {
+      const parsed = JSON.parse(examMatch[1]);
+      if (parsed && parsed.exam_id) examCard = parsed;
+    } catch (e) {
+      /* 降级为纯文本展示 */
+    }
+    clean = clean.replace(examMatch[0], '').trim();
+  }
+
+  return { text: clean, card, list, examCard };
+};
+
+
+// 试卷导出卡片下载触发逻辑 (支持标准 Word .docx 文档下载)
+const downloadExamCard = async (examCard: ExamCardData): Promise<void> => {
+  try {
+    const token = localStorage.getItem('tiku_tob_token') || '';
+    const res = await fetch(examCard.download_url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('试卷导出下载失败');
+
+    // 优先从响应头 Content-Disposition 中提取 RFC 5987 / filename 文件名
+    let finalFileName = `${examCard.title || '试卷'}.docx`;
+    const disposition = res.headers.get('Content-Disposition') || '';
+    if (disposition) {
+      const fnMatchStar = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      if (fnMatchStar && fnMatchStar[1]) {
+        try {
+          finalFileName = decodeURIComponent(fnMatchStar[1]);
+        } catch (e) { /* 保留默认 */ }
+      } else {
+        const fnMatch = disposition.match(/filename="?([^";]+)"?/i);
+        if (fnMatch && fnMatch[1]) {
+          finalFileName = fnMatch[1];
+        }
+      }
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = finalFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    ElMessage.success(`《${examCard.title}》已成功下载为 Word 试卷文档`);
+  } catch (e: any) {
+    ElMessage.error(e?.message || '试卷导出失败，请重试');
+  }
 };
 
 // 批阅抽屉联动（action_list [去批改] 原地唤出）
@@ -755,6 +914,8 @@ const handleCardAction = (action: { type: string; label: string; target: string;
     gradingExamId.value = action.params?.exam_id ?? null;
     gradingExamTitle.value = '';
     gradingVisible.value = true;
+  } else if (action.target === 'go_exams') {
+    router.push('/exams');
   }
 };
 
@@ -815,12 +976,17 @@ const refreshPendingSnapshot = async (): Promise<void> => {
 
 const buildPreamble = (userText: string) => {
   const roleText = userStore.role === 'super_admin' ? '超级管理员' : (userStore.role === 'admin' ? '管理员' : '出题人');
+  const profileParts: string[] = [];
+  if (userStore.name) profileParts.push(`真实姓名=${userStore.name}`);
+  if (userStore.position) profileParts.push(`职务=${userStore.position}`);
+  if (userStore.bio) profileParts.push(`背景与学科介绍=${userStore.bio}`);
+
   return [
     `[系统隐藏上下文 | 用户不可见]:`,
-    `当前用户=${userStore.username}(${roleText}), 剩余AI额度=${userStore.quotaRemaining}次,`,
+    `当前用户=${userStore.username}(${roleText})${profileParts.length ? '，个人画像=[' + profileParts.join(', ') + ']' : ''}, 剩余AI额度=${userStore.quotaRemaining}次,`,
     ...pendingSnapshotLines.value,
     `当前页面=AI助理全屏工作台。`,
-    `请基于以上身份与业务上下文回答老师的问题; 回答保持专业、扁平、无废话。`,
+    `请基于以上身份、用户背景与业务上下文回答老师的问题; 称呼亲切自然，保持专业、扁平、无废话。`,
     ``
   ].join('\n') + `\n老师提问: ${userText}`;
 };
@@ -830,8 +996,9 @@ const usePreset = (text: string) => {
   send();
 };
 
-const send = async () => {
-  const text = input.value.trim();
+const send = async (customText?: string) => {
+  const isCustom = typeof customText === 'string';
+  const text = (isCustom ? customText : input.value).trim();
   if (!text || sending.value) return;
   // 无选中会话时先云端新建（换端/首登场景）
   if (activeSessionId.value == null) {
@@ -840,7 +1007,9 @@ const send = async () => {
   }
   const sessionId = activeSessionId.value as number;
 
-  input.value = '';
+  if (!isCustom) {
+    input.value = '';
+  }
   messages.value.push({ role: 'user', content: text });
   followScroll();
 
@@ -856,6 +1025,7 @@ const send = async () => {
     streamingMsg.content = parsed.text || '(无回复)';
     streamingMsg.actionCard = parsed.card;
     streamingMsg.actionList = parsed.list;
+    streamingMsg.examCard = parsed.examCard;
   };
 
   try {
@@ -982,9 +1152,9 @@ const executeAction = async (m: ChatMessage) => {
     m.actionResolved = true;
     ElMessage.success('操作已执行');
     
-    // 把结果当做一条隐形的系统提示再次发给 AI 让他知道结果
-    input.value = `[系统消息]: 我已批准并执行了操作 ${m.toolName}，后端返回的结果是：${JSON.stringify(res)}`;
-    await send();
+    // 把结果当做隐形系统回执直接发给 AI，不写入用户输入框
+    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${m.toolName}，后端返回的结果是：${JSON.stringify(res)}`;
+    await send(systemMsg);
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '执行失败');
   } finally {
@@ -995,8 +1165,8 @@ const executeAction = async (m: ChatMessage) => {
 const cancelAction = async (m: ChatMessage) => {
   m.actionResolved = true;
 
-  input.value = `[系统消息]: 我拒绝了操作 ${m.toolName} 的执行。`;
-  await send();
+  const systemMsg = `[系统消息]: 我拒绝了操作 ${m.toolName} 的执行。`;
+  await send(systemMsg);
 };
 
 const cancelMarkCard = (m: ChatMessage): void => {
@@ -1615,5 +1785,175 @@ onMounted(() => {
 .send-btn {
   background: linear-gradient(135deg, #0284c7, #0369a1);
   border: none;
+}
+
+/* v1.3: 豆包风格极简文档展示卡片 (纯 CSS 拟物纸张 + 网格 + 操作浮岛) */
+.doubao-doc-card {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  min-height: 100px;
+  background: #ffffff;
+  /* 豆包标志性微灰网格底纹 */
+  background-image: 
+    linear-gradient(to right, rgba(226, 232, 240, 0.45) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 232, 240, 0.45) 1px, transparent 1px);
+  background-size: 16px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-top: 10px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.doubao-doc-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+/* 拟物化纸张底层视觉装饰（右侧斜倾微凸起纸张层） */
+.doubao-doc-sheet {
+  position: absolute;
+  right: 14px;
+  top: -12px;
+  width: 130px;
+  height: 125px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transform: rotate(5deg);
+  pointer-events: none;
+  z-index: 1;
+  box-shadow: -2px 4px 12px rgba(0, 0, 0, 0.03);
+  opacity: 0.85;
+}
+
+.sheet-line {
+  position: absolute;
+  left: 14px;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+}
+
+.sheet-line-1 {
+  top: 24px;
+  width: 50px;
+  background: #cbd5e1;
+}
+
+.sheet-line-2 {
+  top: 36px;
+  width: 75px;
+}
+
+.sheet-box {
+  position: absolute;
+  left: 14px;
+  top: 50px;
+  width: 90px;
+  height: 45px;
+  background: #edf2f7;
+  border-radius: 6px;
+  opacity: 0.6;
+}
+
+/* 左上角文档图标 */
+.doubao-doc-icon-wrap {
+  position: relative;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.doubao-doc-svg {
+  display: block;
+}
+
+/* 标题与副文本 */
+.doubao-doc-main {
+  position: relative;
+  z-index: 2;
+  padding-right: 90px; /* 为右侧浮岛避让 */
+}
+
+.doubao-doc-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.4;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doubao-doc-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sub-dot {
+  color: #cbd5e1;
+}
+
+.doc-format-badge {
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid #dbeafe;
+}
+
+/* 右下角白色药丸操作浮岛 */
+.doubao-doc-actions {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 3px 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.doubao-action-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 6px;
+  color: #475569;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.doubao-action-btn:hover {
+  background: #f1f5f9;
+  color: #2563eb;
 }
 </style>

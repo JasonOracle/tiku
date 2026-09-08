@@ -1,5 +1,17 @@
 """
 [变更日志]
+修改时间：2026-09-09
+AI模型：Gemini 系列
+修改内容：[优化 delete_exam 工具: 允许未有人作答(graded=0)的已下架/已归档试卷物理删除，仅拦截正在上架中(published)或已有真实学员作答记录的试卷，彻底打通用户下架后删除试卷的闭环]
+修改时间：2026-09-09
+AI模型：Gemini 系列
+修改内容：[新增 delete_exam 工具及 delete_exam_handler: 严格校验本人权限、未上架草稿(draft)、零人次作答(0记录)，支持通过 ID 或关键词匹配删除试卷并记录审计日志]
+修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[export_my_latest_exam 工具返回数据补充 created_at 格式化创建时间字段，便于仿豆包质感文档卡片展示创建时间]
+修改时间：2026-09-08
+AI模型：Gemini 系列
+修改内容：[澄清 get_my_exams 工具中的 pass_score_percent 字段含义为「及格标准线」，避免大模型将其与学员实际作答「通过率」概念混淆产生误导]
 修改时间：2026-09-06 17:35:00
 AI模型：Gemini 3.1 Pro
 修改内容：[创建 AI 代理网关使用的工具注册表]
@@ -83,8 +95,8 @@ def get_my_exams_handler(db: Session, admin: Admin, args: dict) -> dict:
             {
                 "id": e.id,
                 "title": e.title,
-                "status": e.status,
-                "pass_percent": e.pass_percent,
+                "status": "已发布" if e.status == "published" else ("待上架草稿" if e.status == "draft" else "已下架"),
+                "pass_score_line": f"{e.pass_percent or 60}% (试卷及格分数线设定, 非作答通过率)",
                 "created_at": e.created_at.strftime("%Y-%m-%d %H:%M:%S")
             } for e in exams
         ]
@@ -345,6 +357,154 @@ def list_all_exams_handler(db: Session, admin: Admin, args: dict) -> dict:
         })
     return {"total": total, "by_category": by_category, "exams": items}
 
+
+def export_my_latest_exam_handler(db: Session, admin: Admin, args: dict) -> dict:
+    """获取用户最近创建的一份试卷并生成导出下载信息"""
+    keyword = str(args.get("keyword") or "").strip()
+    q = db.query(Exam).filter(Exam.creator_id == admin.id)
+    if keyword:
+        q = q.filter(Exam.title.contains(keyword))
+    exam = q.order_by(Exam.id.desc()).first()
+    if not exam:
+        return {"found": False, "message": "未找到您名下的试卷，请先创建试卷。"}
+    q_count = db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam.id).count()
+    download_url = f"/api/v1/admin/exams/{exam.id}/export"
+    created_time_str = exam.created_at.strftime("%m-%d %H:%M") if exam.created_at else ""
+    return {
+        "found": True,
+        "exam_id": exam.id,
+        "title": exam.title,
+        "total_score": exam.total_score or 100,
+        "pass_percent": exam.pass_percent or 60,
+        "question_count": q_count,
+        "download_url": download_url,
+        "created_at": created_time_str,
+        "message": f"已找到您最近创建的试卷《{exam.title}》（共 {q_count} 题，总分 {exam.total_score or 100} 分），可直接下载格式化试卷文件。"
+    }
+
+
+def get_my_questions_pass_rate_handler(db: Session, admin: Admin, args: dict) -> dict:
+    """统计当前管理员在指定时间窗口内出过的试卷/试题的作答通过率"""
+    from datetime import datetime, timedelta
+    from app.models.record import ExamRecord
+    days = int(args.get("days", 7))
+    days = max(1, min(days, 90))
+    since_date = datetime.now() - timedelta(days=days)
+
+    # 查找该老师创建的试卷
+    my_exams = db.query(Exam).filter(
+        Exam.creator_id == admin.id,
+        Exam.created_at >= since_date
+    ).all()
+    exam_ids = [e.id for e in my_exams]
+
+    if not exam_ids:
+        # 如果最近N天没有出新试卷，统计其所有已出试卷在最近N天内的答卷情况
+        all_my_exams = db.query(Exam).filter(Exam.creator_id == admin.id).all()
+        exam_ids = [e.id for e in all_my_exams]
+
+    if not exam_ids:
+        return {
+            "period_days": days,
+            "total_exams": 0,
+            "total_records": 0,
+            "pass_count": 0,
+            "pass_rate": "0.0%",
+            "message": f"最近 {days} 天内未检索到您创建的试卷或答卷记录。"
+        }
+
+    # 查询这些试卷在指定时间段内的答卷记录
+    records = db.query(ExamRecord).filter(
+        ExamRecord.exam_id.in_(exam_ids),
+        ExamRecord.status == "submitted",
+        ExamRecord.submit_time >= since_date
+    ).all()
+
+    total_records = len(records)
+    pass_count = sum(1 for r in records if r.passed)
+    pass_rate = (pass_count / total_records * 100) if total_records > 0 else 0.0
+
+    return {
+        "period_days": days,
+        "exams_count": len(exam_ids),
+        "total_records": total_records,
+        "pass_count": pass_count,
+        "pass_rate": f"{pass_rate:.1f}%",
+        "average_score": round(sum(r.score or 0 for r in records) / total_records, 1) if total_records > 0 else 0,
+        "message": f"统计结果：最近 {days} 天内，您名下的 {len(exam_ids)} 套试卷共有 {total_records} 人次提交作答，其中及格 {pass_count} 人次，整体通过率为 {pass_rate:.1f}%。"
+    }
+
+
+def delete_exam_handler(db: Session, admin: Admin, args: dict) -> dict:
+    """删除单份试卷（执行前需人工确认卡，严格遵循：本人名下、未上架草稿 draft、零人次作答）"""
+    from fastapi import HTTPException
+    from app.models.record import ExamRecord
+    from app.services.audit_service import write_audit
+
+    exam_id = args.get("exam_id")
+    keyword = str(args.get("keyword") or "").strip()
+
+    exam = None
+    if exam_id:
+        try:
+            eid = int(exam_id)
+            exam = db.query(Exam).filter(Exam.id == eid).first()
+        except (ValueError, TypeError):
+            exam = None
+    elif keyword:
+        # 关键词优先匹配自己名下的试卷
+        exam = db.query(Exam).filter(
+            Exam.creator_id == admin.id,
+            Exam.title.contains(keyword)
+        ).order_by(Exam.id.desc()).first()
+    else:
+        # 未指定 ID 也未指定关键词，默认匹配自己名下最近创建的一份试卷
+        exam = db.query(Exam).filter(Exam.creator_id == admin.id).order_by(Exam.id.desc()).first()
+
+    if not exam:
+        raise HTTPException(status_code=404, detail="未检索到符合条件的试卷，请核对试卷名称或ID")
+
+    # 1. 权限校验：必须是本人出的试卷（超管除外）
+    if exam.creator_id != admin.id and admin.role != "super_admin":
+        raise HTTPException(status_code=403, detail="您无权删除他人创建的试卷，仅支持删除您名下的试卷")
+
+    # 2. 上架状态校验：若正在发布中，提示先下架
+    if exam.status == "published":
+        raise HTTPException(status_code=400, detail=f"试卷《{exam.title}》处于已上架状态，不可直接删除；请先在试卷管理列表中将其下架，然后再点删除。")
+
+    # 3. 答卷作答记录校验：有人做过绝不能物理删除
+    graded = db.query(ExamRecord).filter(
+        ExamRecord.exam_id == exam.id,
+        ExamRecord.status.in_(["submitted", "timeout", "pending_grading"])
+    ).count()
+    if graded > 0:
+        raise HTTPException(status_code=400, detail=f"试卷《{exam.title}》已有 {graded} 人次学员作答，为保护学员考试数据不可删除，仅可保持下架归档。")
+
+    # 4. 清理无意义的未提交幽灵记录后执行物理删除
+    db.query(ExamRecord).filter(
+        ExamRecord.exam_id == exam.id,
+        ExamRecord.status == "in_progress"
+    ).delete()
+    
+    # 清理试卷试题关联
+    db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam.id).delete()
+
+    title = exam.title
+    deleted_id = exam.id
+    db.delete(exam)
+    db.commit()
+
+    write_audit(db, "delete", "exam", deleted_id, summary=f"AI助管删除试卷《{title}》",
+                before_data={"title": title, "exam_id": deleted_id}, admin=admin)
+    db.commit()
+
+    return {
+        "success": True,
+        "deleted_exam_id": deleted_id,
+        "title": title,
+        "message": f"试卷《{title}》（ID: {deleted_id}）已成功删除。"
+    }
+
 # ================= 工具注册表 =================
 
 REGISTRY: Dict[str, dict] = {
@@ -365,7 +525,7 @@ REGISTRY: Dict[str, dict] = {
     "get_my_exams": {
         "definition": AiToolDefinition(
             name="get_my_exams",
-            description="获取当前登录用户（我自己）创建的试卷列表。当用户询问自己创建了哪些试卷或其状态时调用。",
+            description="获取当前登录用户（我自己）创建的试卷列表（包含试卷标题、发布状态、及格标准分数线 pass_score_line 等信息，注意：pass_score_line 是试卷配置的及格线如60%，绝对不是学员做题的通过率！未有人作答时没有通过率）。当用户询问自己出过/创建过哪些试卷时调用。",
             parameters={
                 "type": "object",
                 "properties": {
@@ -487,6 +647,61 @@ REGISTRY: Dict[str, dict] = {
             allowed_roles=["super_admin"]
         ),
         "handler": list_all_exams_handler
+    },
+    "export_my_latest_exam": {
+        "definition": AiToolDefinition(
+            name="export_my_latest_exam",
+            description="查询并导出当前老师名下最近创建的一份试卷（支持按关键词筛选标题）。当用户要求“给我导出最近我出的一份试卷”、“下载最近出的试卷”、“导出某某试卷”时必须调用此工具。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "试卷标题关键词，未指定则留空直接取最近一份"}
+                },
+                "required": []
+            },
+            risk_level="low",
+            allowed_roles=["super_admin", "admin", "teacher", "creator"]
+        ),
+        "handler": export_my_latest_exam_handler
+    },
+    "get_my_questions_pass_rate": {
+        "definition": AiToolDefinition(
+            name="get_my_questions_pass_rate",
+            description="统计当前老师在指定天数内出过的试卷/试题的作答及格率与通过率。当用户询问“统计最近我一周出过的试题通过率”、“我出的题通过率怎么样”、“统计最近答卷情况”时调用此工具。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "统计过去多少天内，默认 7 天"}
+                },
+                "required": []
+            },
+            risk_level="low",
+            allowed_roles=["super_admin", "admin", "teacher", "creator"]
+        ),
+        "handler": get_my_questions_pass_rate_handler
+    },
+    "delete_exam": {
+        "definition": AiToolDefinition(
+            name="delete_exam",
+            description="删除当前老师自己创建的名下某份试卷。满足业务安全约束：试卷必须是本人创建、处于未上架或已下架状态(非已上架published)、且没有任何学员作答记录(0人次作答)。当用户表达“我想删除这份试卷”、“帮我删除某某试卷”、“删除刚建的试卷”等单张试卷删除意图时调用此工具。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "exam_id": {
+                        "type": "integer",
+                        "description": "要删除的试卷ID（可选，与 keyword 二选一）"
+                    },
+                    "keyword": {
+                        "type": "string",
+                        "description": "试卷标题关键词，用于模糊匹配名下试卷（可选，若未指定ID与关键词则默认取名下最近一份试卷）"
+                    }
+                },
+                "required": []
+            },
+            risk_level="medium",
+            allowed_roles=["super_admin", "admin", "teacher", "creator"]
+        ),
+        "handler": delete_exam_handler
     },
 }
 

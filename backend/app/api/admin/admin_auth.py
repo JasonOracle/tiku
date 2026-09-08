@@ -4,7 +4,7 @@ from app.core.database import get_db
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.api.deps import get_current_admin
 from app.models.user import Admin
-from app.schemas.auth import RegisterRequest, LoginRequest, AdminResponse, TokenResponse
+from app.schemas.auth import RegisterRequest, LoginRequest, AdminResponse, AdminProfileUpdate, TokenResponse
 from app.schemas.common import ResponseModel
 
 router = APIRouter()
@@ -53,3 +53,19 @@ def init_super_admin(data: RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(admin)
     return ResponseModel(code=201, message="超级管理员初始化成功", data=admin)
+
+
+@router.put("/profile", response_model=ResponseModel[AdminResponse])
+def update_admin_profile(
+    data: AdminProfileUpdate,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin)
+):
+    """B端管理员更新个人信息（白名单字段，不允许修改角色/额度等敏感项）"""
+    # 只更新实际传入的非 None 字段
+    update_fields = data.model_dump(exclude_unset=True)
+    for field, value in update_fields.items():
+        setattr(admin, field, value)
+    db.commit()
+    db.refresh(admin)
+    return ResponseModel(code=200, message="个人信息已更新", data=admin)

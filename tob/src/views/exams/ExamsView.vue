@@ -1,5 +1,11 @@
 <!--
   * [变更日志]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
+  * 修改内容：[优化试卷下架与删除闭环: 1. 试卷操作列对已归档/下架状态(archived)开放删除按钮与重新编辑上架能力; 2. 优化下架确认提示文案，说明零作答试卷下架后依然支持物理删除或重新上架]
+  * 修改时间：2026-09-08
+  * AI模型：Gemini 系列
+  * 修改内容：[✨AI智能一键组卷优化: 1. 首屏两项核心输入改为「组卷需求」+「试卷分类」(分类必填且默认选中第一项); 2. 考试时间移至高级选项，未填写时系统自动默认当前时间起 7 天考试区间]
   * 修改时间：2026-09-07 00:05:00
   * AI模型：Gemini 系列
   * 修改内容：[1. AI 智能一键组卷弹窗 UI 对齐普通新建试卷: 增加题目难度单选框(默认简单)、限时作答开关+输入框、及格比例 Slider 滑块；2. 说明 AI 组卷及格线在题目生成后进入查看与确认页动态向上取整计算]
@@ -58,9 +64,8 @@
         <template #default="{ row }">
           <el-switch
             :model-value="row.status === 'published'"
-            :disabled="row.status === 'archived'"
             active-text="已上架"
-            :inactive-text="row.status === 'archived' ? '已归档' : '待上架'"
+            :inactive-text="row.status === 'archived' ? '已下架' : '待上架'"
             inline-prompt
             @change="(val: boolean) => handleStatusChange(row, val)"
           />
@@ -111,7 +116,7 @@
             <el-icon><View /></el-icon> 查看详情
           </el-button>
           <el-button v-if="row.status === 'draft'" type="primary" text size="small" @click="openEditDialog(row)">编辑/组卷</el-button>
-          <el-button v-if="row.status === 'draft'" type="danger" text size="small" @click="handleDelete(row.id)">删除</el-button>
+          <el-button v-if="row.status !== 'published'" type="danger" text size="small" @click="handleDelete(row.id)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -517,7 +522,7 @@
       </template>
     </el-dialog>
     <!-- ✨ AI 智能一键组卷 Dialog (v1.2 Step4: 极简两项必填 + 生成后原地审阅) -->
-    <el-dialog v-model="aiExamVisible" :title="aiReviewVisible ? '✨ AI 组卷结果审阅' : '✨ AI 智能一键组卷'" width="700px" destroy-on-close>
+    <el-dialog v-model="aiExamVisible" :title="aiReviewVisible ? '✨ AI 组卷结果审阅' : '✨ AI 智能一键组卷'" width="700px" destroy-on-close @open="handleOpenAiExam">
       <!-- 生成后所见即所得审阅清单 -->
       <div v-if="aiReviewVisible">
         <el-alert type="success" :closable="false" show-icon style="margin-bottom: 14px"
@@ -535,34 +540,37 @@
         </div>
       </div>
 
-      <!-- 组卷表单：仅两项必填，其余折叠 -->
+      <!-- 组卷表单：核心两项（组卷需求 + 试卷分类）必填，其余按需折叠 -->
       <el-form v-else label-width="100px">
         <el-form-item label="组卷需求" required>
           <el-input v-model="aiExamForm.description" type="textarea" :rows="3"
                     placeholder="例如：帮我组一份消防安全测试卷，包含3道单选、2道判断、1道简答，难度中等" />
         </el-form-item>
-        <el-form-item label="考试时间" required>
-          <div style="display: flex; align-items: center; gap: 10px; width: 100%">
-            <el-date-picker v-model="aiExamForm.start_time" type="datetime" placeholder="开始时间(必填，不得早于现在)" format="YYYY-MM-DD HH:mm"
-                            value-format="YYYY-MM-DDTHH:mm:ss" :disabled-date="disablePastDate" style="flex: 1" />
-            <span style="color: #94a3b8">至</span>
-            <el-date-picker v-model="aiExamForm.end_time" type="datetime" placeholder="结束时间(必填，须晚于开始时间)" format="YYYY-MM-DD HH:mm"
-                            value-format="YYYY-MM-DDTHH:mm:ss" :disabled-date="disableBeforeStart" style="flex: 1" />
-          </div>
+        <el-form-item label="试卷分类" required>
+          <el-select v-model="aiExamForm.category_id" placeholder="请选择试卷分类" style="width: 100%">
+            <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
           <div class="score-calc-tip" style="margin-top: 4px; color: #64748b; font-size: 12px">
-            必填：开始时间不得早于现在，结束时间须晚于开始时间，保障 C 端时间流转闭环（未开始/进行中/已结束）
+            必填：明确试卷归属分类，方便在试卷列表与学员端按题库维度归类展示
           </div>
         </el-form-item>
 
         <el-collapse>
-          <el-collapse-item title="高级选项（试卷标题 / 分类 / 难度 / 限时 / 及格线，已设最优默认）" name="advanced">
+          <el-collapse-item title="高级选项（考试时间 / 试卷标题 / 难度 / 限时 / 及格线，已设最优默认）" name="advanced">
+            <el-form-item label="考试时间">
+              <div style="display: flex; align-items: center; gap: 10px; width: 100%">
+                <el-date-picker v-model="aiExamForm.start_time" type="datetime" placeholder="默认当前时间" format="YYYY-MM-DD HH:mm"
+                                value-format="YYYY-MM-DDTHH:mm:ss" :disabled-date="disablePastDate" style="flex: 1" />
+                <span style="color: #94a3b8">至</span>
+                <el-date-picker v-model="aiExamForm.end_time" type="datetime" placeholder="默认 7 天后" format="YYYY-MM-DD HH:mm"
+                                value-format="YYYY-MM-DDTHH:mm:ss" :disabled-date="disableBeforeStart" style="flex: 1" />
+              </div>
+              <div class="score-calc-tip" style="margin-top: 4px; color: #64748b; font-size: 12px">
+                选填：不填写时系统将自动默认设置为当前时间起 7 天开放区间（如需指定考试开放窗口可在此设置）
+              </div>
+            </el-form-item>
             <el-form-item label="试卷标题">
               <el-input v-model="aiExamForm.title" placeholder="留空则由 AI 命名" />
-            </el-form-item>
-            <el-form-item label="试卷分类">
-              <el-select v-model="aiExamForm.category_id" placeholder="默认第一项" style="width: 100%">
-                <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
-              </el-select>
             </el-form-item>
             <el-form-item label="题目难度">
               <el-radio-group v-model="aiExamForm.difficulty">
@@ -748,13 +756,13 @@ const loadExams = async () => {
 const handleStatusChange = (row: any, val: boolean) => {
   const newStatus = val ? 'published' : 'archived';
   if (!val) {
-    ElMessageBox.confirm('下架后试卷将归档冻结（不可再编辑/删除/上架，已作答成绩保留），C 端用户将无法作答，确定要下架吗？', '下架确认', {
+    ElMessageBox.confirm('下架后试卷将停止对学员开放（无学员作答时可重新编辑、上架或彻底删除；已有作答成绩则保留归档）。确定要下架吗？', '下架确认', {
       type: 'warning',
-      confirmButtonText: '确认下架归档',
+      confirmButtonText: '确认下架',
       cancelButtonText: '取消'
     }).then(async () => {
       await request.put(`/api/v1/admin/exams/${row.id}/status?status=${newStatus}`);
-      ElMessage.success('试卷已下架归档');
+      ElMessage.success('试卷已成功下架');
       loadExams();
     });
   } else {
@@ -997,9 +1005,9 @@ const saveExam = async () => {
 };
 
 const handleDelete = (id: number) => {
-  ElMessageBox.confirm('确定要删除该试卷吗？仅草稿零作答可删除（有作答/已上架/已归档一律不可删），删除后不可恢复', '提示', { type: 'warning' }).then(async () => {
+  ElMessageBox.confirm('确定要删除该试卷吗？未上架或已下架且无学员作答的试卷可彻底删除，删除后不可恢复。', '提示', { type: 'warning' }).then(async () => {
     await request.delete(`/api/v1/admin/exams/${id}`);
-    ElMessage.success('删除成功');
+    ElMessage.success('试卷删除成功');
     loadExams();
   });
 };
@@ -1067,27 +1075,42 @@ const disableBeforeStart = (date: Date): boolean => {
   return date.getTime() < today.getTime();
 };
 
+// 打开 AI 组卷弹窗时自动回显默认分类（若未选择）
+const handleOpenAiExam = () => {
+  aiReviewVisible.value = false;
+  aiReviewQuestions.value = [];
+  aiExamResult.value = '';
+  if (!aiExamForm.category_id && categories.value.length > 0) {
+    aiExamForm.category_id = categories.value[0].id;
+  }
+};
+
 const generateAiExam = async () => {
   if (!aiExamForm.description.trim()) {
     ElMessage.error('请描述组卷需求');
     return;
   }
-  if (!aiExamForm.start_time || !aiExamForm.end_time) {
-    ElMessage.error('请选择考试时间（开始时间与结束时间均为必填）');
+  if (!aiExamForm.category_id) {
+    ElMessage.error('请选择试卷分类');
     return;
   }
-  if (new Date(aiExamForm.start_time).getTime() < Date.now() - 60000) {
+
+  // 考试时间选填校验：若填写了开始时间或结束时间，则校验时间先后顺序与区间合法性
+  if (aiExamForm.start_time && new Date(aiExamForm.start_time).getTime() < Date.now() - 60000) {
     ElMessage.error('开始时间不能早于现在');
     return;
   }
-  if (aiWindowMinutes.value <= 0) {
-    ElMessage.error('考试结束时间必须晚于开始时间');
-    return;
+  if (aiExamForm.start_time && aiExamForm.end_time) {
+    if (aiWindowMinutes.value <= 0) {
+      ElMessage.error('考试结束时间必须晚于开始时间');
+      return;
+    }
+    if (aiExamForm.is_timed && aiExamForm.time_limit > aiWindowMinutes.value) {
+      ElMessage.error(`考试限时不能大于开放区间 ${aiWindowMinutes.value} 分钟`);
+      return;
+    }
   }
-  if (aiExamForm.is_timed && aiExamForm.time_limit > aiWindowMinutes.value) {
-    ElMessage.error(`考试限时不能大于开放区间 ${aiWindowMinutes.value} 分钟`);
-    return;
-  }
+
   aiExamLoading.value = true;
   aiReviewVisible.value = false;
   aiReviewQuestions.value = [];
@@ -1097,7 +1120,7 @@ const generateAiExam = async () => {
       description: aiExamForm.description,
       specs: parseSpecs(aiExamForm.description),
       difficulty: aiExamForm.difficulty,
-      category_id: aiExamForm.category_id || categories.value[0]?.id || undefined,
+      category_id: aiExamForm.category_id,
       is_timed: aiExamForm.is_timed,
       time_limit: aiExamForm.is_timed ? aiExamForm.time_limit : 0,
       start_time: aiExamForm.start_time || undefined,

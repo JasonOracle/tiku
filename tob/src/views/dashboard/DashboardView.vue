@@ -3,9 +3,12 @@
   * 修改时间：2026-09-07
   * AI模型：Muse Spark
   * 修改内容：[v1.7 新建: SaaS 首页 Dashboard，1:1 还原设计图（Banner + 4 KPI + 趋势图 + 环形图 + 四小卡），ECharts 静态假数据]
+  * 修改时间：2026-09-08
+  * AI模型：Muse Spark
+  * 修改内容：[v1.3 任务4: 对接 GET /admin/dashboard/stats 真实聚合数据（KPI/趋势/环形/排行/动态/公告/额度），出题人自动作用域隔离]
   -->
 <template>
-  <div class="dashboard">
+  <div v-loading="loading" class="dashboard">
     <!-- 顶部 Banner -->
     <div class="banner">
       <div class="banner-text">
@@ -17,7 +20,7 @@
 
     <!-- 4 张 KPI 卡 -->
     <div class="kpi-row">
-      <div v-for="k in kpis" :key="k.label" class="kpi-card">
+      <div v-for="k in kpis" :key="k.key" class="kpi-card">
         <div class="kpi-top">
           <div class="kpi-icon" :style="{ background: k.bg }">
             <el-icon><component :is="k.icon" /></el-icon>
@@ -51,7 +54,7 @@
               :key="r"
               class="range-tab"
               :class="{ active: range === r }"
-              @click="range = r"
+              @click="switchRange(r)"
             >{{ r }}</span>
           </div>
         </div>
@@ -61,8 +64,8 @@
       <div class="card donut-card">
         <div class="card-head">
           <div>
-            <div class="card-title"><el-icon class="title-icon"><PieChart /></el-icon>试卷类型占比</div>
-            <div class="card-sub">各类题型试卷在总数中的占比</div>
+            <div class="card-title"><el-icon class="title-icon"><PieChart /></el-icon>试卷分类占比</div>
+            <div class="card-sub">各分类试卷在总数中的占比</div>
           </div>
           <el-select v-model="donutFilter" size="small" style="width: 110px">
             <el-option label="全部类型" value="all" />
@@ -97,6 +100,7 @@
             {{ e.status }}
           </el-tag>
         </div>
+        <el-empty v-if="!recentExams.length" description="暂无考试动态" :image-size="60" />
       </div>
 
       <div class="card">
@@ -108,10 +112,10 @@
           <div ref="ringRef" class="ring-chart"></div>
           <div class="quota-info">
             <div class="quota-label">今日已用</div>
-            <div class="quota-num">36,892 <span class="quota-total">/ 54,000</span></div>
-            <el-progress :percentage="68" :show-text="false" stroke-width="8" />
+            <div class="quota-num">{{ quota.used }} <span class="quota-total">/ {{ quota.total }}</span></div>
+            <el-progress :percentage="quota.pct" :show-text="false" stroke-width="8" />
             <div class="quota-left">剩余额度</div>
-            <div class="quota-left-num">17,108 <el-tag size="small" type="info" effect="plain">预计可用 2.5 天</el-tag></div>
+            <div class="quota-left-num">{{ quota.left }} <el-tag v-if="quota.days" size="small" type="info" effect="plain">预计可用 {{ quota.days }}</el-tag></div>
           </div>
         </div>
       </div>
@@ -126,6 +130,7 @@
           <span class="hot-name">{{ h.name }}</span>
           <span class="hot-count">{{ h.count }} 次</span>
         </div>
+        <el-empty v-if="!hotList.length" description="暂无排行数据" :image-size="60" />
       </div>
 
       <div class="card">
@@ -138,60 +143,100 @@
           <span class="notice-text">{{ n.text }}</span>
           <span class="notice-date">{{ n.date }}</span>
         </div>
+        <el-empty v-if="!notices.length" description="暂无公告" :image-size="60" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import { ArrowRight, TrendCharts, PieChart, Document, User, Cpu, Clock } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
+import request from '../../utils/request';
 
 const bannerUrl = `${import.meta.env.BASE_URL}images/dashboard-banner.png`;
 
-// ---- 静态假数据（v1.7：先展示，后续再接真实统计接口）----
 const ranges = ['近7天', '近30天', '近90天'];
 const range = ref('近7天');
 const donutFilter = ref('all');
+const loading = ref(true);
 
-const kpis = [
-  { key: 'exams', label: '试卷总数', value: '2,846', delta: '12.5%', down: false, bg: 'linear-gradient(135deg,#3b82f6,#60a5fa)', icon: Document, spark: [12, 18, 15, 22, 19, 28, 24, 33] },
-  { key: 'users', label: '考试人次', value: '48,721', delta: '18.3%', down: false, bg: 'linear-gradient(135deg,#22c55e,#4ade80)', icon: User, spark: [20, 16, 24, 21, 30, 27, 36, 34] },
-  { key: 'ai', label: 'AI 额度消耗', value: '36,892', delta: '7.6%', down: false, bg: 'linear-gradient(135deg,#8b5cf6,#a78bfa)', icon: Cpu, spark: [10, 14, 12, 18, 16, 22, 20, 26] },
-  { key: 'pending', label: '待阅试卷', value: '428', delta: '23.4%', down: true, bg: 'linear-gradient(135deg,#f43f5e,#fb7185)', icon: Clock, spark: [30, 26, 28, 22, 24, 18, 20, 14] }
-];
+interface Stats {
+  kpi: { exams: number; records: number; ai_usage: number; pending: number };
+  deltas: { exams: string; records: string; ai_usage: string };
+  sparks: { exams: number[]; records: number[]; ai: number[] };
+  trend: Array<{ day: string; count: number; avg: number }>;
+  donut: Array<{ name: string; value: number }>;
+  hot: Array<{ exam_id: number; title: string; count: number }>;
+  recent: Array<{ time: string; name: string; username: string; score: number; status: string }>;
+  notices: Array<{ text: string; date: string }>;
+  quota: { used_today: number; remaining: number; limit: number };
+}
 
-const donutData = [
-  { name: '客观题', value: 1284, pct: '45.1%', color: '#3b82f6' },
-  { name: '主观题', value: 712, pct: '25.0%', color: '#8b5cf6' },
-  { name: '组合题', value: 468, pct: '16.4%', color: '#14b8a6' },
-  { name: '实操题', value: 246, pct: '8.6%', color: '#f59e0b' },
-  { name: '其他', value: 136, pct: '4.8%', color: '#cbd5e1' }
-];
+const stats = ref<Stats | null>(null);
 
-const recentExams = [
-  { time: '2025年09月07日 14:32', name: '计算机基础测试', status: '进行中' },
-  { time: '2025年09月07日 11:20', name: '英语能力评估', status: '已完成' },
-  { time: '2025年09月07日 09:15', name: '职业技能考试', status: '已完成' },
-  { time: '2025年09月06日 16:48', name: '数学模拟测试', status: '已完成' },
-  { time: '2025年09月06日 14:22', name: '语文综合测试', status: '已完成' }
-];
+const fmt = (n: number) => (n || 0).toLocaleString();
+const isDown = (d?: string) => !!d && d !== '—' && d.startsWith('-');
 
-const hotList = [
-  { name: '计算机基础测试', count: '1,248' },
-  { name: '英语能力评估', count: '982' },
-  { name: '职业技能考试', count: '764' },
-  { name: '数学模拟测试', count: '621' },
-  { name: '综合素质测评', count: '508' }
-];
+const kpis = computed(() => {
+  const k = stats.value?.kpi || { exams: 0, records: 0, ai_usage: 0, pending: 0 };
+  const dl = stats.value?.deltas || { exams: '—', records: '—', ai_usage: '—' };
+  const sp = stats.value?.sparks || { exams: [], records: [], ai: [] };
+  return [
+    { key: 'exams', label: '试卷总数', value: fmt(k.exams), delta: dl.exams, down: isDown(dl.exams), bg: 'linear-gradient(135deg,#3b82f6,#60a5fa)', icon: Document, spark: sp.exams, color: '#3b82f6' },
+    { key: 'users', label: '考试人次', value: fmt(k.records), delta: dl.records, down: isDown(dl.records), bg: 'linear-gradient(135deg,#22c55e,#4ade80)', icon: User, spark: sp.records, color: '#22c55e' },
+    { key: 'ai', label: 'AI 额度消耗', value: fmt(k.ai_usage), delta: dl.ai_usage, down: isDown(dl.ai_usage), bg: 'linear-gradient(135deg,#8b5cf6,#a78bfa)', icon: Cpu, spark: sp.ai, color: '#8b5cf6' },
+    { key: 'pending', label: '待阅试卷', value: fmt(k.pending), delta: '—', down: false, bg: 'linear-gradient(135deg,#f43f5e,#fb7185)', icon: Clock, spark: sp.records.map(() => 0), color: '#f43f5e' }
+  ];
+});
 
-const notices = [
-  { text: '系统将于本周六进行例行维护', date: '09-05' },
-  { text: 'AI 题库新增模板更新', date: '09-03' },
-  { text: '新增试卷模板上线', date: '08-28' },
-  { text: '关于数据安全的说明', date: '08-25' }
-];
+const donutPalette = ['#3b82f6', '#8b5cf6', '#14b8a6', '#f59e0b', '#64748b', '#cbd5e1'];
+
+const donutData = computed(() => {
+  const total = (stats.value?.donut || []).reduce((s, d) => s + d.value, 0);
+  return (stats.value?.donut || []).map((d, i) => ({
+    name: d.name,
+    value: d.value,
+    pct: total > 0 ? `${((d.value * 100) / total).toFixed(1)}%` : '0%',
+    color: donutPalette[i % donutPalette.length]
+  }));
+});
+
+const donutTotal = computed(() => (stats.value?.donut || []).reduce((s, d) => s + d.value, 0));
+
+const recentExams = computed(() => (stats.value?.recent || []).map((r) => ({
+  time: r.time, name: r.name, status: '已完成'
+})));
+
+const hotList = computed(() => (stats.value?.hot || []).map((h) => ({
+  name: h.title, count: String(h.count)
+})));
+
+const notices = computed(() => stats.value?.notices || []);
+
+const quota = computed(() => {
+  const q = stats.value?.quota || { used_today: 0, remaining: 0, limit: 0 };
+  const total = q.used_today + q.remaining;
+  const pct = total > 0 ? Math.round((q.used_today * 100) / total) : 0;
+  const avg7 = ((stats.value?.sparks.ai || []).reduce((s, v) => s + v, 0) / 7) || 0;
+  return {
+    used: fmt(q.used_today),
+    total: fmt(total),
+    pct,
+    left: q.remaining >= 99999999 ? '无限制' : fmt(q.remaining),
+    days: q.remaining >= 99999999 || avg7 <= 0 ? '' : `${(q.remaining / avg7).toFixed(1)} 天`
+  };
+});
+
+const switchRange = (r: string) => {
+  range.value = r;
+  if (r !== '近7天') {
+    ElMessage.info('近30/90天视图即将上线，当前展示近7天数据');
+    range.value = '近7天';
+  }
+};
 
 // ---- ECharts ----
 const trendRef = ref<HTMLElement | null>(null);
@@ -218,8 +263,7 @@ const lineStyle = (color: string) => ({
 });
 
 const initCharts = () => {
-  // KPI 迷你折线
-  for (const k of kpis) {
+  for (const k of kpis.value) {
     const el = sparkRefs[k.key];
     if (!el) continue;
     const c = echarts.init(el);
@@ -227,34 +271,34 @@ const initCharts = () => {
       grid: { left: 0, right: 0, top: 4, bottom: 0 },
       xAxis: { type: 'category', show: false, data: k.spark.map((_, i) => i) },
       yAxis: { type: 'value', show: false },
-      series: [{ ...lineStyle(k.key === 'pending' ? '#f43f5e' : k.key === 'ai' ? '#8b5cf6' : k.key === 'users' ? '#22c55e' : '#3b82f6'), data: k.spark }]
+      series: [{ ...lineStyle(k.color), data: k.spark }]
     });
     charts.push(c);
   }
-  // 趋势图
+  const trend = stats.value?.trend || [];
   if (trendRef.value) {
     const c = echarts.init(trendRef.value);
     c.setOption({
       grid: { left: 36, right: 16, top: 32, bottom: 28 },
       tooltip: { trigger: 'axis' },
       legend: { top: 0, right: 0, textStyle: { fontSize: 11, color: '#64748b' }, data: ['平均分', '考试人次'] },
-      xAxis: { type: 'category', data: ['09/01', '09/02', '09/03', '09/04', '09/05', '09/06', '09/07'], axisLine: { lineStyle: { color: '#e2e8f0' } }, axisTick: { show: false }, axisLabel: { color: '#94a3b8', fontSize: 11 } },
+      xAxis: { type: 'category', data: trend.map((t) => t.day), axisLine: { lineStyle: { color: '#e2e8f0' } }, axisTick: { show: false }, axisLabel: { color: '#94a3b8', fontSize: 11 } },
       yAxis: { type: 'value', max: 100, splitLine: { lineStyle: { color: '#f1f5f9' } }, axisLabel: { color: '#94a3b8', fontSize: 11 } },
       series: [
-        { name: '平均分', data: [40, 38, 48, 47, 58, 79, 62], ...lineStyle('#3b82f6') },
-        { name: '考试人次', data: [24, 22, 32, 31, 42, 59, 43], ...lineStyle('#14b8a6') }
+        { name: '平均分', data: trend.map((t) => t.avg), ...lineStyle('#3b82f6') },
+        { name: '考试人次', data: trend.map((t) => t.count), ...lineStyle('#14b8a6') }
       ]
     });
     charts.push(c);
   }
-  // 环形图
   if (donutRef.value) {
     const c = echarts.init(donutRef.value);
+    const total = donutTotal.value;
     c.setOption({
       tooltip: { trigger: 'item' },
       graphic: [
         { type: 'text', left: 'center', top: '42%', style: { text: '总计', fontSize: 12, fill: '#94a3b8', textAlign: 'center' } },
-        { type: 'text', left: 'center', top: '50%', style: { text: '2,846', fontSize: 22, fontWeight: 800, fill: '#0f172a', textAlign: 'center' } },
+        { type: 'text', left: 'center', top: '50%', style: { text: String(total), fontSize: 22, fontWeight: 800, fill: '#0f172a', textAlign: 'center' } },
         { type: 'text', left: 'center', top: '60%', style: { text: '试卷总数', fontSize: 12, fill: '#94a3b8', textAlign: 'center' } }
       ],
       series: [{
@@ -264,24 +308,26 @@ const initCharts = () => {
         avoidLabelOverlap: true,
         label: { show: false },
         itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 4 },
-        data: donutData.map((d) => ({ name: d.name, value: d.value, itemStyle: { color: d.color } }))
+        data: donutData.value.map((d) => ({ name: d.name, value: d.value, itemStyle: { color: d.color } }))
       }]
     });
     charts.push(c);
   }
-  // 额度环
   if (ringRef.value) {
     const c = echarts.init(ringRef.value);
+    const q = stats.value?.quota || { used_today: 0, remaining: 0 };
+    const total = q.used_today + q.remaining;
+    const pct = total > 0 ? Math.round((q.used_today * 100) / total) : 0;
     c.setOption({
-      graphic: [{ type: 'text', left: 'center', top: '44%', style: { text: '68%\n已使用', fontSize: 16, fontWeight: 800, fill: '#0f172a', textAlign: 'center' } }],
+      graphic: [{ type: 'text', left: 'center', top: '44%', style: { text: `${pct}%\n已使用`, fontSize: 16, fontWeight: 800, fill: '#0f172a', textAlign: 'center' } }],
       series: [{
         type: 'pie',
         radius: ['72%', '88%'],
         center: ['50%', '50%'],
         label: { show: false },
         data: [
-          { value: 68, itemStyle: { color: '#3b82f6', borderRadius: 8 } },
-          { value: 32, itemStyle: { color: '#e0f2fe' } }
+          { value: pct, itemStyle: { color: '#3b82f6', borderRadius: 8 } },
+          { value: 100 - pct, itemStyle: { color: '#e0f2fe' } }
         ]
       }]
     });
@@ -291,8 +337,21 @@ const initCharts = () => {
 
 const handleResize = () => charts.forEach((c) => c.resize());
 
+const loadStats = async () => {
+  loading.value = true;
+  try {
+    const res: any = await request.get('/api/v1/admin/dashboard/stats');
+    stats.value = res;
+  } catch (e) {
+    /* 拦截器已提示；图表保持空态 */
+  } finally {
+    loading.value = false;
+    initCharts();
+  }
+};
+
 onMounted(() => {
-  initCharts();
+  loadStats();
   window.addEventListener('resize', handleResize);
 });
 

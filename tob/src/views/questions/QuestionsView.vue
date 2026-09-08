@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-08
+ * AI模型：Gemini 系列
+ * 修改内容：[✨AI出题界面极简化: 将「私有资料 (RAG)」移入高级选项折叠面板内，首屏主界面仅保留所属分类与出题材料，界面更加清爽不臃肿]
  * 修改时间：2026-09-06 22:30:00
  * AI模型：ZCode (GLM)
  * 修改内容：[v1.5 AI出题体验: 单次生成上限10道(数量输入/后端双重限制)+顶部红色提示+材料指定数量优先 + 生成中全弹窗loading("AI生成中，请稍候") /
@@ -81,8 +84,9 @@
           <span v-else style="color: #cbd5e1">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="270" fixed="right">
         <template #default="{ row }">
+          <el-button v-if="(row.source_ref || []).length" type="success" text size="small" @click="openTrace(row)">引用溯源</el-button>
           <el-button v-if="row.locked" type="warning" text size="small" @click="handleCopy(row)">复制新题</el-button>
           <el-button v-else type="primary" text size="small" @click="openEditDialog(row)">编辑</el-button>
           <el-button type="danger" text size="small" @click="handleDelete(row.id)">删除</el-button>
@@ -221,9 +225,17 @@
           <el-collapse-item name="adv">
             <template #title>
               <span class="adv-title">高级选项（选填）</span>
-              <span class="adv-tip">自定义题型、题目数量与难度；与材料描述冲突时以此为准（启用后三项需完整填写）</span>
+              <span class="adv-tip">私有资料(RAG)、自定义题型、题目数量与难度；与材料描述冲突时以此为准</span>
             </template>
             <div class="adv-body">
+              <div class="form-item">
+                <label class="form-label">私有资料（RAG，选填）</label>
+                <el-select v-model="aiForm.docIds" multiple collapse-tags collapse-tags-tooltip
+                           placeholder="勾选后 AI 优先依据资料出题并自动溯源" style="width: 100%">
+                  <el-option v-for="d in ragDocs" :key="d.id" :label="`${d.filename}（${d.total_chunks}块）`" :value="d.id" />
+                </el-select>
+                <div class="field-tip">仅列出已向量化完成的文档；入库题目自动携带引用，出处可在列表追溯</div>
+              </div>
               <div class="form-item">
                 <label class="form-label">题目难度</label>
                 <el-radio-group v-model="aiForm.difficulty" @change="markAdvancedTouched">
@@ -285,6 +297,13 @@
       </template>
     </el-dialog>
 
+    <!-- v1.3: RAG 引用溯源抽屉 -->
+    <TraceDrawer
+      :visible="traceVisible"
+      :question="traceQuestion"
+      @update:visible="traceVisible = $event"
+    />
+
     <!-- Excel 批量导入 Dialog -->
       <el-dialog v-model="importDialogVisible" title="批量导入题目" width="520px">
       <div style="margin-bottom: 12px; color: #64748b; font-size: 13px">
@@ -315,6 +334,7 @@ import { ref, reactive, onMounted, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Upload, Delete, UploadFilled } from '@element-plus/icons-vue';
 import request from '../../utils/request';
+import TraceDrawer from './components/TraceDrawer.vue';
 
 import { useRouter } from 'vue-router';
 
@@ -402,10 +422,21 @@ const aiForm = reactive({
   material: '',
   types: [] as string[],
   count: 5 as number | undefined,
-  difficulty: 'medium'
+  difficulty: 'medium',
+  docIds: [] as number[]
 });
 const aiPreview = ref<any[]>([]);
 const aiSelected = ref<any[]>([]);
+const ragDocs = ref<any[]>([]);
+
+const loadRagDocs = async () => {
+  try {
+    const res: any = await request.get('/api/v1/admin/rag/documents');
+    ragDocs.value = (res.items || []).filter((d: any) => d.status === 'done');
+  } catch (e) {
+    ragDocs.value = [];
+  }
+};
 
 const openAiDialog = () => {
   if (!checkCategoryPrerequisite()) return;
@@ -416,8 +447,10 @@ const openAiDialog = () => {
   aiForm.types = [];
   aiForm.count = 5;
   aiForm.difficulty = 'medium';
+  aiForm.docIds = [];
   advancedTouched.value = false;
   advancedOpen.value = [];
+  loadRagDocs();
   aiDialogVisible.value = true;
 };
 
@@ -460,6 +493,7 @@ const generateQuestions = async () => {
       types: useAdvanced ? aiForm.types : undefined,
       count: useAdvanced ? aiForm.count : undefined,
       difficulty: useAdvanced ? aiForm.difficulty : undefined,
+      doc_ids: aiForm.docIds.length ? aiForm.docIds : undefined,
       category_id: aiForm.category_id
     }, { timeout: 120000 }); // 真实大模型出题较慢, 覆盖全局 10s 超时
     aiPreview.value = res.questions || [];
@@ -662,8 +696,16 @@ const saveQuestion = async () => {
   loadQuestions();
 };
 
-const handleDelete = (id: number) => {
-  ElMessageBox.confirm('删除后题目将从题库隐藏，但已被试卷引用的原题仍可正常使用（防牵连软删除）。确定删除吗？', '提示', { type: 'warning' }).then(async () => {
+// v1.3: RAG 引用溯源
+const traceVisible = ref(false);
+const traceQuestion = ref<any>(null);
+
+const openTrace = (row: any) => {
+  traceQuestion.value = row;
+  traceVisible.value = true;
+};
+
+const handleDelete = (id: number) => {  ElMessageBox.confirm('删除后题目将从题库隐藏，但已被试卷引用的原题仍可正常使用（防牵连软删除）。确定删除吗？', '提示', { type: 'warning' }).then(async () => {
     await request.delete(`/api/v1/admin/questions/${id}`);
     ElMessage.success('已删除');
     loadQuestions();

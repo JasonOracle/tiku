@@ -1,5 +1,8 @@
 <!--
   * [变更日志]
+  * 修改时间：2026-09-08
+  * AI模型：Gemini 系列
+  * 修改内容：[增加 getOptKey 容错机制: 兼容 options 项中 key/label/value 或空 key 场景，自动按序号补齐 ABCDEF 标识，杜绝空中括号问题]
   * 修改时间：2026-09-07
   * AI模型：Muse Spark
   * 修改内容：[v1.2 Step4 新建: 题目透亮预览 QuestionPreview (选项与正确答案绿色高亮/判断徽章/填空简答案例紧凑展示, 普通组卷与 AI 审阅共用)]
@@ -9,13 +12,13 @@
     <!-- 单选/多选：普通选项灰色小标签，正确答案绿色高亮并前置 ✔ -->
     <div v-if="q.type === 'single' || q.type === 'multiple'" class="opts-list">
       <span
-        v-for="opt in q.options || []"
-        :key="opt.key"
+        v-for="(opt, oIdx) in q.options || []"
+        :key="getOptKey(opt, oIdx)"
         class="opt-chip"
-        :class="{ 'opt-correct': isCorrectOpt(opt.key) }"
+        :class="{ 'opt-correct': isCorrectOpt(getOptKey(opt, oIdx)) }"
       >
-        <template v-if="isCorrectOpt(opt.key)">✔ [{{ opt.key }}] {{ opt.text }}</template>
-        <template v-else>[{{ opt.key }}] {{ opt.text }}</template>
+        <template v-if="isCorrectOpt(getOptKey(opt, oIdx))">✔ [{{ getOptKey(opt, oIdx) }}] {{ opt.text }}</template>
+        <template v-else>[{{ getOptKey(opt, oIdx) }}] {{ opt.text }}</template>
       </span>
       <span v-if="!(q.options || []).length" class="muted">暂无选项</span>
     </div>
@@ -25,13 +28,13 @@
       <el-tag v-if="judgeVerdict" type="success" size="small" effect="dark">✔ 正确</el-tag>
       <el-tag v-else type="danger" size="small" effect="dark">✖ 错误</el-tag>
       <span
-        v-for="opt in q.options || []"
-        :key="opt.key"
+        v-for="(opt, oIdx) in q.options || []"
+        :key="getOptKey(opt, oIdx)"
         class="opt-chip"
-        :class="{ 'opt-correct': isCorrectOpt(opt.key) }"
+        :class="{ 'opt-correct': isCorrectOpt(getOptKey(opt, oIdx)) }"
       >
-        <template v-if="isCorrectOpt(opt.key)">✔ [{{ opt.key }}] {{ opt.text }}</template>
-        <template v-else>[{{ opt.key }}] {{ opt.text }}</template>
+        <template v-if="isCorrectOpt(getOptKey(opt, oIdx))">✔ [{{ getOptKey(opt, oIdx) }}] {{ opt.text }}</template>
+        <template v-else>[{{ getOptKey(opt, oIdx) }}] {{ opt.text }}</template>
       </span>
     </div>
 
@@ -59,6 +62,13 @@ const props = defineProps<{
 }>();
 
 const q = computed(() => props.question || {});
+
+const getOptKey = (opt: any, index: number): string => {
+  if (!opt) return 'ABCDEF'[index] || 'A';
+  const raw = opt.key || opt.label || opt.value || '';
+  if (String(raw).trim()) return String(raw).trim().toUpperCase();
+  return 'ABCDEF'[index] || `Opt${index + 1}`;
+};
 
 const normSet = (arr: any[]): Set<string> => {
   const list = Array.isArray(arr) ? arr : [];
