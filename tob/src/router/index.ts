@@ -1,5 +1,8 @@
 /**
  * [变更日志]
+ * 修改时间：2026-09-09
+ * AI模型：Gemini 系列
+ * 修改内容：[路由元信息 meta.title 规范更新: 原「题海管理」更名为「题目管理」，原「试卷与组卷」更名为「试卷管理」]
  * 修改时间：2026-09-03 23:41:00
  * AI模型：Gemini 底层
  * 修改内容：[1. createWebHistory 绑定 import.meta.env.BASE_URL，彻底解决 /admin/ 子路径空白白屏问题]
@@ -36,7 +39,7 @@ const routes: Array<RouteRecordRaw> = [
         path: 'questions',
         name: 'Questions',
         component: () => import('../views/questions/QuestionsView.vue'),
-        meta: { title: '题海管理' }
+        meta: { title: '题目管理' }
       },
       {
         path: 'rag',
@@ -48,7 +51,7 @@ const routes: Array<RouteRecordRaw> = [
         path: 'exams',
         name: 'Exams',
         component: () => import('../views/exams/ExamsView.vue'),
-        meta: { title: '试卷与组卷' }
+        meta: { title: '试卷管理' }
       },
       {
         path: 'categories',

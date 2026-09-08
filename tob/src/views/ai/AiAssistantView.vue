@@ -2,6 +2,15 @@
   * [变更日志]
   * 修改时间：2026-09-09
   * AI模型：Gemini 系列
+  * 修改内容：[页面跳转名称对齐: 批量出题确认后引导查看文案更新为「题目管理」]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
+  * 修改内容：[优化批量出题确认卡与操作按钮层级: 1. 消除标题与文档标签 flex 挤压造成的垂直竖排畸变，增加 wide-card 宽度与防折行保障; 2. 移除卡片内重复操作按钮，由外层统一风险操作区承担【确认批量存入题库】/【取消】，并在 executeAction 中自动联动分类参数入库]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
+  * 修改内容：[实现批量出题至题库人机协同卡与RAG切片溯源: 1. 支持 batch_create_questions_draft 渲染折叠多题卡片并提供分类选择器一键入库题海; 2. 题目卡片精准打上私有文档切片溯源标签与通用通识标; 3. 原生集成 TraceDrawer 抽屉，支持点击切片高亮查看教材原文段落]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
   * 修改内容：[优化 executeAction/cancelAction 系统回执数据流: 采用独立参数发送系统执行回执给 AI，杜绝直接将 [系统消息] 写入用户界面输入框 input.value，保障输入框纯净]
   * 修改时间：2026-09-09
   * AI模型：Gemini 系列
@@ -146,7 +155,7 @@
                 </template>
               </div>
               
-              <div class="action-card" v-if="m.actionRequired">
+              <div class="action-card" :class="{ 'wide-card': ['batch_create_questions_draft', 'create_exam_draft'].includes(m.toolName || '') }" v-if="m.actionRequired">
                 <div class="action-header" :class="[m.actionResolved ? 'resolved' : '', riskHeaderClass(m.riskLevel)]">
                   <span class="header-icon"><el-icon><MagicStick /></el-icon></span> 
                   <span class="header-title">确认: {{ riskLabel(m.riskLevel) }}风险业务操作</span> 
@@ -230,6 +239,71 @@
                     </div>
                     <div v-else class="action-desc">试卷草稿已创建，可前往<a class="exam-link" @click="goExams">试卷管理</a>查看。</div>
                   </div>
+                  <!-- 批量题目确认卡：题目列表折叠全览 + 私有资料溯源标 + 题库分类选择器 + 统一底部执行 -->
+                  <div v-if="m.toolName === 'batch_create_questions_draft'" class="exam-draft-card batch-draft-card">
+                    <div class="batch-draft-header">
+                      <div class="batch-draft-title-wrap">
+                        <el-icon style="color: #0284c7; font-size: 16px;"><MagicStick /></el-icon>
+                        <span class="batch-draft-title">AI 批量出题确认卡 (共 {{ (m.arguments?.questions || []).length }} 题 · 存入题海)</span>
+                      </div>
+                      <el-tag v-if="m.arguments?.doc_name" type="success" size="small" effect="plain" class="batch-doc-tag">
+                        📚 已关联私有文档《{{ m.arguments.doc_name }}》
+                      </el-tag>
+                    </div>
+                    <div class="exam-draft-summary" style="margin-top: 6px; font-size: 12px; color: #64748b;">
+                      {{ examTypeSummary(m.arguments) }} · 审核题目无误后，选择入库分类并点击下方【确认执行】即可存入题库
+                    </div>
+                    <el-collapse style="margin-top: 10px;">
+                      <el-collapse-item
+                        v-for="(q, qi) in (m.arguments?.questions || [])"
+                        :key="qi"
+                        :name="qi"
+                        :title="`第 ${qi + 1} 题 · [${draftPreview(q).typeLabel}] ${q.title}`"
+                      >
+                        <div class="draft-meta" style="margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                          <div>
+                            <el-tag size="small" type="primary">{{ draftPreview(q).typeLabel }}</el-tag>
+                            <span style="margin-left: 8px; font-size: 12px; color: #64748b;">难度 {{ draftPreview(q).difficulty }} · {{ draftPreview(q).score }} 分</span>
+                          </div>
+                          <!-- 溯源标签: 命中文档切片展示绿色可点击溯源; 通识展示灰色 -->
+                          <div>
+                            <el-tag
+                              v-if="(q.source_ref && q.source_ref.length) || q.source_origin?.includes('切片')"
+                              type="success"
+                              size="small"
+                              style="cursor: pointer;"
+                              @click.stop="openBatchTrace(q)"
+                            >
+                              📚 依据{{ q.source_origin || '文档切片' }} (查看原文)
+                            </el-tag>
+                            <el-tag v-else type="info" size="small" effect="plain">
+                              🌐 专业通识拓展
+                            </el-tag>
+                          </div>
+                        </div>
+                        <div
+                          v-for="(opt, oi) in draftPreview(q).options"
+                          :key="oi"
+                          class="draft-opt"
+                          :class="{ correct: opt.correct }"
+                        >
+                          <span class="draft-opt-key">{{ opt.label }}</span>
+                          <span>{{ opt.text }}</span>
+                          <span v-if="opt.correct" class="draft-opt-mark">✔</span>
+                        </div>
+                        <div class="draft-row" style="margin-top: 6px"><span class="draft-label">正确答案：</span>{{ draftPreview(q).answerText }}</div>
+                        <div v-if="draftPreview(q).explanation" class="draft-row"><span class="draft-label">解析：</span>{{ draftPreview(q).explanation }}</div>
+                      </el-collapse-item>
+                    </el-collapse>
+                    <el-form label-width="80px" size="small" style="margin-top: 14px">
+                      <el-form-item label="入库分类" style="margin-bottom: 0;">
+                        <el-select v-model="batchFormOf(m).category_id" placeholder="选择存入题目分类" style="width: 100%">
+                          <el-option v-for="c in questionCategories" :key="c.id" :label="c.name" :value="c.id" />
+                        </el-select>
+                      </el-form-item>
+                    </el-form>
+                    <div v-if="m.actionResolved" class="action-desc" style="margin-top: 10px;">题目已成功存入题库，可前往<a class="exam-link" @click="goQuestions">题目管理</a>查看与引用。</div>
+                  </div>
                   <!-- 新建题目：结构化题面预览（题干/选项/答案/解析），告别生硬 JSON -->
                   <div v-else-if="m.toolName === 'create_question_draft'" class="draft-preview">
                     <div class="draft-title">{{ draftPreview(m.arguments).title }}</div>
@@ -273,7 +347,7 @@
                   </div>
                   <div class="action-footer" v-if="!m.actionResolved && m.toolName !== 'create_exam_draft'">
                     <button :class="m.toolName === 'delete_exam' ? 'btn-confirm' : (m.riskLevel === 'high' ? 'btn-confirm' : 'btn-confirm-medium')" @click="executeAction(m)">
-                      {{ m.toolName === 'delete_exam' ? '确认删除试卷' : '确认执行' }}
+                      {{ m.toolName === 'delete_exam' ? '确认删除试卷' : (m.toolName === 'batch_create_questions_draft' ? '确认批量存入题库' : '确认执行') }}
                     </button>
                     <button class="btn-cancel" @click="cancelAction(m)">取消</button>
                   </div>
@@ -395,6 +469,13 @@
       @update:visible="gradingVisible = $event"
       @graded="handleDrawerGraded"
     />
+
+    <!-- RAG 知识库切片高亮溯源抽屉 (复用题库溯源抽屉) -->
+    <TraceDrawer
+      :visible="traceVisible"
+      :question="traceQuestion"
+      @update:visible="traceVisible = $event"
+    />
   </div>
 </template>
 
@@ -407,6 +488,7 @@ import { marked } from 'marked';
 import request from '../../utils/request';
 import { useUserStore } from '../../store/user';
 import GradingDrawer from '../exams/components/GradingDrawer.vue';
+import TraceDrawer from '../questions/components/TraceDrawer.vue';
 
 interface ActionCard {
   actionType: string;
@@ -716,6 +798,20 @@ interface ExamDraftForm {
 }
 
 const examCategories = ref<any[]>([]);
+const questionCategories = ref<any[]>([]);
+
+// 溯源抽屉响应式状态
+const traceVisible = ref(false);
+const traceQuestion = ref<any>(null);
+
+const openBatchTrace = (q: any) => {
+  traceQuestion.value = q;
+  traceVisible.value = true;
+};
+
+const goQuestions = () => {
+  router.push('/questions');
+};
 
 const loadExamCategories = async (): Promise<void> => {
   try {
@@ -723,6 +819,59 @@ const loadExamCategories = async (): Promise<void> => {
     examCategories.value = Array.isArray(res) ? res : (res.items || []);
   } catch (e) {
     examCategories.value = [];
+  }
+};
+
+const loadQuestionCategories = async (): Promise<void> => {
+  try {
+    const res: any = await request.get('/api/v1/admin/categories', { params: { target_type: 'question' } });
+    questionCategories.value = Array.isArray(res) ? res : (res.items || []);
+  } catch (e) {
+    questionCategories.value = [];
+  }
+};
+
+interface BatchQuestionsForm {
+  category_id: number | null;
+}
+
+const batchFormOf = (m: ChatMessage): BatchQuestionsForm => {
+  const holder = m as any;
+  if (!holder.batchForm) {
+    holder.batchForm = {
+      category_id: questionCategories.value.length > 0 ? questionCategories.value[0].id : null
+    };
+  }
+  if (holder.batchForm.category_id == null && questionCategories.value.length > 0) {
+    holder.batchForm.category_id = questionCategories.value[0].id;
+  }
+  return holder.batchForm as BatchQuestionsForm;
+};
+
+const confirmBatchQuestionsDraft = async (m: ChatMessage): Promise<void> => {
+  if (m.actionResolved || sending.value) return;
+  const f = batchFormOf(m);
+  const merged = {
+    ...(m.arguments || {}),
+    category_id: f.category_id ?? undefined
+  };
+  sending.value = true;
+  try {
+    const res: any = await request.post('/api/v1/admin/ai/chat/execute_tool', {
+      tool_name: 'batch_create_questions_draft',
+      arguments: merged,
+      tool_call_id: m.toolCallId,
+      message_id: m.id ?? null
+    });
+    m.actionResolved = true;
+    ElMessage.success(res?.message || '题目已批量存入题库');
+
+    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${m.toolName}，后端返回的结果是：${JSON.stringify(res)}`;
+    await send(systemMsg);
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '批量入库失败');
+  } finally {
+    sending.value = false;
   }
 };
 
@@ -1142,15 +1291,23 @@ const executeAction = async (m: ChatMessage) => {
   if (sending.value || m.actionResolved) return;
   sending.value = true;
   try {
+    let finalArgs = m.arguments;
+    if (m.toolName === 'batch_create_questions_draft') {
+      const f = batchFormOf(m);
+      finalArgs = {
+        ...(m.arguments || {}),
+        category_id: f.category_id ?? undefined
+      };
+    }
     const res: any = await request.post('/api/v1/admin/ai/chat/execute_tool', {
       tool_name: m.toolName,
-      arguments: m.arguments,
+      arguments: finalArgs,
       tool_call_id: m.toolCallId,
       message_id: m.id ?? null
     });
     // 服务端已将 action_card_data.status 置 executed，本地同步防回退
     m.actionResolved = true;
-    ElMessage.success('操作已执行');
+    ElMessage.success(res?.message || '操作已执行');
     
     // 把结果当做隐形系统回执直接发给 AI，不写入用户输入框
     const systemMsg = `[系统消息]: 我已批准并执行了操作 ${m.toolName}，后端返回的结果是：${JSON.stringify(res)}`;
@@ -1197,6 +1354,7 @@ const submitFeedback = async (content: string, rating: 'up' | 'down') => {
 onMounted(() => {
   initCloud();
   loadExamCategories();
+  loadQuestionCategories();
 });
 </script>
 
@@ -1315,7 +1473,12 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   border: 1px solid #fee2e2;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
+  transition: max-width 0.2s ease;
+}
+
+.action-card.wide-card {
+  max-width: 680px;
 }
 
 .action-header.high-risk {
@@ -1729,6 +1892,42 @@ onMounted(() => {
   margin-bottom: 16px;
   font-size: 13px;
   color: #334155;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.batch-draft-card {
+  background: #f8fafc;
+  border: 1px solid #e0f2fe;
+}
+
+.batch-draft-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.batch-draft-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.batch-draft-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0369a1;
+  white-space: nowrap;
+}
+
+.batch-doc-tag {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .exam-draft-title {

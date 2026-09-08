@@ -1,5 +1,11 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-09
+ * AI模型：Gemini 系列
+ * 修改内容：[统一命题资料文案为「参考私有文库」: 明确说明与出题材料不相关时将智能脱钩避免张冠李戴，提升交互准确性与专业感]
+ * 修改时间：2026-09-09
+ * AI模型：Gemini 系列
+ * 修改内容：[优化AI出题私有资料交互: 1. 将「参考教材/私有资料(RAG)」下拉多选移至出题材料正下方，极大提升发现率; 2. 增加 v-if="ragDocs.length" 条件渲染，无已解析文档时不予展示; 3. 从折叠的高级选项中剥离]
  * 修改时间：2026-09-08
  * AI模型：Gemini 系列
  * 修改内容：[✨AI出题界面极简化: 将「私有资料 (RAG)」移入高级选项折叠面板内，首屏主界面仅保留所属分类与出题材料，界面更加清爽不臃肿]
@@ -220,22 +226,24 @@
                     placeholder="粘贴一段材料文本，或直接描述需求。例如：生成5道关于Python并发编程的题目，带详细解析" />
         </div>
 
+        <!-- 私有文库（RAG，选填多选）：仅当存在已解析完成的文档时呈现，紧跟出题材料下方 -->
+        <div v-if="ragDocs.length" class="form-item">
+          <label class="form-label">参考私有文库（选填）</label>
+          <el-select v-model="aiForm.docIds" multiple collapse-tags collapse-tags-tooltip clearable
+                     placeholder="可多选：勾选后 AI 优先依据所选私有文库出题并自动溯源（留空则依据出题材料/通用题库）" style="width: 100%">
+            <el-option v-for="d in ragDocs" :key="d.id" :label="`${d.filename}（${d.total_chunks}块）`" :value="d.id" />
+          </el-select>
+          <div class="field-tip">已检测到您在私有文库上传的资料；若所选文档与出题材料不相关，系统将自动脱钩并以通识出题，避免张冠李戴</div>
+        </div>
+
         <!-- 高级选项: 默认收起, 提示放在标题右侧 -->
         <el-collapse v-model="advancedOpen" class="adv-collapse">
           <el-collapse-item name="adv">
             <template #title>
               <span class="adv-title">高级选项（选填）</span>
-              <span class="adv-tip">私有资料(RAG)、自定义题型、题目数量与难度；与材料描述冲突时以此为准</span>
+              <span class="adv-tip">自定义题型、题目数量与难度；与材料描述冲突时以此为准</span>
             </template>
             <div class="adv-body">
-              <div class="form-item">
-                <label class="form-label">私有资料（RAG，选填）</label>
-                <el-select v-model="aiForm.docIds" multiple collapse-tags collapse-tags-tooltip
-                           placeholder="勾选后 AI 优先依据资料出题并自动溯源" style="width: 100%">
-                  <el-option v-for="d in ragDocs" :key="d.id" :label="`${d.filename}（${d.total_chunks}块）`" :value="d.id" />
-                </el-select>
-                <div class="field-tip">仅列出已向量化完成的文档；入库题目自动携带引用，出处可在列表追溯</div>
-              </div>
               <div class="form-item">
                 <label class="form-label">题目难度</label>
                 <el-radio-group v-model="aiForm.difficulty" @change="markAdvancedTouched">

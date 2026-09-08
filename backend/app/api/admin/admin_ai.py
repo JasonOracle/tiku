@@ -2,6 +2,18 @@
 [变更日志]
 修改时间：2026-09-09
 AI模型：Gemini 系列
+修改内容：[落地方案A RAG相似度阈值过滤脱钩与私有文库规范: 1. 出题、组卷与助管流式检索统一注入 min_score=0.45 阈值，选中文档不相关时自动脱钩，避免张冠李戴伪溯源; 2. 统一全站提示词与文案为「私有文库」]
+修改时间：2026-09-09
+AI模型：Gemini 系列
+修改内容：[AI智能组卷集成私有文库RAG资料多选: 1. ExamGenRequest 增加 doc_ids 字段; 2. ai_generate_exam 支持检索选定文档切片并注入 prompt 作为命题核心依据; 3. 新生成的试卷题目正确携带 source_ref 溯源数据]
+修改时间：2026-09-09
+AI模型：Gemini 系列
+修改内容：[AI助管集成私有文库RAG自动感知与批量题目入库分流: 1. 明确区分题库出题(batch_create_questions_draft)与试卷组卷(create_exam_draft); 2. 自动检索出题人私有文库Top-K切片作为出题依据并携带chunk_id溯源; 3. 题目折叠卡片清晰标注真实出处与专业通识拓展]
+修改时间：2026-09-09
+AI模型：Gemini 系列
+修改内容：[修复多题出题意图误判为单题Bug: 明确当用户要求生成2道及以上题目（如“出5道题目”、“生成3道判断题”）时，一律路由至 create_exam_draft 组卷工具以完整卡片全量展示题目，严禁调用 create_question_draft 只创建一道题]
+修改时间：2026-09-09
+AI模型：Gemini 系列
 修改内容：[强化试卷删除意图分流: 1. 单份试卷删除精准路由至 delete_exam 工具触发人机中风险确认卡; 2. 批量删除全部试卷意图严禁调用工具，直接回复暂不支持批量删除并附带 action_list 跳转试卷管理页面引导卡]
 修改时间：2026-09-08
 AI模型：Gemini 系列
@@ -75,6 +87,7 @@ class ExamGenRequest(BaseModel):
     specs: List[ExamSpecItem] = Field(..., description="题型构成要求")
     difficulty: Optional[str] = Field("medium", description="难度: easy, medium, hard")
     category_id: Optional[int] = Field(None, description="试卷分类")
+    doc_ids: Optional[List[int]] = Field(None, description="私有文库文档ID列表 (RAG 选填多选)")
     is_timed: bool = Field(True)
     time_limit: int = Field(30)
     pass_percent: int = Field(60)
@@ -449,10 +462,11 @@ def ai_generate_questions(
         if admin.role != "super_admin":
             own = {r[0] for r in db.query(DocLibrary.id).filter(DocLibrary.admin_id == admin.id).all()}
             scope_ids = [i for i in scope_ids if i in own]
-        hits = retrieve_chunks(db, data.material, doc_ids=scope_ids or [-1], limit=6) if scope_ids else []
+        # min_score=0.45: 严格过滤不相关文档，若用户选了不相关的文档则自动脱钩，避免张冠李戴
+        hits = retrieve_chunks(db, data.material, doc_ids=scope_ids or [-1], limit=6, min_score=0.45) if scope_ids else []
         if hits:
             rag_refs = [{"doc_id": h["doc_id"], "chunk_id": h["id"]} for h in hits]
-            rag_block = "【私有资料(出题必须优先依据, 每题须能从中找到出处)】\n" + "\n---\n".join(
+            rag_block = "【私有文库资料(出题必须优先依据以下真实段落, 每题须能从中找到出处)】\n" + "\n---\n".join(
                 f"[资料{h['id']}] {h['text']}" for h in hits) + "\n"
 
     # ---- Prompt: 高级选项是硬性指令 (与 material 文字冲突时以指令为准) ----
@@ -566,7 +580,26 @@ def ai_generate_exam(
     # v1.3 任务2: 拼装长期记忆偏好 (静默, 无记忆时为空)
     mem_ctx = memory_service.recall(admin.id, data.description)
     need_text = ((mem_ctx + "\n") if mem_ctx else "") + data.description
+
+    # RAG 私有资料检索 (指定文档多选, 教师隔离/超管全库)
+    rag_refs: List[dict] = []
+    rag_block = ""
+    if data.doc_ids:
+        from app.api.admin.admin_rag import retrieve_chunks
+        from app.models.rag import DocLibrary
+        scope_ids = list(data.doc_ids)
+        if admin.role != "super_admin":
+            own = {r[0] for r in db.query(DocLibrary.id).filter(DocLibrary.admin_id == admin.id).all()}
+            scope_ids = [i for i in scope_ids if i in own]
+        # min_score=0.45: 严格过滤不相关文档切片，若用户选了不相关文档则自动脱钩，避免张冠李戴
+        hits = retrieve_chunks(db, data.description, doc_ids=scope_ids or [-1], limit=8, min_score=0.45) if scope_ids else []
+        if hits:
+            rag_refs = [{"doc_id": h["doc_id"], "chunk_id": h["id"]} for h in hits]
+            rag_block = "【指定私有文库教材/资料切片（出卷请优先依据以下资料出题，保证专业性与事实准确）】\n" + "\n---\n".join(
+                f"[资料切片#{h['id']}] {h['text']}" for h in hits) + "\n\n"
+
     prompt = (
+        f"{rag_block}"
         f"组卷需求: {need_text}\n"
         f"题型构成要求: {[(s.q_type, s.count) for s in data.specs]}\n"
         f"题目难度倾向: {difficulty}\n"
@@ -623,7 +656,8 @@ def ai_generate_exam(
                 difficulty=nq["difficulty"],
                 score=10,
                 source="ai",
-                category_id=first_category_id(db, "question"),
+                source_ref=rag_refs if rag_refs else None,
+                category_id=data.category_id or first_category_id(db, "question"),
                 creator_id=admin.id,
             )
             db.add(q)
@@ -770,16 +804,17 @@ def _build_chat_system(admin: Admin):
     )
     system_prompt += (
         "【意图精准分流】\n"
-        "1. 当用户要求创建或出一道特定题目时，调用 create_question_draft；\n"
-        "2. 当用户要求生成一份试卷/测试卷/多题组卷时，必须调用 create_exam_draft，"
-        "并在 questions 参数中一次性原创生成指定题型与数量的完整题目列表，严禁用 create_question_draft 只创建一道题！\n"
-        "3. 当用户要求导出或下载试卷时，必须调用 export_my_latest_exam 工具；获取到工具结果后，必须在回复末尾附带 ```exam_card 代码块提供下载试卷卡片，格式严格如下:\n"
+        "1. 【严格单题创建】只有当用户明确要求创建「1道题」、「单道特定题目」（例如“出一道关于勾股定理的选择题”、“新增一道单选题”）时，才调用 create_question_draft；\n"
+        "2. 【批量出题到题库/题海】只要用户要求生成多道题目（数量>=2，例如“出5道题目”、“生成3道道路工程判断题”、“出5道关于道路工程的题目”），且未指明是整份试卷时，必须强制调用 batch_create_questions_draft！并在 questions 参数中一次性原创生成指定数量的完整题目列表，前端将呈现折叠题目卡片供老师一键存入题库；\n"
+        "3. 【私有文库RAG自动溯源】当系统在上下文中提供了出题人私有资料切片（形如 [文档:名称 | 切片#ID]）时，在生成题目时必须优先依据切片内容出题！若某题确实取材自切片，必须在题目的 source_ref 参数中填入 [{'doc_id': 文档ID, 'chunk_id': 切片ID}]，并在 source_origin 中填入切片简写（如'切片#2'）；若该题属于通用专业通识拓展，则 source_ref 置空并在 source_origin 中填入'专业通识拓展'。真实标注，严禁虚假挂靠！\n"
+        "4. 【整套试卷组卷】只有当用户明确要求“生成试卷/测试卷/模拟卷/综合测验/期末卷”等整卷组织时，才调用 create_exam_draft 生成试卷；\n"
+        "5. 当用户要求导出或下载试卷时，必须调用 export_my_latest_exam 工具；获取到工具结果后，必须在回复末尾附带 ```exam_card 代码块提供下载试卷卡片，格式严格如下:\n"
         "```exam_card\n"
         '{"type": "exam_download", "exam_id": 试卷ID, "title": "试卷标题", "total_score": 总分, "question_count": 题数, "download_url": "/api/v1/admin/exams/试卷ID/export"}\n'
         "```\n"
-        "4. 当用户询问统计最近一周（或指定周期）出过的试题通过率/及格率时，必须调用 get_my_questions_pass_rate 工具进行数据统计分析。\n"
-        "5. 【单份试卷删除】当用户说“我想删除这份试卷”、“帮我把这套试卷删了”、“删除试卷”等指代某份具体试卷时，必须调用 delete_exam 工具（参数 exam_id 或 keyword 匹配，未指明时默认取最近一份名下试卷）。调用后系统会弹出确认卡片，待老师确认后执行安全删除。\n"
-        "6. 【批量删除全部试卷拦截】当用户表达“想删除我出的所有试卷”、“清空我出的全部试卷”、“把我的试卷全部删掉”等批量全量删除意图时，严禁调用任何删除工具！必须明确礼貌地回复：出于数据安全与防误触考虑，系统暂不支持一次性批量清空或删除您名下的所有试卷；并告知其可在试卷管理页面中对未上架且无作答记录的草稿逐一处理或下架归档。并在回复末尾附带跳转试卷管理的 action_list 操作代码块，格式严格如下:\n"
+        "6. 当用户询问统计最近一周（或指定周期）出过的试题通过率/及格率时，必须调用 get_my_questions_pass_rate 工具进行数据统计分析。\n"
+        "7. 【单份试卷删除】当用户说“我想删除这份试卷”、“帮我把这套试卷删了”、“删除试卷”等指代某份具体试卷时，必须调用 delete_exam 工具（参数 exam_id 或 keyword 匹配，未指明时默认取最近一份名下试卷）。调用后系统会弹出确认卡片，待老师确认后执行安全删除。\n"
+        "8. 【批量删除全部试卷拦截】当用户表达“想删除我出的所有试卷”、“清空我出的全部试卷”、“把我的试卷全部删掉”等批量全量删除意图时，严禁调用任何删除工具！必须明确礼貌地回复：出于数据安全与防误触考虑，系统暂不支持一次性批量清空或删除您名下的所有试卷；并告知其可在试卷管理页面中对未上架且无作答记录的草稿逐一处理或下架归档。并在回复末尾附带跳转试卷管理的 action_list 操作代码块，格式严格如下:\n"
         "```action_list\n"
         '[{"title": "前往试卷管理", "badge": "快捷入口", "action": {"type": "in_app", "label": "进入试卷管理", "target": "go_exams"}}]\n'
         "```\n"
@@ -914,6 +949,31 @@ def ai_chat_stream(
     mem_ctx = memory_service.recall(admin.id, display)
     if mem_ctx:
         system_prompt += "\n" + mem_ctx
+
+    # 自动检索出题人私有文库 (RAG 知识感知: 限定当前用户自传文档或超管全库)
+    try:
+        from app.models.rag import DocLibrary
+        from app.api.admin.admin_rag import retrieve_chunks
+        user_doc_ids = [d.id for d in db.query(DocLibrary.id).filter(
+            DocLibrary.admin_id == admin.id if admin.role != "super_admin" else True,
+            DocLibrary.status == "done"
+        ).all()]
+        if user_doc_ids:
+            # min_score=0.45: 仅当用户提问与文库切片语义高度相关时才注入上下文，避免张冠李戴
+            rag_hits = retrieve_chunks(db, display, doc_ids=user_doc_ids, limit=4, min_score=0.45)
+            if rag_hits:
+                doc_groups: dict = {}
+                for h in rag_hits:
+                    fn = h.get("filename") or "私有文库参考资料"
+                    doc_groups.setdefault(fn, []).append(h)
+                rag_lines = ["\n【系统自动检索命中的私有文库切片参考资料 (若用户要求出题，请优先基于以下段落命题并标注对应 chunk_id)】:"]
+                for fn, chunks in doc_groups.items():
+                    rag_lines.append(f"《{fn}》:")
+                    for c in chunks:
+                        rag_lines.append(f"  [文档ID:{c.get('doc_id')} | 切片#{c.get('id')}]: {c.get('text')}")
+                system_prompt += "\n".join(rag_lines) + "\n"
+    except Exception:
+        pass
 
     # 会话归属解析 (未传自动新建) + User 提问即时落库
     if data.session_id is not None:

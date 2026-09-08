@@ -2,6 +2,12 @@
 [变更日志]
 修改时间：2026-09-09
 AI模型：Gemini 系列
+修改内容：[新增 batch_create_questions_draft 批量出题至题库工具: 支持单次生成多道题目并在确认后原子性存入题库(questions表)，支持携带题目分类与私有文库切片溯源信息(source_ref)，彻底将批量出题到题库与试卷组卷(Exam)两套业务解耦隔离]
+修改时间：2026-09-09
+AI模型：Gemini 系列
+修改内容：[优化 create_question_draft 与 create_exam_draft 工具语义: 明确 create_question_draft 仅用于单道题目的创建; 凡要求生成2道及以上题目或试卷时，必须使用 create_exam_draft 一次性生成全量题目列表并渲染组卷预览卡片]
+修改时间：2026-09-09
+AI模型：Gemini 系列
 修改内容：[优化 delete_exam 工具: 允许未有人作答(graded=0)的已下架/已归档试卷物理删除，仅拦截正在上架中(published)或已有真实学员作答记录的试卷，彻底打通用户下架后删除试卷的闭环]
 修改时间：2026-09-09
 AI模型：Gemini 系列
@@ -200,6 +206,92 @@ def create_question_draft_handler(db: Session, admin: Admin, args: dict) -> dict
     db.commit()
     db.refresh(q)
     return {"success": True, "message": f"题目草稿已创建，ID: {q.id}", "question_id": q.id}
+
+
+def batch_create_questions_draft_handler(db: Session, admin: Admin, args: dict) -> dict:
+    """批量创建题目存入题海/题库 (AI 工具链路, 前端人机协同卡片确认后入库)"""
+    from fastapi import HTTPException
+    from app.models.category import ExamCategory
+    from app.services.exam_service import first_category_id, validate_fill_question
+    from app.services.audit_service import write_audit
+
+    raw_questions = args.get("questions")
+    if not isinstance(raw_questions, list) or not raw_questions:
+        raise HTTPException(status_code=400, detail="题目列表不能为空，必须包含至少1道有效题目")
+
+    # 分类指定优先，未指定则兜底取出题人可用分类或题库首分类
+    cat_id = args.get("category_id")
+    if not cat_id:
+        cat_id = first_category_id(db, "question")
+
+    created_ids = []
+    for idx, q_data in enumerate(raw_questions):
+        if not isinstance(q_data, dict):
+            continue
+        q_type = q_data.get("type", "single")
+        if q_type not in ("single", "multiple", "judge", "fill", "short"):
+            continue
+        title = str(q_data.get("title") or "").strip()
+        if not title:
+            continue
+        norm_options = _normalize_tool_options(q_data.get("options"))
+        answer = _normalize_tool_answer(q_type, q_data.get("answer"), norm_options)
+        if not answer:
+            continue
+        if q_type == "fill":
+            try:
+                validate_fill_question(title, answer)
+            except Exception:
+                pass
+        diff = q_data.get("difficulty", "medium")
+        if diff not in ("easy", "medium", "hard"):
+            diff = "medium"
+        try:
+            score = int(q_data.get("score", 10))
+        except (TypeError, ValueError):
+            score = 10
+
+        # 解析溯源引用 source_ref
+        raw_ref = q_data.get("source_ref")
+        clean_ref = []
+        if isinstance(raw_ref, list):
+            for ref_item in raw_ref:
+                if isinstance(ref_item, dict) and "chunk_id" in ref_item:
+                    clean_ref.append({
+                        "doc_id": ref_item.get("doc_id"),
+                        "chunk_id": ref_item.get("chunk_id")
+                    })
+
+        q = Question(
+            category_id=cat_id,
+            type=q_type,
+            title=title,
+            options=norm_options,
+            answer=answer,
+            explanation=str(q_data.get("explanation", "")),
+            difficulty=diff,
+            score=score,
+            source="ai",
+            creator_id=admin.id,
+            source_ref=clean_ref if clean_ref else None
+        )
+        db.add(q)
+        db.flush()
+        created_ids.append(q.id)
+
+    if not created_ids:
+        raise HTTPException(status_code=400, detail="未成功解析到任何合规格式的题目")
+
+    db.commit()
+    write_audit(db, "create_batch", "question", None, summary=f"AI 批量出题入库共 {len(created_ids)} 道题",
+                after_data={"count": len(created_ids), "question_ids": created_ids}, admin=admin)
+    db.commit()
+    return {
+        "success": True,
+        "count": len(created_ids),
+        "question_ids": created_ids,
+        "message": f"成功将 {len(created_ids)} 道题目存入题库（题海管理）。"
+    }
 
 
 def _parse_tool_datetime(val):
@@ -563,7 +655,7 @@ REGISTRY: Dict[str, dict] = {
     "create_question_draft": {
         "definition": AiToolDefinition(
             name="create_question_draft",
-            description="创建一道新的题目。当用户要求新增或创建特定题目时调用。",
+            description="仅用于创建【单道题目】。当且仅当用户明确要求新增或创建1道特定题目（如“出一道题”）时调用。若用户要求生成多道题（数量>=2，如“出5道题”），严禁调用此工具，必须调用 batch_create_questions_draft！",
             parameters={
                 "type": "object",
                 "properties": {
@@ -582,10 +674,52 @@ REGISTRY: Dict[str, dict] = {
         ),
         "handler": create_question_draft_handler
     },
+    "batch_create_questions_draft": {
+        "definition": AiToolDefinition(
+            name="batch_create_questions_draft",
+            description="批量生成多道题目到题库/题海（非试卷）。当用户要求“出N道题目”（N>=2，如“出5道关于道路工程的题目”、“生成3道判断题”、“出一些题目”）且未指明是整张试卷时，必须调用此工具。必须在 questions 参数中一次性原创生成满足指定数量与题型的完整题目列表，前端将渲染批量题目折叠卡片与切片溯源标，用户确认后存入题海管理。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "doc_name": {"type": "string", "description": "命中的私有知识库文档名称（可选，若基于文库切片出题则填入，如'道路工程技术规范.pdf'）"},
+                    "questions": {
+                        "type": "array",
+                        "description": "原创生成的全量题目列表",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "enum": ["single", "multiple", "judge", "fill", "short"]},
+                                "title": {"type": "string", "description": "题干"},
+                                "options": {
+                                    "type": "array",
+                                    "items": {"type": "object", "properties": {"key": {"type": "string"}, "text": {"type": "string"}}}
+                                },
+                                "answer": {"type": "array", "items": {"type": "string"}},
+                                "explanation": {"type": "string"},
+                                "difficulty": {"type": "string", "enum": ["easy", "medium", "hard"]},
+                                "score": {"type": "integer"},
+                                "source_ref": {
+                                    "type": "array",
+                                    "description": "若该题取材自知识库切片，必须附带 [{doc_id: 文档ID, chunk_id: 切片ID}]；若属于通用拓展则留空",
+                                    "items": {"type": "object"}
+                                },
+                                "source_origin": {"type": "string", "description": "如'切片#2'或'专业通识拓展'，供卡片微标直观显示"}
+                            },
+                            "required": ["type", "title", "answer"]
+                        }
+                    }
+                },
+                "required": ["questions"]
+            },
+            risk_level="medium",
+            allowed_roles=["super_admin", "admin", "teacher", "creator"]
+        ),
+        "handler": batch_create_questions_draft_handler
+    },
     "create_exam_draft": {
         "definition": AiToolDefinition(
             name="create_exam_draft",
-            description="当用户明确要求生成整份试卷/测试卷/模拟卷/综合测验，或要求包含多种题型构成的试卷时调用此工具。必须在 questions 参数中一次性原创生成指定题型与数量的完整题目列表。",
+            description="当用户明确要求生成【整份试卷/测试卷/模拟卷/期末试卷/综合测验】等整套试卷组织时调用此工具。必须在 questions 参数中一次性原创生成指定题型与数量的完整题目列表。",
             parameters={
                 "type": "object",
                 "properties": {

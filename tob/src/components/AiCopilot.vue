@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-09
+ * AI模型：Gemini 系列
+ * 修改内容：[页面映射规范更新: 原「题海管理」更名为「题目管理」，原「试卷与组卷」更名为「试卷管理」]
  * 修改时间：2026-09-08
  * AI模型：Gemini 系列
  * 修改内容：[前端隐藏上下文 buildPreamble 注入用户个人资料画像(姓名/职务/背景)，使抽屉式AI助手同步具备个性化认知]
@@ -55,7 +58,7 @@ const aiAvailable = ref(true);
 const chatAreaRef = ref<HTMLElement | null>(null);
 
 const pageName = (path: string) =>
-  ({ '/questions': '题海管理', '/exams': '试卷与组卷', '/grading': '阅卷大厅', '/categories': '分类配置',
+  ({ '/questions': '题目管理', '/exams': '试卷管理', '/grading': '阅卷大厅', '/categories': '分类配置',
     '/users': '用户与明细', '/banners': 'Banner设置', '/messages': '消息中心', '/members': '成员与额度',
     '/audit': '审计日志' } as any)[path] || '工作台';
 

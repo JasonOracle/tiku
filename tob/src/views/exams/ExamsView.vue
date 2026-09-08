@@ -2,6 +2,15 @@
   * [变更日志]
   * 修改时间：2026-09-09
   * AI模型：Gemini 系列
+  * 修改内容：[模块名称统一对齐「试卷管理」: 1. 弹窗标题更新为「编辑试卷」/「新建试卷」/「试卷详情 (只读模式)」; 2. 移除旧称「试卷与组卷」]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
+  * 修改内容：[统一组卷资料文案为「参考私有文库」: 明确说明与组卷需求不相关时系统将自动脱钩以通识出卷，避免张冠李戴]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
+  * 修改内容：[AI智能一键组卷弹窗新增私有教材/资料(RAG)选填多选下拉框: 1. 仅当存在已向量化解析成功的文档时展示(v-if="ragDocs.length"); 2. 组卷时优先检索命中切片并作为事实依据赋给大模型; 3. 新生成的题目自动携带切片溯源]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
   * 修改内容：[优化试卷下架与删除闭环: 1. 试卷操作列对已归档/下架状态(archived)开放删除按钮与重新编辑上架能力; 2. 优化下架确认提示文案，说明零作答试卷下架后依然支持物理删除或重新上架]
   * 修改时间：2026-09-08
   * AI模型：Gemini 系列
@@ -182,7 +191,7 @@
     </el-dialog>
 
     <!-- 查看详情（只读模态框） Dialog -->
-    <el-dialog v-model="viewDialogVisible" title="试卷与组卷详情 (只读模式)" width="850px" top="40px">
+    <el-dialog v-model="viewDialogVisible" title="试卷详情 (只读模式)" width="850px" top="40px">
       <el-form :model="viewData" label-width="100px" disabled>
         <el-row :gutter="16">
           <el-col :span="14">
@@ -555,6 +564,17 @@
           </div>
         </el-form-item>
 
+        <!-- 私有文库（RAG，选填多选）：仅当存在已解析完成的文档时呈现 -->
+        <el-form-item v-if="ragDocs.length" label="参考私有文库">
+          <el-select v-model="aiExamForm.doc_ids" multiple collapse-tags collapse-tags-tooltip clearable
+                     placeholder="选填可多选：勾选后优先依据所选私有文库组卷，题目将自动附带切片溯源" style="width: 100%">
+            <el-option v-for="d in ragDocs" :key="d.id" :label="`${d.filename}（${d.total_chunks}块切片）`" :value="d.id" />
+          </el-select>
+          <div class="score-calc-tip" style="margin-top: 4px; color: #64748b; font-size: 12px">
+            已检测到您的私有文库资料；若所选文档与组卷需求不相关，系统将自动脱钩并以通识出卷，避免张冠李戴
+          </div>
+        </el-form-item>
+
         <el-collapse>
           <el-collapse-item title="高级选项（考试时间 / 试卷标题 / 难度 / 限时 / 及格线，已设最优默认）" name="advanced">
             <el-form-item label="考试时间">
@@ -655,7 +675,7 @@ const pagination = reactive({ page: 1, size: 10, total: 0 });
 
 const dialogVisible = ref(false);
 const editingId = ref<number | null>(null);
-const dialogTitle = computed(() => (editingId.value ? '编辑试卷与组卷' : '新建试卷'));
+const dialogTitle = computed(() => (editingId.value ? '编辑试卷' : '新建试卷'));
 const saving = ref(false);
 
 const statsDialogVisible = ref(false);
@@ -1040,10 +1060,22 @@ const aiExamLoading = ref(false);
 const aiExamResult = ref('');
 const aiReviewVisible = ref(false);
 const aiReviewQuestions = ref<any[]>([]);
+const ragDocs = ref<any[]>([]);
+
+const loadRagDocs = async () => {
+  try {
+    const res: any = await request.get('/api/v1/admin/rag/documents');
+    ragDocs.value = (res.items || []).filter((d: any) => d.status === 'done');
+  } catch (e) {
+    ragDocs.value = [];
+  }
+};
+
 const aiExamForm = reactive({
   description: '',
   title: '',
   category_id: null as number | null,
+  doc_ids: [] as number[],
   difficulty: 'medium',
   is_timed: true,
   time_limit: 30,
@@ -1075,11 +1107,13 @@ const disableBeforeStart = (date: Date): boolean => {
   return date.getTime() < today.getTime();
 };
 
-// 打开 AI 组卷弹窗时自动回显默认分类（若未选择）
+// 打开 AI 组卷弹窗时自动回显默认分类（若未选择）并拉取私有文库可用文档
 const handleOpenAiExam = () => {
   aiReviewVisible.value = false;
   aiReviewQuestions.value = [];
   aiExamResult.value = '';
+  aiExamForm.doc_ids = [];
+  loadRagDocs();
   if (!aiExamForm.category_id && categories.value.length > 0) {
     aiExamForm.category_id = categories.value[0].id;
   }
@@ -1121,6 +1155,7 @@ const generateAiExam = async () => {
       specs: parseSpecs(aiExamForm.description),
       difficulty: aiExamForm.difficulty,
       category_id: aiExamForm.category_id,
+      doc_ids: aiExamForm.doc_ids.length ? aiExamForm.doc_ids : undefined,
       is_timed: aiExamForm.is_timed,
       time_limit: aiExamForm.is_timed ? aiExamForm.time_limit : 0,
       start_time: aiExamForm.start_time || undefined,

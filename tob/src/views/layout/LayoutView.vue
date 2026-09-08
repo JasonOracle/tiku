@@ -1,5 +1,8 @@
 <!--
   * [变更日志]
+  * 修改时间：2026-09-09
+  * AI模型：Gemini 系列
+  * 修改内容：[优化侧边栏菜单层级与文案: 1. 调整菜单排序为分类配置 -> 题目管理 -> 试卷管理; 2. 原「题海管理」更名为「题目管理」，原「试卷与组卷」更名为「试卷管理」]
   * 修改时间：2026-09-08
   * AI模型：Gemini 系列
   * 修改内容：[v1.4: 严格 RBAC 权限控制，仅超级管理员 (isSuper) 头像下拉菜单可见「模型中心」，普通管理员及出题人隐藏]
@@ -38,13 +41,13 @@
           <el-icon><Folder /></el-icon>
           <span>分类配置</span>
         </el-menu-item>
-        <el-menu-item index="/exams">
-          <el-icon><Reading /></el-icon>
-          <span>试卷与组卷</span>
-        </el-menu-item>
         <el-menu-item index="/questions">
           <el-icon><Document /></el-icon>
-          <span>题海管理</span>
+          <span>题目管理</span>
+        </el-menu-item>
+        <el-menu-item index="/exams">
+          <el-icon><Reading /></el-icon>
+          <span>试卷管理</span>
         </el-menu-item>
         <el-menu-item index="/grading">
           <el-icon><EditPen /></el-icon>

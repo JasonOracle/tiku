@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-09
+AI模型：Gemini 系列
+修改内容：[retrieve_chunks 新增 min_score 阈值参数支持，低相似度不相关切片自动丢弃脱钩，防止AI出题/组卷张冠李戴]
 修改时间：2026-09-08
 AI模型：Muse Spark
 修改内容：[v1.3 任务3: RAG 私有文档库 API (上传切片/进度/列表/检索/删除/批量取块), 超管全览他人仅看自传]
@@ -131,8 +134,14 @@ def _embed_doc(doc_id: int) -> None:
         db.close()
 
 
-def retrieve_chunks(db: Session, query: str, doc_ids: Optional[List[int]] = None, limit: int = 6) -> List[dict]:
-    """检索 top-k 切片 (本地 cosine; 云端替换为 TiDB Vector 查询即可)"""
+def retrieve_chunks(
+    db: Session,
+    query: str,
+    doc_ids: Optional[List[int]] = None,
+    limit: int = 6,
+    min_score: Optional[float] = None
+) -> List[dict]:
+    """检索 top-k 切片 (本地 cosine; 云端替换为 TiDB Vector 查询即可; 支持 min_score 阈值过滤)"""
     q = db.query(DocChunk).filter(DocChunk.embedding.isnot(None))
     if doc_ids:
         q = q.filter(DocChunk.doc_id.in_(doc_ids))
@@ -152,6 +161,10 @@ def retrieve_chunks(db: Session, query: str, doc_ids: Optional[List[int]] = None
     if not cands:
         return []
     top = embedding_service.top_k(qvec[0], cands, k=limit)
+    if min_score is not None:
+        top = [item for item in top if item[1] >= min_score]
+    if not top:
+        return []
     by_id = {c.id: c for c in rows}
     names = {d.id: d.filename for d in db.query(DocLibrary).filter(
         DocLibrary.id.in_([by_id[i].doc_id for i, _ in top])).all()}
