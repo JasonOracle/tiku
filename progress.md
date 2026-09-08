@@ -500,5 +500,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
    - 改造 `backend/app/services/memory_service.py`：优先读取 `MEM0_API_KEY` 启动官方 `mem0.MemoryClient` 直连云端服务（适配 Vercel Serverless 无状态环境）；本地环境保持 `fastembed + qdrant` 离线运行零开销。
    - 新增 `tests/test_memory_service.py` 自动化单测覆盖双轨分支，全量通过。
    - 用户的官方 Mem0 API Key 已成功注入 Vercel 生产环境变量。
-
-
+3. **版本部署发布与待验证项（2026-09-09 02:47:30 交接清单）**：
+   - 所有 14 个 commit 已合入并推送 `master`，Cloudflare Pages 与 Vercel 均已触发最新部署。
+   - 线上 B 端已配置好大模型与 Mem0 云端环境变量。
+   - **待办/下次接手事项**：下次直接从【线上 B 端全流程验收】继续：使用超级管理员登录测试普通出题、AI出题、普通组卷、AI组卷，以及测试与 AI 助管对话问答。
