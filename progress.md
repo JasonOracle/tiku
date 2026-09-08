@@ -479,3 +479,18 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
    - 路由返回修复：`FavoriteView`、`HistoryView`、`ReportView` 返回跳转错误问题全部修复，统一调用 `NavBar` 回退上一页。
 7. 已知小坑：`script setup` 内禁 `export`（封面常量抽 `assets/covers/index.ts`）；Profile 曾因 `if (res.data)` 取错解包层导致统计恒 0，已改为 `if (res)`。
 
+---
+
+## 🎯 9. v1.3 开发路线图 (Opencode 接手首要任务)
+当前项目处于 v1.2 稳定态，**接手后请立即围绕以下 v1.3 核心目标展开开发**（详细架构见 `product.md`，执行细节参考 Artifact 里的 `implementation_plan.md`）：
+- [ ] **任务 1：动态模型中心 (前端先行)**
+  - 实现 `ModelCenterView.vue` 渐变色卡片与动态 API Key / BaseURL 存储 (Pinia)。
+- [ ] **任务 2：Mem0 长期记忆接入 (后端)**
+  - 集成 `mem0ai`，打通管理员/出题人的 User_ID画像提取，对接 Mem0 Cloud API。
+- [ ] **任务 3：RAG 智能私有库与溯源抽屉 (全栈)**
+  - 后端：实现文档上传切片，接入 TiDB Vector。
+  - 前端：实现切片进度流 UI，及题目侧边栏的高亮溯源 (Highlight Tracer)。
+- [ ] **任务 4：Dashboard 真实数据大屏**
+  - 后端提供 `/api/v1/admin/dashboard/stats` 聚合接口，前端对接 ECharts 渲染折线与饼图。
+- [ ] **规范提醒**：多模态图片资源强制遵循 `agent.md` 的全网搜索与 MCP 生成协议；开发全程严格遵守本地 Develop 双轨协议。
+
