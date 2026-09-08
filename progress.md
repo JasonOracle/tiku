@@ -485,8 +485,20 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 ## 🎯 9. v1.3 开发路线图 (Opencode 接手首要任务)
 当前项目处于 v1.2 稳定态，**接手后请立即围绕以下 v1.3 核心目标展开开发**（详细架构与执行细节已全量同步至 `product.md` 与 `tech-spec.md`）：
 - [x] **任务 1：动态模型中心 (前端先行)** (`2026-09-08` 落地：`ModelCenterView.vue` 渐变色卡片 + `store/modelCenter.ts` Pinia 多通道/BaseURL/Key/激活模型 + `/v1/models` 一键拉取 + 菜单路由)
-- [x] **任务 2：Mem0 长期记忆接入 (后端)** (`2026-09-08` 落地：`services/memory_service.py`，`User_ID=admin:{id}`，本地 fastembed+qdrant，聊天/组卷静默提取注入，`MEM0_ENABLED` 开关，失败静默)
+- [x] **任务 2：Mem0 长期记忆接入 (后端)** (`2026-09-08` 落地本地 Qdrant；`2026-09-09 02:34:00` 升级云端/本地双轨支持：检测到 `MEM0_API_KEY` 自动切官方 `MemoryClient` 直连云端，本地未配自动回退 `fastembed+qdrant`，Vercel 生产环境变量已注入)
 - [x] **任务 3：RAG 智能私有库与溯源抽屉 (全栈)** (`2026-09-08` 落地：`rag.py` 双表 + `admin_rag.py` 上传切片/进度/检索/删除 + `embedding_service.py` 本地 cosine；`Question.source_ref` 透传；`RagView.vue` + `TraceDrawer.vue` 高亮溯源；AI 出题 `doc_ids` 参数)
 - [x] **任务 4：Dashboard 真实数据大屏** (`2026-09-08` 落地：`GET /api/v1/admin/dashboard/stats` 聚合 + 前端 ECharts 对接，出题人作用域隔离)
 - [ ] **规范提醒**：多模态图片资源强制遵循 `agent.md` 的全网搜索与 MCP 生成协议；开发全程严格遵守本地 Develop 双轨协议。
+
+---
+
+### 10. 2026-09-09 02:34:00 云端 AI 模型通道与 Mem0 双轨闭环交付记录
+1. **云端大模型通道切换确认**：
+   - 用户在 Vercel 环境变量中注入了生产级大模型变量 (`DOTS_API_KEY`、`DOTS_API_URL`、`DOTS_MODEL`)，完成重新部署。
+   - 系统所有 AI 出题、智能组卷、右侧助管问答与主观题批阅均走云端指定模型通道。
+2. **Mem0 双轨长期记忆落地**：
+   - 改造 `backend/app/services/memory_service.py`：优先读取 `MEM0_API_KEY` 启动官方 `mem0.MemoryClient` 直连云端服务（适配 Vercel Serverless 无状态环境）；本地环境保持 `fastembed + qdrant` 离线运行零开销。
+   - 新增 `tests/test_memory_service.py` 自动化单测覆盖双轨分支，全量通过。
+   - 用户的官方 Mem0 API Key 已成功注入 Vercel 生产环境变量。
+
 
