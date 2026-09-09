@@ -5,7 +5,7 @@
   * 修改内容：[v1.3: 升级个人信息弹窗，支持编辑基础资料(姓名/手机/邮箱/性别/职位/个人介绍)，无缝调用 PUT /api/v1/admin/auth/profile]
   * 修改时间：2026-09-07
   * AI模型：Muse Spark
-  * 修改内容：[v1.7 新建: 头像个人信息弹窗 (账号/角色/额度展示 + 退出登录)]
+  * 修改内容：[新建: 头像个人信息弹窗 (账号/角色/额度展示 + 退出登录)]
   -->
 <template>
   <el-dialog v-model="visible" title="个人资料与信息" width="520px" destroy-on-close @open="handleOpen">

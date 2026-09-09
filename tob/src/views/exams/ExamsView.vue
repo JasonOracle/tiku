@@ -644,7 +644,7 @@
       @graded="handleGraded"
     />
 
-    <!-- v1.7: 行级阅卷大厅全屏弹窗 -->
+    <!-- 行级阅卷大厅全屏弹窗 -->
     <ExamGradingDialog
       :visible="gradingHallVisible"
       :exam-id="gradingHallExam?.id ?? null"
@@ -1045,7 +1045,7 @@ const handleGraded = () => {
   loadExams();
 };
 
-// ---- v1.7: 行级阅卷大厅全屏弹窗 ----
+// ---- 行级阅卷大厅全屏弹窗 ----
 const gradingHallVisible = ref(false);
 const gradingHallExam = ref<any>(null);
 

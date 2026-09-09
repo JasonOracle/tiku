@@ -1,335 +1,106 @@
-# 智题库 (TiKu) 产品技术说明书 (Technical Specification)
+# 智题库 (TiKu) v1.4 技术说明书 (Technical Specification)
 
 ## 1. 架构总览与项目结构
 
-### 1.1 项目三元架构
+本项目基于前后端分离的现代化架构，针对 v1.4 SaaS 化重构，技术栈与代码组织如下：
+
 ```
 tiku/
-tiku/
-├── toc/                     # C端移动端 Web 项目 (Vue3 + Vite + Vue Router)
-│   ├── src/
-│   │   ├── views/           # 页面视图 (IndexView, QuizView, ReportView, FavoriteView, ProfileView, HistoryView)
-│   │   ├── components/      # 核心组件 (NavBar 统一导航, CoverArt 矢量封面, BannerCarousel 轮播)
-│   │   ├── router/          # 路由配置
-│   │   └── utils/http.ts    # Axios 统一封装与拦截器
-│   └── public/              # 静态资源与 SVG 插画
-├── tob/                     # B端 SaaS 管理后台 (Vue3 + Element Plus)
-│   ├── src/
-│   │   ├── views/
-│   │   │   ├── questions/   # 题海管理 (列表+Excel导入)
-│   │   │   ├── exams/       # 试卷组卷与配置 (支持封面上传)
-│   │   │   ├── categories/  # 分类管理
-│   │   │   └── users/       # 用户与答题明细
-│   │   ├── store/           # Pinia (Token存储: tiku_tob_token)
-│   │   └── utils/request.ts # HTTP 拦截器
-├── backend/                 # FastAPI 后端项目 (Python 3.12)
+├── toc/                     # 成员端 (原C端，Web H5) - Vue3 + Vite
+├── tob/                     # 管理端 (原B端，SaaS后台) - Vue3 + Element Plus
+├── backend/                 # 核心 API 服务 - FastAPI (Python 3.12)
 │   ├── app/
-│   │   ├── api/             # 路由控制
-│   │   │   ├── v1/          # C端 API (/api/v1/*)
-│   │   │   └── admin/       # B端 API (/api/v1/admin/*)
-│   │   ├── core/            # 配置、JWT (7天有效)、数据库连接
-│   │   ├── models/          # SQLAlchemy ORM 数据模型
-│   │   ├── uploads/         # 本地图片/媒体上传目录
-│   │   └── services/        # 核心业务逻辑 (评分引擎/被动超时结算/悲观锁)
-│   └── tests/               # pytest 自动化集成与单元测试
-├── api-contract.md          # 接口契约测试文档
-├── product.md               # 产品需求规格说明书
-└── direction-approved.md    # 选定设计语言规范
+│   │   ├── api/             # 路由分组
+│   │   ├── core/            # 鉴权(JWT)与中间件
+│   │   ├── models/          # 数据库实体 (强制包含 tenant_id)
+│   │   └── services/        # 业务逻辑与 AI 调度
+│   └── tests/               # 自动化集成测试 (Pytest)
+├── api-contract.md          # 接口定义契约
+└── product.md               # 产品需求规格说明书
 ```
 
 ---
 
-## 2. 关键核心机制与设计方案
+## 2. 核心架构机制：多租户物理隔离 (Multi-Tenant Isolation)
 
-### 2.1 v1.3 核心架构扩充 (当前状态)
-> **注意**：本项目已突破 MVP 阶段，完成了 v1.2 的全功能闭环（含简答题/填空题设计、人工与 AI 阅卷工作流状态机、三级 RBAC 权限隔离）。
-> **当前正处于 v1.3 迭代期**：技术架构正在引入以下两大新支柱：
-> 1. **大语言模型枢纽与记忆网关**：基于 Vue3/Pinia 的纯前端动态大模型路由，及基于 Mem0 的 `User_ID` 级别跨会话记忆库。
-> 2. **无服务原生的 RAG 引擎**：依托 TiDB Cloud Serverless 原生 Vector 存储与轻量级 Python 切片，实现全站资料知识库检索与前端高亮溯源。
+在 v1.4 中，系统从单体向通用 SaaS 演进，**多租户隔离是系统的最高技术红线**。
 
-### 2.2 多账号并发登录与抢先提交逻辑 (First-Submit-Wins)
-- **Token 隔离与生命周期**：
-  - C端 (`toc`) 保存 Key 为 `tiku_toc_token`。
-  - B端 (`tob`) 保存 Key 为 `tiku_tob_token`。
-  - Token 有效期设为 7 天 (7*24h)，交卷时支持 5 分钟宽限期验证，防止考试中途断连。
-- **防止重复交卷悲观锁处理 (Python/FastAPI)**：
-  ```python
-  def submit_exam_record(db: Session, record_id: int, user_id: int, answers: list):
-      # 悲观锁锁定答题记录
-      record = db.query(ExamRecord).filter(
-          ExamRecord.id == record_id, 
-          ExamRecord.user_id == user_id
-      ).with_for_update().first()
+### 2.1 数据库 Schema 改造 (核心表设计)
+所有业务表强制挂载 `tenant_id`，实现数据沙箱隔离。
 
-      if not record:
-          raise HTTPException(404, "答题记录不存在")
-      
-      if record.status != "in_progress":
-          raise HTTPException(400, "该试卷答题记录已被提交结算，请勿重复提交！")
-      
-      # 检查是否已在客户端超期
-      record.status = "submitted"
-      record.submit_time = datetime.now()
-      db.commit()
-      return record
-  ```
+- **`sys_tenant`** (租户/组织表)
+  - `id` (PK), `name`, `status`, `created_at`
+- **`sys_user`** (用户登录凭证表)
+  - `id` (PK), `phone` (唯一), `password`, `is_super_admin` (布尔标识，决定是否允许访问上帝视图)。
+  - **红线**：此表严禁存放任何与租户相关的业务字段。
+- **`sys_tenant_user`** (组织与成员关联表)
+  - `tenant_id` (FK), `user_id` (FK), `role` (枚举：`owner`, `admin`, `member`)。
+- **业务资产表** (包括 `tasks`, `items`, `kb_documents` 等)
+  - 全部增加 `tenant_id` (FK)。
 
-### 2.2 考试超时与“幽灵记录”被动结算机制
-在 C端调用 `POST /api/v1/records/start` 或查询试卷详情时，服务端会自动检查该用户未完成的 `in_progress` 记录：
-```python
-def cleanup_expired_records(db: Session, user_id: int):
-    # 查找所有当前已超期的 in_progress 记录
-    now = datetime.now()
-    records = db.query(ExamRecord).join(Exam).filter(
-        ExamRecord.user_id == user_id,
-        ExamRecord.status == "in_progress",
-        Exam.is_timed == True,
-        # 加上 2 分钟缓冲网络容错
-        func.timestampdiff(func.MINUTE, ExamRecord.start_time, now) > (Exam.time_limit + 2)
-    ).all()
-    
-    for r in records:
-        r.status = "timeout"
-        r.submit_time = now
-    db.commit()
-```
+### 2.2 租户上下文透传与路由守卫
+- **鉴权流**：用户登录后，JWT Payload 中除了携带 `user_id`，还必须返回用户默认或选定的 `tenant_id`。
+- **API 通信**：前端发出任何业务请求，必须在 HTTP Header 中携带 `X-Tenant-ID`。
+- **中间件拦截**：FastAPI 后端提供依赖注入 `get_current_tenant`。在执行任何业务逻辑前，系统先拦截查询：`SELECT 1 FROM sys_tenant_user WHERE user_id=? AND tenant_id=? AND status='active'`。若不通过，直接抛出 `403 Forbidden`。
 
-### 2.3 文件上传与 Nginx 静态文件代理
-- 上传接口：`POST /api/v1/admin/upload`
-- 存储路径：`backend/app/uploads/`
-- Nginx 反向代理配置：
-  ```nginx
-  location /uploads/ {
-      alias /app/uploads/;
-      expires 30d;
+### 2.3 超级管理员 (上帝视角) 的隐患防御
+- **问题**：`is_super_admin` 不属于任何特定租户。如果代码中直接写 `if user.is_super_admin: return query.all()`，将破坏所有业务代码的隔离优雅性。
+- **解决方案**：
+  1. 上帝默认只能访问专用的超管路由前缀 `/api/v1/super-admin/*`（如管理全网租户）。
+  2. 若上帝需要视察某个具体的组织，需在前端点击“模拟进入”，此时前端 Header 会携带该组织的 `X-Tenant-ID`。后端业务代码**无需任何特殊处理**，依旧按照普通的 `tenant_id` 过滤逻辑运行，实现完美隔离。
+
+---
+
+## 3. RAG 知识库与切片级溯源 (AI Traceability)
+
+### 3.1 TiDB Vector 原生检索
+废弃沉重的第三方向量数据库（如 Milvus），拥抱 **TiDB Cloud Serverless** 的原生 Vector 数据类型。
+
+- **`kb_documents`** (文档元数据表)
+  - `id`, `tenant_id`, `scope` (`public` / `private`), `creator_id`
+- **`kb_chunks`** (文档切片向量表)
+  - `id`, `document_id`, `content` (切片文本), `embedding` (VECTOR 维度视大模型而定)。
+
+### 3.2 溯源信息持久化结构
+当 AI 基于知识库生成结果时，无论生成的是“条目(Item)”还是“总结建议”，相关业务表必须增加 `ai_rag_sources` JSON 字段进行溯源保存。
+
+格式规范：
+```json
+[
+  {
+    "document_id": 1024,
+    "file_name": "2026年企业合规手册.pdf",
+    "chunk_content": "员工在报销时必须提供对应的发票复印件...",
+    "similarity_score": 0.89
   }
-  ```
+]
+```
+前端 UI 读取该字段后，需在生成结果旁渲染 `[引用溯源]` 交互徽章。
 
-### 2.4 分页数据结构设计 (Standardized Pagination)
-所有列表接口返回格式统一包装：
+---
+
+## 4. 业务流转底座设计
+
+### 4.1 静默建号与自动绑定流
+当管理员在 B 端通过手机号录入新成员时，调用接口 `POST /api/v1/admin/members`：
+1. **DB 事务开始**。
+2. 检索 `sys_user` 是否有该手机号。
+3. 若无，新建记录并赋予 Hash 后的默认密码。
+4. 获取该用户的 `user_id`。
+5. 在 `sys_tenant_user` 中建立 `tenant_id` (从上下文获取) 与 `user_id` 的关联，`role` 设为 `member`。
+6. **DB 事务提交**。
+
+### 4.2 高并发写保护 (悲观锁)
+在关键业务（如成员提交任务）时，必须保留原有架构的 `FOR UPDATE` 行级锁，防止网络重传导致的数据覆写：
 ```python
-class PageResponse(BaseModel, Generic[T]):
-    total: int
-    page: int
-    size: int
-    total_pages: int
-    has_next: bool
-    items: List[T]
+record = db.query(TaskRecord).filter(...).with_for_update().first()
+if record.status != "in_progress":
+    raise HTTPException(400, "不可重复提交")
 ```
 
-### 2.5 数据模型字段扩展与算法调整（2026-09-04 治理版）
-1. **试卷生命周期与组卷**：
-   - 增加 `is_random` 布尔值，用于控制 C 端答题乱序引擎。
-   - B 端组卷引入 `checkbox-group` 批量管理（题海多选删除、弹窗备选批量加入、已选题批量移除）及已选题目的拖拽排序。
-   - `draft → published → archived`，`archived` 为彻底终态。下架 = `published → archived`；上架经 `ensure_publishable` 校验有效分类并写入 `category_name` 快照。
-2. **删除守卫矩阵**：分类被引用拦；题目被 published/archived 卷引用拦（报卷名），仅 draft 引用联动移除 + `recalc_exam_totals` 重算；试卷仅 draft 零作答可删。
-3. **空卷拦截**：`submit_exam_record_with_lock` 零作答 400；C端 0 作答离开/超时不提交。
-4. **导入行级分类**：按表头“分类”列逐题归入（不存在自动新建，空取第一项）；`short/fill` 预留题型跳过计数；读首工作表（`sheetnames[0]`）。
-5. **同源部署**：前后端 `baseURL: ''` 走 Nginx `/api/v1/` 代理；`vite server.proxy` 保开发；B端 401 跳 `/admin/login`；backend 重建后必须 `nginx -s reload`。
-6. **第一项口径**：分类列表 `(sort_order,id)` 双排序，前端默认与后端兜底同源。
-7. **Banner 模块**：`banners`（image/link三态/sort/enabled，上限3启用）+ `banner_settings` 单行（interval 2–10s）；C端合一接口 `{interval_seconds, items}`；1张静显、>1自播+手滑、0张回退推荐 Hero；内部跳转仅 `/` 开头。
-8. **C端 UI 改版**（效果图为准）：抽公共 `TabBar.vue`；封面 `CoverArt.vue` 移除所有渐变/底色，纯渲染 raw SVG；报告圆环按真实总分；引入 `AppModal.vue` 实现毛玻璃自定义弹窗全面替换原生 `confirm/alert`。
-
-### 2.6 原数据模型字段扩展与算法调整（历史）
-1. **ExamCategory 分类模型**：
-   - 增加 `target_type`: 分类用途标识（`question` 题目分类 / `exam` 试卷分类，默认 `exam`）。
-2. **Question 题目模型**：
-   - `category_id`: 外键关联 `target_type='question'` 的题目分类。
-   - `score`: 题目默认分值（`int`，默认 10）。
-3. **Exam 试卷模型**：
-   - `category_id`: 外键关联 `target_type='exam'` 的试卷分类。
-   - `status`: 三态（`draft` 待上架 / `published` 已上架 / `archived` 已归档冻结，终态不可逆）。
-   - `category_name`: 上架时写入的分类名称快照，展示层优先使用。
-   - `is_random`: 题目是否随机打乱呈现（`bool`，默认 `false`）。
-   - `pass_percent`: 及格百分比（`int`，0-100，默认 60）。
-   - `total_score` 计算规则：由试卷关联的所有 `Question.score` 动态求和。
-   - `pass_score` 计算规则：`Math.ceil(total_score * pass_percent / 100.0)` 向上取整。
-4. **C 端 ProfileView 与考情看板数据流**：
-   - 个人中心实时调用 `/api/v1/users/me/stats` 获取作答场次与综合通过率。
-   - B 端试卷列表对 `status='published'` 试卷锁定编辑，点击调用 `/api/v1/admin/exams/{id}/stats` 获取考情看板明细。
-
----
-
-## 3. 部署架构设计 (Docker Containerization)
-
-### 3.1 Nginx 反向代理配置与容器拓扑
-```
-                     ┌───────────────────────────────────────────┐
-                     │          Debian NAS Docker 宿主机          │
-                     │                                           │
- 浏览器 (tob) ──────►│  Nginx 容器 (Port 80/443)                 │
- 手机 H5 (toc) ──────►│    ├── /api/v1/admin  ──► backend:8000     │
-                     │    ├── /api/v1        ──► backend:8000     │
-                     │    ├── /uploads/      ──► backend/uploads │
-                     │    ├── /admin         ──► tob 静态构建产物   │
-                     │    └── /              ──► toc 静态构建产物   │
-                     │                                           │
-                     │  FastAPI 容器 (Port 8000)                 │
-                     │    └── MySQL 容器 (Port 3306)              │
-                     └───────────────────────────────────────────┘
-
----
-
-## 4. v1.2 版本实现指北 (Implementation Guide for AI Developer)
-
-> **✅ v1.2 已于 2026-09-06 全量落地（ZCode GLM）**：下方 Step 1–5 全部实现并通过 39 项 pytest 与实库真 AI 阅卷验证。接手者请以下方【落地实况】为准，并同步阅读 `progress.md` §6.0/§7.6。
->
-> **【落地实况 · 大模型接入定案】**
-> - API Key：宿主机用户系统环境变量 `SENSENOVA_API_KEY`，代码 `os.getenv()` 读取；`D:\docker\docker-compose.yml` 已透传 `SENSENOVA_*` 至容器。
-> - **网关与模型（实测有效）**：`https://token.sensenova.cn/v1/chat/completions` + `sensenova-6.8-flash-lite`（免费档）。老网关 `api.sensenova.cn` 会返回 Forbidden；`sensenova-6.7-flash-lite` 无路由；`deepseek-v4-flash/glm-5.2` 免费档配额不足；`deepseek-v4-pro` 为思考型（content 为空）勿用作阅卷。可用模型清单：`GET /v1/models`。
-> - 兜底实测有效：模型输出 markdown 代码块/多余文字时，`ai_service.extract_json` 可鲁棒提取 JSON。
-
-> **⚠️ 致接手此项目的 AI 或人类开发者**：
-> 下方是严格按照 MVP（最小可行性产品）和“AI平权”原则拆解的技术落地步骤。若遇技术瓶颈，请严格参考下方的**【平替方案/兜底逻辑】**，切勿自行增加过度复杂的设计。
-
-### Step 1: 数据库物理列拓展与数据迁移
-修改 ORM 文件（`backend/app/models/`）：
-- `user.py` (Admin 模型)：
-  - 增加 `role` 字符串列（`'super_admin'`, `'admin'`, `'creator'`，默认 `'admin'`）。
-  - 增加 `created_by_id` 整数外键列（指向 `admins.id`，表示该管理员/出题人由谁创建，实现层级追溯）。
-  - 增加 `daily_ai_quota` 整数列（默认 `100`，表示每日主动 AI 额度）。
-- `question.py` (Question 模型)：
-  - 增加 `is_deleted` 布尔列（默认 `False`，实现安全软删除，避免直接物理删除导致组卷外键断裂）。
-- `exam.py` (Exam 模型)：
-  - 增加 `start_time` 与 `end_time`（`DATETIME`，必须满足 `time_limit <= end_time - start_time` 强校验）。
-  - 增加 `grading_mode` 字符串列（枚举：`'manual'`-人工全权, `'ai_pre'`-AI辅助预审, `'ai_auto'`-AI代管直出，默认 `'manual'`）。
-- `record.py` (ExamRecord 模型)：
-  - 扩展状态枚举：增加 `'pending_grading'`（待批阅）。
-  - 增加 `ai_grading_result` JSON 列（记录 AI 建议分与各题评语快照）。
-- `audit_log.py` (新增 AuditLog 模型)：
-  - 字段：`id`, `operator_id`, `operator_role`, `action_type`, `target_entity`, `before_payload`, `after_payload`, `created_at`。
-
-### Step 1.5: 组卷列表题目透亮渲染与 AI 弹窗轻量化规范
-1. **试卷题目列表（普通新建与 AI 审阅共用）**：
-   - 题干下方渲染选项容器，单选/多选的正确选项强制添加样式：
-     `background-color: #f0fdf4; border: 1px solid #86efac; color: #166534; font-weight: 600;` 并前置 `✔` 标识。
-   - 判断题高亮挂出绿色 `[✔ 正确]` 或橙红 `[✖ 错误]`。
-   - 仅保留 `▲/▼` 排序与 `🗑️` 移出，**剔除快速编辑**。
-2. **AI 一键组卷弹窗**：
-   - 默认视图收敛至：`需求输入 (Prompt)` + `起止时间窗口` 两项。其余参数默认并折叠至 `<el-collapse>`。
-   - 生成题目为大模型实时原创生成，保存试卷时自动同步入库共享题海。
-3. **模型名称隐藏**：界面统一使用「AI 智能助管」/「AI 智算引擎」，不露出底层 API 供应商厂商名。
-
-### Step 2: 题库重构与客观题/填空题引擎升级
-- **填空题多空校验**：
-  - 在 `POST /api/v1/admin/questions` 中，如果 `type == 'fill'`，后端强制执行：`question.title.count('___') == len(json.loads(question.answer))`，不等则抛 `HTTP 400`。
-- **多选题半对机制**：
-  - 修改原交卷接口 `/api/v1/records/submit` 的评分引擎。多选题的判断逻辑变为：`如果 user_answer 是 correct_answer 的真子集，得 50% 分；只要存在交集以外的元素，得 0 分`。
-
-### Step 3: 僵尸卷子“懒惰求值”与行内批阅下钻 (Lazy Evaluation & Inline Drawer)
-- **技术实现**：在获取 C 端试卷列表 (`GET /api/v1/exams`) 和 B 端拉取试卷列表 (`GET /api/v1/admin/exams`) 时，拦截查询前置动作。
-  - `UPDATE exam_records SET status = 'submitted' WHERE status = 'in_progress' AND now() > start_time + time_limit`。
-  - *平替方案*：绝不能用 Celery/Redis。必须保持 0 运维基建。
-- **B 端交互架构**：废除独立阅卷大厅页面，在 `ExamsView.vue` 试卷列表行内增加待批阅徽章 `[N份待批阅]`。点击原地唤出 `GradingDrawer.vue` 抽屉，支持基于试卷维度的集中快速人机协同复核。
-
-### Step 4: AI 全托管阅卷底层调度 (FastAPI BackgroundTasks)
-- **开发期指定大模型 (SenseNova)**：
-  - **重要约束**：开发期间统一使用**商汤日日新大模型 (SenseNova)**，因其免费。
-  - **凭证获取**：API Key **已配置在宿主机电脑的用户系统环境变量中**，无需在 `.env` 中强行写死，代码中直接 `os.getenv('XXX')` 读取即可。
-  - **接口文档参考**：[商汤大模型开发文档](https://platform.sensenova.cn/docs)
-- **原子化 Prompt 阅卷**：学生交卷且包含主观题时，主线程立刻返回 `200 交卷成功，批阅中`。
-- **后台协程**：使用 `fastapi.BackgroundTasks` 传入一个 `grade_exam_async` 函数。
-  - 提取该卷所有简答题和考生答案，拼凑成单次 JSON Prompt。
-  - 请求商汤日日新 API 进行阅卷。
-  - 成功则写库。如果抛出超时或解析异常，则回滚并将记录置为 `pending_grading` 抛给人工大厅。
-  - *平替方案*：如果大模型 JSON 返回一直格式错乱，可要求大模型使用最简单的 Markdown 代码块输出，后端用正则提取。
-
-### Step 5: B 端 AI Copilot 工业级交互与 Action Card 协议
-- **前端状态快照注入 (Preamble Injection)**：
-  - 发送 `/api/v1/admin/ai/chat` 前，Vue/Pinia 取出当前上下文拼装前置隐藏系统信息：`[系统状态快照: 登录人=xxx, 角色=xxx, 待阅试卷=X份, 剩余额度=Y] \n\n 用户提问: ...`。
-- **消息气泡视觉与脱敏**：
-  - 全站隐去大模型供应商（SenseNova/DeepSeek等），统一标识为「AI 智能助管」/「AI 智算引擎」。
-  - AI 消息气泡统一采用浅灰底（`#f8fafc`）+ 细边框（`1px solid #e2e8f0`）+ 大圆角（`12px~16px`）。
-  - 顶部带引述条：`| 回复 全Ai系统: [用户提问摘要]`。
-- **人机协同确认卡片 (Action Card 协议)**：
-  - 当大模型识别到高危管理意图（如划拨额度、批量生成入库）时，回答末尾附带：
-    ```markdown
-    ```action_card
-    {
-      "actionType": "TRANSFER_QUOTA",
-      "title": "划拨 AI 额度",
-      "riskLevel": "medium",
-      "details": [{"label": "目标出题人", "value": "陈思源"}, {"label": "划拨数量", "value": "50次"}],
-      "payload": {"target_email": "creator.chen@tiku.io", "amount": 50}
-    }
-    ```
-    ```
-  - 前端流式捕获该代码块，动态挂载渲染为红调卡片（带 `[确认执行]` 红色按钮与 `[取消]` 按钮）。
-  - 人类点击确认后调后端真实业务接口，卡片状态转为绿色 `已执行`，按钮自动隐藏防重复执行。
-- **交互式操作路由卡片 (Action Routing Card 协议) 与权限白名单**：
-  - 当出题人/管理员询问待办或列表时，AI 可输出结构化操作清单：
-    ```markdown
-    ```action_list
-    [
-      {
-        "title": "2026全国消防安全科普测验",
-        "badge": "3 份待批改",
-        "action": {"type": "in_app", "label": "去批改", "target": "open_grading_drawer", "params": {"exam_id": 101}}
-      }
-    ]
-    ```
-    ```
-  - **权限双向守卫**：
-    1. 前端注入时，出题人仅注入其私有试卷快照；
-    2. 前端维护 `ACTION_WHITELIST` 字典，拦截非当前角色允许执行的 `target`；
-    3. 点击调出抽屉后，后端接口执行二次身份校验（非本人试卷返回 403）。
-- **知识盲区优雅降级**：
-  - 超出题库系统上下文的问题，大模型遵循系统提示词诚实拒答，并附带快捷提问建议气泡（Suggested Prompts）。
-
-### Step 5.5: 企业级会话持久化与仿微信向上游标分页规约
-
-1. **数据库模型拓展 (`backend/app/models/ai_chat.py`)**：
-   - `AiChatSession` 表 (`ai_chat_sessions`)：
-     - `id`: INT 主键自增
-     - `admin_id`: INT 外键关联 `admins.id`，建立索引，支持级联删除
-     - `title`: VARCHAR(120) NOT NULL，默认 `'新对话'`
-     - `created_at`: DATETIME，默认当前时间
-     - `updated_at`: DATETIME，默认当前时间，建立索引（用于侧边栏按最近活跃倒序排列）
-   - `AiChatMessage` 表 (`ai_chat_messages`)：
-     - `id`: INT 主键自增（天然单调递增游标 Cursor）
-     - `session_id`: INT 外键关联 `ai_chat_sessions.id`，建立索引，级联删除
-     - `role`: VARCHAR(20) NOT NULL ('user' | 'assistant' | 'system')
-     - `content`: TEXT NOT NULL
-     - `quote`: TEXT NULL（回复引用内容）
-     - `action_card_data`: JSON NULL（三档确认卡数据，含 tool_name, arguments, status 等）
-     - `action_list_data`: JSON NULL（操作路由待办卡数据）
-     - `created_at`: DATETIME，建立索引
-
-2. **核心 API 接口契约 (`backend/app/api/admin/admin_ai.py`)**：
-   - `GET /api/v1/admin/ai/sessions`：
-     - 权限：当前登录 Admin
-     - 逻辑：按 `updated_at DESC` 返回当前用户的所有会话列表。
-   - `POST /api/v1/admin/ai/sessions`：
-     - 逻辑：创建新会话，初始标题为 `"新对话"`，返回新建 session 对象。
-   - `DELETE /api/v1/admin/ai/sessions/{session_id}`：
-     - 逻辑：校验归属权，删除指定会话及旗下所有消息流水。
-   - `PUT /api/v1/admin/ai/sessions/{session_id}`：
-     - 请求体：`{ "title": "新标题" }`
-     - 逻辑：重命名会话标题。
-   - `GET /api/v1/admin/ai/sessions/{session_id}/messages?before_id={cursor}&limit=20`：
-     - 核心游标分页：
-       - 不传 `before_id`：查询 `WHERE session_id = :sid ORDER BY id DESC LIMIT 20`，服务端反转为时间升序返回。
-       - 传 `before_id`：查询 `WHERE session_id = :sid AND id < :before_id ORDER BY id DESC LIMIT 20`，服务端反转后返回。
-       - 响应体格式：`{ "items": [...], "has_more": bool, "next_cursor": int | null }`。
-   - `POST /api/v1/admin/ai/chat/stream` 与持久化流水联动：
-     - 请求体增加入参 `session_id: int`。
-     - 发起时：立即持久化 User 提问记录入库。
-     - 流式完成（done / action_required）：使用安全独立会话将 Assistant 完整内容原子化落库，并更新 session 的 `updated_at`；若会话标题仍为默认，则截取前 15 字符自动更新标题。
-
-3. **前端防跳屏视口高度无感锚定算法 (`tob/src/views/ai/AiAssistantView.vue`)**：
-   - 彻底移除 `localStorage` 本地存储会话逻辑，实现多端数据漫游。
-   - 监听消息容器滚动 `@scroll="handleScroll"`：
-     - 触发条件：`scrollTop < 60 && hasMore && !loadingHistory`。
-     - 高度差补偿公式：
-       ```ts
-       const oldScrollHeight = chatBox.scrollHeight;
-       const oldScrollTop = chatBox.scrollTop;
-       const res = await fetchMessages(activeSessionId, minMessageId);
-       messages.value.unshift(...res.items);
-       hasMore.value = res.has_more;
-       await nextTick();
-       // 补偿滚动条位置，使得当前视口内容绝对静止，零抖动
-       chatBox.scrollTop = chatBox.scrollHeight - oldScrollHeight + oldScrollTop;
-       ```
-   - 切换会话或发送新消息：直接平滑滚动到底部 `scrollToBottom()`。
-```
+### 4.3 异步 AI 核验 (BackgroundTasks)
+对于需要主观判断的业务（原简答题批改），不阻塞 HTTP 请求主线程：
+1. 更新数据库状态为 `pending_verification`。
+2. 返回客户端 `200 OK`。
+3. 利用 `fastapi.BackgroundTasks` 异步调度大模型，带上任务数据的 JSON Prompt 请求 AI。
+4. AI 响应后，更新记录状态及意见；若超时或异常，则记录错误并保留在待人工核验池中。

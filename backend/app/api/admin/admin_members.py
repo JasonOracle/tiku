@@ -8,7 +8,7 @@ AI模型：Muse Spark
 修改内容：[v1.2 Step5: 创建账号写入 created_by_id 层级溯源; 划拨额度红线校验(普通管理员仅可向直属出题人充值, 违背403; 超管全域调配)]
 修改时间：2026-09-07
 AI模型：Muse Spark
-修改内容：[v1.7: 成员列表返回 created_by_id; 普通管理员仅可见自己创建的直属账号(超管全览)]
+修改内容：[成员列表返回 created_by_id; 普通管理员仅可见自己创建的直属账号(超管全览)]
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session

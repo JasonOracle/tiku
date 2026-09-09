@@ -1,4 +1,4 @@
-"""v1.4 修复回归: AI options 字符串规范化 / 多选连写拆分 / AI出题高级选项联动校验"""
+"""修复回归: AI options 字符串规范化 / 多选连写拆分 / AI出题高级选项联动校验"""
 import json
 
 from app.services import ai_service
@@ -88,7 +88,7 @@ def test_ai_gen_advanced_options_all_or_nothing(client, monkeypatch):
         "material": "电脑知识生成3道题内容", "count": 5})
     assert r_part.status_code == 400 and "完整填写" in r_part.json()["detail"]
 
-    # 全空 → AI 自主, 返回几道保留几道 (v1.5: 不再硬截回默认 5)
+    # 全空 → AI 自主, 返回几道保留几道 (不再硬截回默认 5)
     r_empty = client.post("/api/v1/admin/ai/questions/generate", headers=ah, json={
         "material": "随便出点电脑知识题目"})
     assert r_empty.status_code == 200
@@ -103,7 +103,7 @@ def test_ai_gen_advanced_options_all_or_nothing(client, monkeypatch):
 
 
 def test_ai_gen_material_count_priority_and_cap_v15(client, monkeypatch):
-    """v1.5: 材料指定数量优先于默认5(说10道出10道); AI 超量按上限10截断并提示; count>10 直接 422"""
+    """材料指定数量优先于默认5(说10道出10道); AI 超量按上限10截断并提示; count>10 直接 422"""
     ah = _bootstrap(client)
     me = client.get("/api/v1/admin/auth/me", headers=ah).json()["data"]
     client.post(f"/api/v1/admin/members/{me['id']}/refill", headers=ah, json={"amount": 20})

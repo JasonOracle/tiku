@@ -8,7 +8,7 @@
  * 修改内容：[1. createWebHistory 绑定 import.meta.env.BASE_URL，彻底解决 /admin/ 子路径空白白屏问题]
  * 修改时间：2026-09-07
  * AI模型：Muse Spark
-  * 修改内容：[v1.7: 新增 Dashboard 首页与 AI 模型配置路由，默认重定向改仪表盘；新增 meta.roles 角色守卫，越权跳转弹 Toast 拦截]
+  * 修改内容：[新增 Dashboard 首页与 AI 模型配置路由，默认重定向改仪表盘；新增 meta.roles 角色守卫，越权跳转弹 Toast 拦截]
   * 修改时间：2026-09-08
   * AI模型：Muse Spark
   * 修改内容：[v1.3 任务1: 新增模型中心路由]
@@ -130,7 +130,7 @@ router.beforeEach((to: RouteLocationNormalized, _from: RouteLocationNormalized, 
   } else if (to.path === '/login' && token) {
     next('/');
   } else if (Array.isArray(to.meta.roles)) {
-    // v1.7: 越权路由直接 Toast 拦截
+    // 越权路由直接 Toast 拦截
     const role = localStorage.getItem('tiku_tob_role') || '';
     if (!(to.meta.roles as string[]).includes(role)) {
       ElMessage.error('当前角色无权访问该页面');

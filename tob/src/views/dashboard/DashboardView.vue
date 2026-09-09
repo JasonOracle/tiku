@@ -2,7 +2,7 @@
   * [变更日志]
   * 修改时间：2026-09-07
   * AI模型：Muse Spark
-  * 修改内容：[v1.7 新建: SaaS 首页 Dashboard，1:1 还原设计图（Banner + 4 KPI + 趋势图 + 环形图 + 四小卡），ECharts 静态假数据]
+  * 修改内容：[新建: SaaS 首页 Dashboard，1:1 还原设计图（Banner + 4 KPI + 趋势图 + 环形图 + 四小卡），ECharts 静态假数据]
   * 修改时间：2026-09-08
   * AI模型：Muse Spark
   * 修改内容：[v1.3 任务4: 对接 GET /admin/dashboard/stats 真实聚合数据（KPI/趋势/环形/排行/动态/公告/额度），出题人自动作用域隔离]

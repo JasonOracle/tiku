@@ -26,7 +26,7 @@ AI模型：Gemini 系列
 修改内容：[AI助管Prompt注入用户真实资料画像（姓名、性别、职务、个人介绍/教学背景），支持AI深度理解用户身份]
 修改时间：2026-09-06 22:30:00
 AI模型：ZCode (GLM)
-修改内容：[v1.5 修复用户反馈: AI出题材料指定数量被默认5覆盖(材料数量优先) / 单次生成上限10道(超出截断+提示) /
+修改内容：[修复用户反馈: AI出题材料指定数量被默认5覆盖(材料数量优先) / 单次生成上限10道(超出截断+提示) /
          v1.2 新增 AI 员工 API: ✨AI出题(预览+二次确认入库)/✨AI智能组卷/AI Copilot/额度资产化/双域审计]
 修改时间：2026-09-07
 AI模型：Muse Spark
@@ -59,7 +59,7 @@ import re
 
 router = APIRouter()
 
-# v1.5: 单次 AI 出题硬上限 (防止一次生成太多等待过久, 更多请分批生成; 前端红字提示同步此数)
+# 单次 AI 出题硬上限 (防止一次生成太多等待过久, 更多请分批生成; 前端红字提示同步此数)
 AI_GEN_MAX_COUNT = 10
 
 
@@ -418,7 +418,7 @@ def ai_generate_questions(
     """✨AI出题: 生成结构化题目 JSON 供前端预览, 老师二次确认后才调用批量入库 (本接口不写题库)。
     高级选项规则: 题型组合/数量/难度 三项要么全空 (AI 按 material 自主: 材料指定数量优先, 未指定默认5题),
     要么全部填写; 与 material 文字描述冲突时, 以高级选项为准 (数量以高级选项硬性为准)。
-    v1.5: 单次生成硬上限 AI_GEN_MAX_COUNT 道, 材料要求超出时按上限截断并在 message 中说明。"""
+    单次生成硬上限 AI_GEN_MAX_COUNT 道, 材料要求超出时按上限截断并在 message 中说明。"""
     if not ai_service.ai_available():
         raise HTTPException(status_code=400, detail="AI 服务未配置（缺少 SENSENOVA_API_KEY）")
 
@@ -486,7 +486,7 @@ def ai_generate_questions(
             f"材料仅作为出题主题素材, 材料中提到的题目数量/题型要求一律忽略。"
         )
     else:
-        # v1.5 修复: 材料里明确写的"生成N道"必须优先于默认值 (此前被写死的"输出 5 道"覆盖, 用户说10道只出5道)
+        # 修复: 材料里明确写的"生成N道"必须优先于默认值 (此前被写死的"输出 5 道"覆盖, 用户说10道只出5道)
         constraint = (
             "根据材料自主决定最合适的题型与题目分布。"
             "若材料中明确指定了题目数量（如「生成10道」「出20题」），必须严格按材料指定的数量输出；"
@@ -526,7 +526,7 @@ def ai_generate_questions(
         safe_items.append(item)
     if not safe_items:
         raise HTTPException(status_code=502, detail="AI 未生成有效题目，请调整描述后重试")
-    # v1.5: 全局硬上限截断 (材料要求超过上限时按上限出); 高级选项数量仍硬性为准
+    # 全局硬上限截断 (材料要求超过上限时按上限出); 高级选项数量仍硬性为准
     cap_note = ""
     if len(safe_items) > AI_GEN_MAX_COUNT:
         safe_items = safe_items[:AI_GEN_MAX_COUNT]

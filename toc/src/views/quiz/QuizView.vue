@@ -341,7 +341,7 @@ const toggleFavorite = async () => {
 };
 
 const handleManualSubmit = () => {
-  // 未作答统计: 客观选项 + 填空逐空 + 简答文本 三类作答一并计入 (v1.4 修复主观题不计入的Bug)
+  // 未作答统计: 客观选项 + 填空逐空 + 简答文本 三类作答一并计入 (修复主观题不计入的Bug)
   const answeredCount = questions.value.filter((q) => {
     const qid = String(q.id);
     if (q.type === 'fill') {
