@@ -490,10 +490,36 @@ def pending_list(ctx: dict = Depends(require_admin), db: Session = Depends(get_d
     if f_task:
         q = q.filter(TaskRecord.task_id == f_task)
     rows = q.order_by(TaskRecord.id.desc()).all()
-    return {"code": 200, "data": {"items": [
-        {"record_id": r.id, "task_id": r.task_id, "user_id": r.user_id,
-         "answers": r.answers, "ai_result": r.ai_result,
-         "submit_time": r.submit_time.strftime("%Y-%m-%d %H:%M:%S") if r.submit_time else ""} for r in rows]}}
+
+    # 查关联 Task, User, Profile
+    t_ids = list(set(r.task_id for r in rows))
+    u_ids = list(set(r.user_id for r in rows))
+
+    tasks = db.query(Task).filter(Task.id.in_(t_ids)).all() if t_ids else []
+    users = db.query(SysUser).filter(SysUser.id.in_(u_ids)).all() if u_ids else []
+    profiles = db.query(SysUserProfile).filter(SysUserProfile.user_id.in_(u_ids)).all() if u_ids else []
+
+    task_map = {t.id: t.title for t in tasks}
+    user_map = {u.id: u for u in users}
+    profile_map = {p.user_id: p for p in profiles}
+
+    items = []
+    for r in rows:
+        u = user_map.get(r.user_id)
+        p = profile_map.get(r.user_id)
+        items.append({
+            "record_id": r.id,
+            "task_id": r.task_id,
+            "task_title": task_map.get(r.task_id, f"试卷#{r.task_id}"),
+            "user_id": r.user_id,
+            "username": u.username if u else f"用户#{r.user_id}",
+            "nickname": p.nickname if p and p.nickname else (u.display_name if u else None),
+            "answers": r.answers,
+            "ai_result": r.ai_result,
+            "submit_time": r.submit_time.strftime("%Y-%m-%d %H:%M:%S") if r.submit_time else (r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "")
+        })
+
+    return {"code": 200, "data": {"items": items}}
 
 
 @router.get("/verifications/{record_id}")
@@ -504,20 +530,48 @@ def verify_detail(record_id: int, ctx: dict = Depends(require_admin),
     if not rec:
         raise HTTPException(status_code=404, detail="记录不存在")
     task = db.query(Task).filter(Task.id == rec.task_id).first()
+    user = db.query(SysUser).filter(SysUser.id == rec.user_id).first()
+    profile = db.query(SysUserProfile).filter(SysUserProfile.user_id == rec.user_id).first()
+
     items = []
     for a in (rec.answers or []):
         rid = a.get("resource_id") if isinstance(a, dict) else None
         ans = a.get("answer") if isinstance(a, dict) else a
         content = ""
+        q_type = "short"
+        correct_ans = None
+        q_score = 10
         if rid:
             r = db.query(ResourceItem).filter(ResourceItem.id == rid).first()
             if r:
                 content = r.content
-        items.append({"resource_id": rid, "content": content, "answer": ans})
-    return {"code": 200, "data": {"record_id": rec.id, "task_id": rec.task_id,
-            "task_title": task.title if task else "", "user_id": rec.user_id,
-            "answers": rec.answers, "items": items, "ai_result": rec.ai_result,
-            "score": rec.score, "status": rec.status, "comments": rec.comments or ""}}
+                q_type = r.type
+                correct_ans = r.correct_answer
+                q_score = r.score or 10
+        items.append({
+            "resource_id": rid,
+            "content": content,
+            "type": q_type,
+            "correct_answer": correct_ans,
+            "score": q_score,
+            "answer": ans
+        })
+
+    return {"code": 200, "data": {
+        "record_id": rec.id,
+        "task_id": rec.task_id,
+        "task_title": task.title if task else "",
+        "user_id": rec.user_id,
+        "username": user.username if user else f"用户#{rec.user_id}",
+        "nickname": profile.nickname if profile and profile.nickname else (user.display_name if user else None),
+        "answers": rec.answers,
+        "items": items,
+        "ai_result": rec.ai_result,
+        "score": rec.score,
+        "status": rec.status,
+        "comments": rec.comments or "",
+        "submit_time": rec.submit_time.strftime("%Y-%m-%d %H:%M:%S") if rec.submit_time else (rec.created_at.strftime("%Y-%m-%d %H:%M:%S") if rec.created_at else "")
+    }}
 
 
 @router.post("/verifications/{record_id}/confirm")
