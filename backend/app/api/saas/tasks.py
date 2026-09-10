@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from app.core.database import get_db
 from app.api.deps import require_admin, require_member
 from app.api.saas.ops import write_audit, notify, notify_admins
-from app.models.saas import ResourceItem, Task, TaskResource, TaskRecord, SysTenant, SysTenantUser
+from app.models.saas import ResourceItem, Task, TaskResource, TaskRecord, SysTenant, SysTenantUser, SysUser, SysUserProfile
 from app.schemas.saas import SubmitAnswers, VerifyConfirm
 
 router = APIRouter()
@@ -285,6 +285,12 @@ def task_detail(task_id: int, ctx: dict = Depends(require_member), db: Session =
     return {"code": 200, "data": out}
 
 
+# /**
+#  * [变更日志]
+#  * 修改时间：2026-09-11
+#  * AI模型：Gemini 3.6 Flash
+#  * 修改内容：[1. 重构 /tasks/{task_id}/stats 接口，返回包含 total_participants, avg_score, pass_rate 及 user_records 列表的全量分析数据]
+#  */
 @router.get("/tasks/{task_id}/stats")
 def task_stats(task_id: int, ctx: dict = Depends(require_admin), db: Session = Depends(get_db)):
     t = db.query(Task).filter(Task.id == task_id, Task.tenant_id == ctx["tenant_id"]).first()
@@ -292,7 +298,42 @@ def task_stats(task_id: int, ctx: dict = Depends(require_admin), db: Session = D
         raise HTTPException(status_code=404, detail="任务不存在")
     recs = db.query(TaskRecord).filter(TaskRecord.task_id == task_id,
                                         TaskRecord.tenant_id == ctx["tenant_id"]).all()
+    
+    # 统计指标计算
+    total_participants = len(recs)
+    scores = [r.score for r in recs if r.score is not None]
+    avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+    passed_count = len([s for s in scores if s >= 60])
+    pass_rate = round((passed_count / len(scores)) * 100, 1) if scores else 0
+
+    # 查关联用户信息
+    user_ids = [r.user_id for r in recs]
+    users = db.query(SysUser).filter(SysUser.id.in_(user_ids)).all() if user_ids else []
+    profiles = db.query(SysUserProfile).filter(SysUserProfile.user_id.in_(user_ids)).all() if user_ids else []
+    
+    user_map = {u.id: u for u in users}
+    profile_map = {p.user_id: p for p in profiles}
+
+    user_records = []
+    for r in recs:
+        u = user_map.get(r.user_id)
+        p = profile_map.get(r.user_id)
+        user_records.append({
+            "record_id": r.id,
+            "user_id": r.user_id,
+            "username": u.username if u else f"用户#{r.user_id}",
+            "nickname": p.nickname if p and p.nickname else (u.display_name if u else None),
+            "score": r.score or 0,
+            "is_passed": (r.score or 0) >= 60,
+            "time_spent": r.time_spent or 0,
+            "submit_time": r.submit_time.strftime("%Y-%m-%d %H:%M:%S") if r.submit_time else (r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "")
+        })
+
     return {"code": 200, "data": {
+        "total_participants": total_participants,
+        "avg_score": avg_score,
+        "pass_rate": pass_rate,
+        "user_records": user_records,
         "submit_count": len([r for r in recs if r.status in ("submitted", "verified", "pending_verification")]),
         "verify_pending": len([r for r in recs if r.status == "pending_verification"]),
         "verified": len([r for r in recs if r.status == "verified"]),
