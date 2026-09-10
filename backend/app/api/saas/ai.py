@@ -684,9 +684,9 @@ def _get_tenant_organization_snapshot(db: Session, tid: int) -> str:
 
 
 def _get_tenant_tasks_snapshot(db: Session, tid: int) -> str:
-    """查询所属企业试卷资产全景：试卷总数、各老师/创建人出题出卷量、最近一份/近期试卷明细。"""
+    """查询所属企业试卷资产全景：试卷总数、各老师/创建人出题出卷量、近期试卷明细及考试作答分析数据（参考人数、及格率、平均分）。"""
     try:
-        from app.models.saas import Task, SysUser, TaskResource
+        from app.models.saas import Task, SysUser, TaskResource, TaskRecord
         tasks = db.query(Task).filter(Task.tenant_id == tid).order_by(Task.id.desc()).all()
         if not tasks:
             return "- 当前企业团队尚未创建任何试卷"
@@ -710,17 +710,30 @@ def _get_tenant_tasks_snapshot(db: Session, tid: int) -> str:
         lines = [
             f"企业试卷总数: 共 {total_count} 套试卷",
             f"各老师出卷统计: {', '.join(stat_lines)}",
-            "近期创建/出卷明细（按时间倒序，最新在前）:"
+            "近期创建/出卷明细与实时考试统计数据（按时间倒序，最新在前）:"
         ]
         
-        # 取最近 5 份试卷详细信息
+        # 取最近 5 份试卷详细信息，包含考试通过率、平均分、作答人数
         status_map = {"draft": "草稿/未上架", "published": "已发布/已上架", "archived": "已归档"}
         for idx, t in enumerate(tasks[:5], 1):
             c_name = creator_names.get(t.creator_id, "未知出题人")
             created_str = t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "近期"
             q_cnt = db.query(TaskResource).filter(TaskResource.task_id == t.id).count()
+            
+            # 查考试作答数据 (TaskRecord)
+            recs = db.query(TaskRecord).filter(TaskRecord.task_id == t.id, TaskRecord.tenant_id == tid).all()
+            total_part = len(recs)
+            if total_part > 0:
+                scores = [r.score for r in recs if r.score is not None]
+                avg_s = round(sum(scores) / len(scores), 1) if scores else 0
+                pass_cnt = len([s for s in scores if s >= 60])
+                pass_r = round((pass_cnt / len(scores)) * 100, 1) if scores else 0
+                exam_stats_str = f"累计作答人数: {total_part}人, 全站平均分: {avg_s}分, 综合及格通过率: {pass_r}%"
+            else:
+                exam_stats_str = "暂无作答记录 (0人考试)"
+
             lines.append(
-                f"  {idx}. 《{t.title}》 [出卷人: {c_name}] (状态: {status_map.get(t.status, t.status)}, 包含题目: {q_cnt}道, 阅卷方式: {t.verification_mode}, 创建时间: {created_str})"
+                f"  {idx}. 《{t.title}》 (ID:{t.id}) [出卷人: {c_name}] | 状态: {status_map.get(t.status, t.status)} | 题目: {q_cnt}道 | 阅卷方式: {t.verification_mode} | 创建时间: {created_str} | 【考试分析数据】-> {exam_stats_str}"
             )
         return "\n".join(lines)
     except Exception:
