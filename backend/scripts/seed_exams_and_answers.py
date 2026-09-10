@@ -472,9 +472,9 @@ def seed_data():
                     final_score = 45
 
                 # 状态判定
-                # 人工审核试卷 (manual) -> 'submitted'
-                # AI / 客观题试卷 (ai_auto) -> 'verified'
-                rec_status = "submitted" if t_mode == "manual" else "verified"
+                # 人工审核试卷 (manual) -> 'pending_verification' (待核验队列)
+                # AI / 客观题试卷 (ai_auto) -> 'verified' (已完成自动阅卷)
+                rec_status = "pending_verification" if t_mode == "manual" else "verified"
 
                 ai_result_json = None
                 comments_str = None
