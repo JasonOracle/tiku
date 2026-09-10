@@ -1,467 +1,140 @@
 <!--
-  * [变更日志]
-  * 修改时间：2026-09-09
-  * AI模型：Gemini 系列
-  * 修改内容：[页面跳转名称对齐: 批量出题确认后引导查看文案更新为「题目管理」]
-  * 修改时间：2026-09-09
-  * AI模型：Gemini 系列
-  * 修改内容：[优化批量出题确认卡与操作按钮层级: 1. 消除标题与文档标签 flex 挤压造成的垂直竖排畸变，增加 wide-card 宽度与防折行保障; 2. 移除卡片内重复操作按钮，由外层统一风险操作区承担【确认批量存入题库】/【取消】，并在 executeAction 中自动联动分类参数入库]
-  * 修改时间：2026-09-09
-  * AI模型：Gemini 系列
-  * 修改内容：[实现批量出题至题库人机协同卡与RAG切片溯源: 1. 支持 batch_create_questions_draft 渲染折叠多题卡片并提供分类选择器一键入库题海; 2. 题目卡片精准打上私有文档切片溯源标签与通用通识标; 3. 原生集成 TraceDrawer 抽屉，支持点击切片高亮查看教材原文段落]
-  * 修改时间：2026-09-09
-  * AI模型：Gemini 系列
-  * 修改内容：[优化 executeAction/cancelAction 系统回执数据流: 采用独立参数发送系统执行回执给 AI，杜绝直接将 [系统消息] 写入用户界面输入框 input.value，保障输入框纯净]
-  * 修改时间：2026-09-09
-  * AI模型：Gemini 系列
-  * 修改内容：[1. ACTION_WHITELIST 增加 go_exams 路由动作权限，支持一键无缝跳转 /exams 试卷管理; 2. actionRequired 卡片针对 delete_exam 呈现专属结构化风险删除确认卡与危险警示，点击执行物理删除]
-  * 修改时间：2026-09-08
-  * AI模型：Gemini 系列
-  * 修改内容：[全面对接方案A标准 Word 试卷导出: 1. 浮岛提示更新为「下载试卷 (Word 文档)」; 2. downloadExamCard 自动解析后端 RFC 5987 标准 Content-Disposition 文件名，默认保存为 .docx; 3. 增强支持 Word 二次排版与打印]
-  * 修改时间：2026-09-08
-  * AI模型：Gemini 系列
-  * 修改内容：[精简豆包文档卡片: 移除冗余不稳定的在线预览抽屉，右下角专注于极简一键下载按钮(Download)，点击直接下载UTF-8试卷，体验极致顺畅稳定]
-  * 修改时间：2026-09-08
-  * AI模型：Gemini 系列
-  * 修改内容：[深度对齐豆包极简文档卡片风格: 1. 微拟物纸张折角+网格底纹+文档icon; 2. 标题居左+创建时间; 3. 右下角集成开窗新标签预览(TopRight)与一键下载(Download)双轻量按钮; 4. 新增试卷在线轻量预览抽屉]
-  * 修改时间：2026-09-08
-  * AI模型：Gemini 系列
-  * 修改内容：[优化试卷导出卡片: 1. 图标替换为优质SVG图标(Document)，杜绝emoji; 2. 流式delta接收时实时解析examCard保证流式期间即可渲染下载卡片]
-  * 修改时间：2026-09-08
-  * AI模型：Gemini 系列
-  * 修改内容：[v1.3: 新增 exam_card 试卷导出下载卡片(展示试卷名称/分值/题数/一键导出按钮) 与通过率统计卡片交互联动]
-  * 修改时间：2026-09-07 01:10:00
-  * AI模型：Gemini 系列
-  * 修改内容：[新建独立 Tab 页 AI 助理组件 (现代交互工作台风格): 支持多会话切换/新建对话/前端状态快照注入/Markdown 风格回复与快捷复制]
-  * 修改时间：2026-09-07
-  * AI模型：Muse Spark
-  * 修改内容：[v1.2 Step5: 全站脱敏(AI智能助管/AI智算引擎)/现代气泡+引用条/action_card 待确认卡片/action_list 路由卡片+权限白名单+批阅抽屉联动]
-  * 修改时间：2026-09-07
-  * AI模型：Muse Spark
-  * 修改内容：[SSE 流式对话: /chat/stream 打字机逐字输出，消除整段等待感]
-  * 修改时间：2026-09-07
-  * AI模型：Muse Spark
-  * 修改内容：[风险三档卡片: medium 蓝色轻确认 + 新建题目结构化题面预览]
-  * 修改时间：2026-09-07
-  * AI模型：Muse Spark
-  * 修改内容：[企业级会话持久化: 云端会话漫游 + 游标分页 + 视口锚定 + 打字吸底锁，彻底移除 localStorage]
+ * [变更日志]
+ * 修改时间：2026-09-10
+ * AI模型：Agnes-2.5-Flash
+ * 修改内容：[v1.3 核心业务卡片回补: SSE流式对话 + 试卷卡片 + 工具调用确认 + 溯源抽屉]
 -->
 <template>
   <div class="ai-tab-container">
-    <!-- 左侧会话历史侧边栏 -->
-    <div class="session-sidebar">
-      <div class="new-chat-btn" @click="startNewSession">
-        <el-icon><Plus /></el-icon>
-        <span>新建对话</span>
-      </div>
+    <!-- 左侧会话侧边栏 -->
+    <SessionSidebar
+      :sessions="sessions"
+      :active-id="activeSessionId"
+      @new="startNewSession"
+      @select="selectSession"
+      @delete="handleDeleteSession"
+    />
 
-      <div class="session-list">
-        <div
-          v-for="s in sessions"
-          :key="s.id"
-          class="session-item"
-          :class="{ active: s.id === activeSessionId }"
-          @click="selectSession(s.id)"
-        >
-          <el-icon class="item-icon"><ChatDotRound /></el-icon>
-          <span class="session-title" @dblclick.stop="renameSession(s)">{{ s.title || '新对话' }}</span>
-          <el-icon class="del-icon" @click.stop="deleteSession(s.id)"><Delete /></el-icon>
-        </div>
-      </div>
-
-      <div class="quota-footer">
-        <div class="quota-card">
-          <span>今日 AI 额度余额</span>
-          <strong style="color: #0284c7; font-size: 16px">{{ userStore.quotaRemaining }} 次</strong>
-        </div>
-      </div>
-    </div>
-
-    <!-- 右侧聊天工作台主区域 -->
+    <!-- 右侧聊天主区域 -->
     <div class="chat-main">
       <div class="chat-header">
         <div class="model-badge">
           <span class="sparkle"><el-icon><MagicStick /></el-icon></span>
           <span class="model-name">AI 智能助管</span>
         </div>
-        <div style="font-size: 13px; color: #64748b">
+        <div style="font-size: 13px; color: #64748b;">
           AI 智算引擎 · 私有业务上下文问答
         </div>
       </div>
 
-      <!-- 消息会话区域 -->
       <div class="messages-wrap" ref="messagesWrapRef" @scroll="handleScroll">
         <div v-if="loadingMessages" class="history-loader">历史消息加载中...</div>
         <div v-if="currentMessages.length === 0 && !loadingMessages" class="welcome-screen">
-          <div class="welcome-badge"><el-icon style="vertical-align: middle; margin-right: 4px;"><MagicStick /></el-icon>智能出题与教务数字助理</div>
+          <div class="welcome-badge">
+            <el-icon style="vertical-align: middle; margin-right: 4px;"><MagicStick /></el-icon>
+            智能出题与教务数字助手
+          </div>
           <h2>你好，{{ userStore.username }}！有什么我可以帮你的？</h2>
           <div class="presets-grid">
-            <div class="preset-card" @click="usePreset('帮我生成一份包含3道单选、2道判断的消防安全测试卷，难度中等')">
+            <div class="preset-card" @click="usePreset('帮我生成一份包含5道单选题3道判断的消防安全测试卷，难度中等')">
               <div class="card-icon">📝</div>
               <div class="card-title">一键智能组卷</div>
               <div class="card-sub">生成包含指定题型构成的消防测试卷</div>
             </div>
-            <div class="preset-card" @click="usePreset('帮我出 5 道关于金融风险控制的单选题，难度偏难，带解析')">
+            <div class="preset-card" @click="usePreset('帮我出5道关于金融风险控制的单选题，难度偏难，带解析')">
               <div class="card-icon">🎯</div>
               <div class="card-title">快速生成题目</div>
-              <div class="card-sub">出 5 道金融风控单选题并附带参考解析</div>
+              <div class="card-sub">出5道金融风控单选题并附带参考解析</div>
             </div>
             <div class="preset-card" @click="usePreset('我今天有哪些待办工作？有哪些需要批改的试卷？')">
               <div class="card-icon">📊</div>
+              <div class="card-title">查询工作状态</div>
+              <div class="card-sub">分析当前试卷待批改与管理状态</div>
+            </div>
+            <div class="preset-card" @click="usePreset('帮我查看当前企业的知识库里有哪些文档')">
+              <div class="card-icon">📚</div>
+              <div class="card-title">知识库检索</div>
+              <div class="card-sub">查询企业知识库中的文档资料</div>
+            </div>
+            <div class="preset-card" @click="usePreset('帮我创建一个关于安全生产的考试，包含单选和多选题')">
+              <div class="card-icon">✅</div>
+              <div class="card-title">创建新考试</div>
+              <div class="card-sub">基于材料智能生成安全生产考试试卷</div>
+            </div>
+            <div class="preset-card" @click="usePreset('查询工作上帝视角')">
+              <div class="card-icon">🔍</div>
               <div class="card-title">查询工作上帝视角</div>
               <div class="card-sub">分析当前试卷待批改与管理状态</div>
             </div>
           </div>
         </div>
 
-        <template v-else>
-          <div v-for="(m, idx) in currentMessages" :key="idx" class="message-row" :class="m.role">
-            <div class="avatar-cell">
-              <div v-if="m.role === 'user'" class="user-avatar">
-                {{ userStore.username.substring(0, 1).toUpperCase() }}
-              </div>
-              <div v-else class="ai-avatar"><el-icon><MagicStick /></el-icon></div>
-            </div>
-            <div class="content-cell">
-              <div class="sender-name">{{ m.role === 'user' ? userStore.username : 'AI 智能助管' }}</div>
-              <div class="bubble-content markdown-body" v-if="m.content && m.content.trim()">
-                <div v-if="m.role === 'assistant' && m.quote" class="quote-bar">| 回复 全Ai系统: {{ m.quote }}</div>
-                <template v-if="m.isThinking">
-                  <div class="thinking-spinner">
-                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-                    <span style="margin-left: 8px; color: #64748b; font-size: 13px;">正在思考中...</span>
-                  </div>
-                </template>
-                <template v-else>
-                  <div v-html="renderMarkdown(m.content)"></div>
-                  
-                  <!-- 操作栏 (只有真正的 AI 回复才显示) -->
-                  <div class="message-actions" v-if="m.role === 'assistant' && !m.isThinking">
-                    <el-tooltip content="复制内容" placement="top">
-                      <span class="action-icon" @click="copyToClipboard(m.content)"><el-icon><DocumentCopy /></el-icon></span>
-                    </el-tooltip>
-                    <el-divider direction="vertical" />
-                    <el-tooltip content="有用" placement="top">
-                      <span class="action-icon" @click="submitFeedback(m.content, 'up')" style="font-size: 14px;">
-                        <svg viewBox="0 0 24 24" width="1em" height="1em" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
-                      </span>
-                    </el-tooltip>
-                    <el-tooltip content="无用" placement="top">
-                      <span class="action-icon" @click="submitFeedback(m.content, 'down')" style="font-size: 14px;">
-                        <svg viewBox="0 0 24 24" width="1em" height="1em" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></svg>
-                      </span>
-                    </el-tooltip>
-                  </div>
-                </template>
-              </div>
-              
-              <div class="action-card" :class="{ 'wide-card': ['batch_create_questions_draft', 'create_exam_draft'].includes(m.toolName || '') }" v-if="m.actionRequired">
-                <div class="action-header" :class="[m.actionResolved ? 'resolved' : '', riskHeaderClass(m.riskLevel)]">
-                  <span class="header-icon"><el-icon><MagicStick /></el-icon></span> 
-                  <span class="header-title">确认: {{ riskLabel(m.riskLevel) }}风险业务操作</span> 
-                  <span class="header-badge" v-if="!m.actionResolved">待确认</span>
-                  <span class="header-badge resolved" v-else>已处理</span>
-                </div>
-                <div class="action-body">
-                  <div class="action-desc" v-if="!m.content">
-                    请确认是否执行刚才的操作 ({{ m.toolName }})。
-                  </div>
-                  <div class="action-desc" v-else>
-                    风险等级: <span style="font-weight:600;" :style="{ color: m.riskLevel === 'high' ? '#ef4444' : '#0284c7' }">{{ riskLabel(m.riskLevel) }}风险</span><br/>
-                    有效期: 5 分钟内
-                  </div>
-                  <!-- 组卷确认卡：题目全览 + 参数补全表单 -->
-                  <div v-if="m.toolName === 'create_exam_draft'" class="exam-draft-card">
-                    <div class="exam-draft-title">✨ AI 智能组卷确认卡</div>
-                    <div class="exam-draft-summary">{{ examTypeSummary(m.arguments) }}</div>
-                    <el-collapse>
-                      <el-collapse-item
-                        v-for="(q, qi) in (m.arguments?.questions || [])"
-                        :key="qi"
-                        :name="qi"
-                        :title="`第 ${qi + 1} 题 · ${q.title}`"
-                      >
-                        <div class="draft-meta" style="margin-bottom: 6px">
-                          <el-tag size="small" type="primary">{{ draftPreview(q).typeLabel }}</el-tag>
-                          <span>{{ draftPreview(q).score }} 分</span>
-                        </div>
-                        <div
-                          v-for="(opt, oi) in draftPreview(q).options"
-                          :key="oi"
-                          class="draft-opt"
-                          :class="{ correct: opt.correct }"
-                        >
-                          <span class="draft-opt-key">{{ opt.label }}</span>
-                          <span>{{ opt.text }}</span>
-                          <span v-if="opt.correct" class="draft-opt-mark">✔</span>
-                        </div>
-                        <div class="draft-row" style="margin-top: 6px"><span class="draft-label">答案：</span>{{ draftPreview(q).answerText }}</div>
-                      </el-collapse-item>
-                    </el-collapse>
-                    <el-form label-width="90px" size="small" style="margin-top: 12px">
-                      <el-form-item label="试卷分类">
-                        <el-select v-model="examFormOf(m).category_id" placeholder="选择试卷分类" style="width: 100%">
-                          <el-option v-for="c in examCategories" :key="c.id" :label="c.name" :value="c.id" />
-                        </el-select>
-                      </el-form-item>
-                      <el-form-item label="考试时间">
-                        <el-date-picker
-                          v-model="examFormOf(m).timeRange"
-                          type="datetimerange"
-                          range-separator="至"
-                          start-placeholder="开始时间"
-                          end-placeholder="结束时间"
-                          format="YYYY-MM-DD HH:mm"
-                          value-format="YYYY-MM-DDTHH:mm:ss"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="考试时长">
-                        <div style="display: flex; align-items: center; gap: 12px">
-                          <el-switch v-model="examFormOf(m).is_timed" />
-                          <div v-if="examFormOf(m).is_timed" style="display: flex; align-items: center; gap: 6px">
-                            <el-input-number v-model="examFormOf(m).time_limit" :min="1" :max="600" />
-                            <span style="color: #64748b">分钟</span>
-                          </div>
-                          <span v-else style="color: #94a3b8">不限时长</span>
-                        </div>
-                      </el-form-item>
-                      <el-form-item v-if="examHasShort(m)" label="AI 阅卷模式">
-                        <el-radio-group v-model="examFormOf(m).grading_mode">
-                          <el-radio label="ai_auto">AI 自动托管</el-radio>
-                          <el-radio label="manual">人工全权批阅</el-radio>
-                        </el-radio-group>
-                      </el-form-item>
-                    </el-form>
-                    <div class="action-footer" v-if="!m.actionResolved">
-                      <button class="btn-confirm-medium" @click="confirmExamDraft(m)">确认创建试卷</button>
-                      <button class="btn-cancel" @click="cancelAction(m)">取消</button>
-                    </div>
-                    <div v-else class="action-desc">试卷草稿已创建，可前往<a class="exam-link" @click="goExams">试卷管理</a>查看。</div>
-                  </div>
-                  <!-- 批量题目确认卡：题目列表折叠全览 + 私有资料溯源标 + 题库分类选择器 + 统一底部执行 -->
-                  <div v-if="m.toolName === 'batch_create_questions_draft'" class="exam-draft-card batch-draft-card">
-                    <div class="batch-draft-header">
-                      <div class="batch-draft-title-wrap">
-                        <el-icon style="color: #0284c7; font-size: 16px;"><MagicStick /></el-icon>
-                        <span class="batch-draft-title">AI 批量出题确认卡 (共 {{ (m.arguments?.questions || []).length }} 题 · 存入题海)</span>
-                      </div>
-                      <el-tag v-if="m.arguments?.doc_name" type="success" size="small" effect="plain" class="batch-doc-tag">
-                        📚 已关联私有文档《{{ m.arguments.doc_name }}》
-                      </el-tag>
-                    </div>
-                    <div class="exam-draft-summary" style="margin-top: 6px; font-size: 12px; color: #64748b;">
-                      {{ examTypeSummary(m.arguments) }} · 审核题目无误后，选择入库分类并点击下方【确认执行】即可存入题库
-                    </div>
-                    <el-collapse style="margin-top: 10px;">
-                      <el-collapse-item
-                        v-for="(q, qi) in (m.arguments?.questions || [])"
-                        :key="qi"
-                        :name="qi"
-                        :title="`第 ${qi + 1} 题 · [${draftPreview(q).typeLabel}] ${q.title}`"
-                      >
-                        <div class="draft-meta" style="margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
-                          <div>
-                            <el-tag size="small" type="primary">{{ draftPreview(q).typeLabel }}</el-tag>
-                            <span style="margin-left: 8px; font-size: 12px; color: #64748b;">难度 {{ draftPreview(q).difficulty }} · {{ draftPreview(q).score }} 分</span>
-                          </div>
-                          <!-- 溯源标签: 命中文档切片展示绿色可点击溯源; 通识展示灰色 -->
-                          <div>
-                            <el-tag
-                              v-if="(q.source_ref && q.source_ref.length) || q.source_origin?.includes('切片')"
-                              type="success"
-                              size="small"
-                              style="cursor: pointer;"
-                              @click.stop="openBatchTrace(q)"
-                            >
-                              📚 依据{{ q.source_origin || '文档切片' }} (查看原文)
-                            </el-tag>
-                            <el-tag v-else type="info" size="small" effect="plain">
-                              🌐 专业通识拓展
-                            </el-tag>
-                          </div>
-                        </div>
-                        <div
-                          v-for="(opt, oi) in draftPreview(q).options"
-                          :key="oi"
-                          class="draft-opt"
-                          :class="{ correct: opt.correct }"
-                        >
-                          <span class="draft-opt-key">{{ opt.label }}</span>
-                          <span>{{ opt.text }}</span>
-                          <span v-if="opt.correct" class="draft-opt-mark">✔</span>
-                        </div>
-                        <div class="draft-row" style="margin-top: 6px"><span class="draft-label">正确答案：</span>{{ draftPreview(q).answerText }}</div>
-                        <div v-if="draftPreview(q).explanation" class="draft-row"><span class="draft-label">解析：</span>{{ draftPreview(q).explanation }}</div>
-                      </el-collapse-item>
-                    </el-collapse>
-                    <el-form label-width="80px" size="small" style="margin-top: 14px">
-                      <el-form-item label="入库分类" style="margin-bottom: 0;">
-                        <el-select v-model="batchFormOf(m).category_id" placeholder="选择存入题目分类" style="width: 100%">
-                          <el-option v-for="c in questionCategories" :key="c.id" :label="c.name" :value="c.id" />
-                        </el-select>
-                      </el-form-item>
-                    </el-form>
-                    <div v-if="m.actionResolved" class="action-desc" style="margin-top: 10px;">题目已成功存入题库，可前往<a class="exam-link" @click="goQuestions">题目管理</a>查看与引用。</div>
-                  </div>
-                  <!-- 新建题目：结构化题面预览（题干/选项/答案/解析），告别生硬 JSON -->
-                  <div v-else-if="m.toolName === 'create_question_draft'" class="draft-preview">
-                    <div class="draft-title">{{ draftPreview(m.arguments).title }}</div>
-                    <div class="draft-meta">
-                      <el-tag size="small" type="primary">{{ draftPreview(m.arguments).typeLabel }}</el-tag>
-                      <span>难度 {{ draftPreview(m.arguments).difficulty }} · {{ draftPreview(m.arguments).score }} 分</span>
-                    </div>
-                    <div v-if="draftPreview(m.arguments).options.length" class="draft-opts">
-                      <div
-                        v-for="(opt, oi) in draftPreview(m.arguments).options"
-                        :key="oi"
-                        class="draft-opt"
-                        :class="{ correct: opt.correct }"
-                      >
-                        <span class="draft-opt-key">{{ opt.label }}</span>
-                        <span>{{ opt.text }}</span>
-                        <span v-if="opt.correct" class="draft-opt-mark">✔</span>
-                      </div>
-                    </div>
-                    <div class="draft-row"><span class="draft-label">正确答案：</span>{{ draftPreview(m.arguments).answerText }}</div>
-                    <div v-if="draftPreview(m.arguments).explanation" class="draft-row"><span class="draft-label">解析：</span>{{ draftPreview(m.arguments).explanation }}</div>
-                  </div>
-                  <!-- 删除试卷专属安全确认卡：清晰展示删除目标与风控提示 -->
-                  <div v-else-if="m.toolName === 'delete_exam'" class="exam-draft-card" style="border-color: #fed7aa; background: #fffaf5;">
-                    <div class="exam-draft-title" style="color: #c2410c; display: flex; align-items: center; gap: 6px;">
-                      <el-icon><Delete /></el-icon>
-                      <span>试卷删除确认（不可逆操作）</span>
-                    </div>
-                    <div style="font-size: 13px; color: #475569; margin-bottom: 8px;">
-                      您正在通过 AI 助理申请物理删除试卷。
-                      <span v-if="m.arguments?.keyword">（匹配关键词：<strong>{{ m.arguments.keyword }}</strong>）</span>
-                      <span v-else-if="m.arguments?.exam_id">（指定试卷 ID：<strong>{{ m.arguments.exam_id }}</strong>）</span>
-                      <span v-else>（默认操作：您名下最近创建的一份试卷）</span>
-                    </div>
-                    <div style="background: #fff; border: 1px dashed #fdba74; border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #9a3412; line-height: 1.6;">
-                      ⚠️ <strong>风控安全准则</strong>：仅允许删除<strong>您本人创建</strong>、处于<strong>未上架草稿(draft)或已下架(archived)</strong>状态且<strong>零学员作答</strong>的试卷。若试卷正在上架中需先下架；若已有学员提交考试，系统将拒绝删除以保护成绩数据安全。
-                    </div>
-                  </div>
-                  <div v-else class="action-code">
-                    <pre>{{ JSON.stringify(m.arguments, null, 2) }}</pre>
-                  </div>
-                  <div class="action-footer" v-if="!m.actionResolved && m.toolName !== 'create_exam_draft'">
-                    <button :class="m.toolName === 'delete_exam' ? 'btn-confirm' : (m.riskLevel === 'high' ? 'btn-confirm' : 'btn-confirm-medium')" @click="executeAction(m)">
-                      {{ m.toolName === 'delete_exam' ? '确认删除试卷' : (m.toolName === 'batch_create_questions_draft' ? '确认批量存入题库' : '确认执行') }}
-                    </button>
-                    <button class="btn-cancel" @click="cancelAction(m)">取消</button>
-                  </div>
-                </div>
-              </div>
+        <template v-for="(m, idx) in currentMessages" :key="idx">
+          <!-- 普通消息气泡 -->
+          <MessageBubble
+            v-if="!m.actionRequired && !m.actionCard && !m.actionList && !m.examCard"
+            :role="m.role"
+            :content="m.content"
+            :username="userStore.username"
+            :quote="m.quote"
+            :is-thinking="m.isThinking"
+            :rag-sources="m.ai_rag_sources || []"
+            @show-source="showSource"
+            @feedback="submitFeedback"
+          />
 
-              <!-- v1.2 Step5: 人机协同待确认卡片 (action_card 协议) -->
-              <div class="action-card" v-if="m.actionCard">
-                <div class="action-header" :class="[m.actionCard.resolved === 'done' ? 'resolved' : '', m.actionCard.riskLevel === 'high' ? 'high-risk' : 'low-risk']">
-                  <span class="header-title">确认: {{ m.actionCard.title }} [{{ m.actionCard.resolved === 'done' ? '已执行' : '待确认' }}]</span>
-                </div>
-                <div class="action-body">
-                  <div class="action-desc">
-                    风险等级: <span style="font-weight:600;" :style="{ color: m.actionCard.riskLevel === 'high' ? '#ef4444' : '#3b82f6' }">{{ m.actionCard.riskLevel || 'medium' }}</span>
-                  </div>
-                  <div class="action-desc" v-for="(d, di) in m.actionCard.details || []" :key="di">
-                    {{ d.label }}：<strong>{{ d.value }}</strong>
-                  </div>
-                  <div class="action-footer" v-if="m.actionCard.resolved !== 'done' && m.actionCard.resolved !== 'cancelled'">
-                    <button class="btn-confirm" @click="confirmActionCard(m)">确认执行</button>
-                    <button class="btn-cancel" @click="cancelMarkCard(m)">取消</button>
-                  </div>
-                  <div v-else-if="m.actionCard.resolved === 'cancelled'" class="action-desc">已取消该操作。</div>
-                </div>
-              </div>
+          <!-- 工具调用确认卡 -->
+          <ToolCallCard
+            v-else-if="m.actionRequired || m.actionCard || m.actionList"
+            :message="m"
+            :categories="examCategories"
+            @confirm="confirmToolCall"
+            @cancel="cancelToolCall"
+          />
 
-              <!-- v1.2 Step5: 交互式操作路由卡片 (action_list 协议) -->
-              <div class="action-list-card" v-if="m.actionList && m.actionList.length">
-                <div v-for="(item, li) in m.actionList" :key="li" class="action-list-row">
-                  <div class="action-list-main">
-                    <div class="action-list-title">{{ item.title }}</div>
-                    <el-tag v-if="item.badge" size="small" type="warning" effect="dark">{{ item.badge }}</el-tag>
-                  </div>
-                  <el-button
-                    v-if="item.action && isActionAllowed(item.action.target)"
-                    type="primary"
-                    size="small"
-                    @click="handleCardAction(item.action)"
-                  >
-                    {{ item.action.label || '去批改' }}
-                  </el-button>
-                </div>
-              </div>
-
-              <!-- v1.3: 豆包风格极简文档卡片 (exam_card 协议) -->
-              <div class="doubao-doc-card" v-if="m.examCard">
-                <!-- 拟物化纸张底层视觉装饰 -->
-                <div class="doubao-doc-sheet">
-                  <div class="sheet-line sheet-line-1"></div>
-                  <div class="sheet-line sheet-line-2"></div>
-                  <div class="sheet-box"></div>
-                </div>
-
-                <!-- 左上角蓝色文件图标 -->
-                <div class="doubao-doc-icon-wrap">
-                  <svg class="doubao-doc-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                    <polyline points="10 9 9 9 8 9"></polyline>
-                  </svg>
-                </div>
-
-                <!-- 标题与时间信息 -->
-                <div class="doubao-doc-main">
-                  <div class="doubao-doc-title" :title="m.examCard.title">
-                    {{ m.examCard.title }}
-                  </div>
-                  <div class="doubao-doc-sub">
-                    <span>创建时间: {{ m.examCard.created_at || '刚刚' }}</span>
-                    <span class="sub-dot">·</span>
-                    <span>{{ m.examCard.question_count }} 题 / {{ m.examCard.total_score }} 分</span>
-                    <span class="sub-dot">·</span>
-                    <span class="doc-format-badge">Word 文档</span>
-                  </div>
-                </div>
-
-                <!-- 右下角操作浮岛 (豆包风格一键下载) -->
-                <div class="doubao-doc-actions">
-                  <el-tooltip content="点击下载试卷 (Word 文档)" placement="top">
-                    <button class="doubao-action-btn" @click="downloadExamCard(m.examCard)">
-                      <el-icon><Download /></el-icon>
-                    </button>
-                  </el-tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- 试卷导出卡 -->
+          <ExamCard
+            v-else-if="m.examCard"
+            :card="m.examCard"
+            :active="false"
+            @download="downloadExamCard"
+          />
         </template>
+
+        <div v-if="sending" class="thinking-indicator">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span style="margin-left: 8px; color: #64748b; font-size: 13px;">AI 正在思考...</span>
+        </div>
       </div>
 
-      <!-- 底部输入框区域 -->
       <div class="input-container">
         <div class="input-box">
           <el-input
             v-model="input"
             type="textarea"
-            :autosize="{ minRows: 2, maxRows: 6 }"
-            placeholder="给 AI 助理发送消息... (Enter 发送，Shift + Enter 换行)"
+            :rows="3"
+            placeholder="输入问题... (Enter 发送，Shift+Enter 换行)"
             @keydown.enter.exact.prevent="send"
             :disabled="sending"
           />
-          <div class="input-actions">
-            <span class="tip-text">按 Enter 发送</span>
-            <el-button type="primary" class="send-btn" :loading="sending" :disabled="!input.trim()" @click="send">
-              发送
-            </el-button>
-          </div>
+        </div>
+        <div class="input-actions">
+          <span class="tip-text">AI 可调用工具：组卷 / 出题 / 删除试卷</span>
+          <el-button type="primary" class="send-btn" :loading="sending" :disabled="!input.trim()" @click="send">
+            发送
+          </el-button>
         </div>
       </div>
     </div>
 
-    <!-- v1.2 Step5: action_list [去批改] 原地唤出批阅抽屉 -->
+    <!-- 溯源抽屉 -->
+    <TraceDrawer
+      :visible="srcVisible"
+      :resource="activeSource"
+      @update:visible="srcVisible = $event"
+    />
+
+    <!-- 批阅抽屉（由 action_list 唤起） -->
     <GradingDrawer
       :visible="gradingVisible"
       :exam-id="gradingExamId"
@@ -469,51 +142,21 @@
       @update:visible="gradingVisible = $event"
       @graded="handleDrawerGraded"
     />
-
-    <!-- RAG 知识库切片高亮溯源抽屉 (复用题库溯源抽屉) -->
-    <TraceDrawer
-      :visible="traceVisible"
-      :question="traceQuestion"
-      @update:visible="traceVisible = $event"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, computed, nextTick, onMounted, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Plus, ChatDotRound, Delete, MagicStick, DocumentCopy, Download, Document } from '@element-plus/icons-vue';
-import { marked } from 'marked';
-import request from '../../utils/request';
+import { MagicStick } from '@element-plus/icons-vue';
 import { useUserStore } from '../../store/user';
+import request from '../../utils/request';
+import SessionSidebar from './components/SessionSidebar.vue';
+import MessageBubble from './components/MessageBubble.vue';
+import ToolCallCard from './components/ToolCallCard.vue';
+import ExamCard from './components/ExamCard.vue';
+import TraceDrawer from '../resources/components/TraceDrawer.vue';
 import GradingDrawer from '../exams/components/GradingDrawer.vue';
-import TraceDrawer from '../questions/components/TraceDrawer.vue';
-
-interface ActionCard {
-  actionType: string;
-  title: string;
-  riskLevel?: string;
-  details?: Array<{ label: string; value: string }>;
-  payload?: any;
-  resolved?: 'pending' | 'done' | 'cancelled';
-}
-
-interface ActionListItem {
-  title: string;
-  badge?: string;
-  action?: { type: string; label: string; target: string; params?: any };
-}
-
-interface ExamCardData {
-  type: string;
-  exam_id: number;
-  title: string;
-  total_score: number;
-  question_count: number;
-  download_url: string;
-  created_at?: string;
-}
 
 interface ChatMessage {
   id?: number;
@@ -527,29 +170,31 @@ interface ChatMessage {
   arguments?: any;
   riskLevel?: string;
   actionResolved?: boolean;
-  actionCard?: ActionCard | null;
-  actionList?: ActionListItem[] | null;
+  actionCard?: any;
+  actionList?: any[];
   examCard?: ExamCardData | null;
+  ai_rag_sources?: any[];
+}
+
+interface ExamCardData {
+  type: string;
+  exam_id: number;
+  title: string;
+  total_score: number;
+  question_count: number;
+  download_url: string;
+  created_at?: string;
 }
 
 interface CloudSession {
   id: number;
   title: string;
-  updated_at: string;
 }
 
-const route = useRoute();
-const router = useRouter();
-
-const goExams = (): void => {
-  router.push('/exams');
-};
 const userStore = useUserStore();
 const input = ref('');
 const sending = ref(false);
 const messagesWrapRef = ref<HTMLElement | null>(null);
-
-// ---- 企业级云端会话（跨端漫游，彻底告别 localStorage）----
 const sessions = ref<CloudSession[]>([]);
 const activeSessionId = ref<number | null>(null);
 const messages = ref<ChatMessage[]>([]);
@@ -557,6 +202,12 @@ const hasMore = ref(true);
 const loadingHistory = ref(false);
 const loadingMessages = ref(false);
 const minMessageId = ref<number | null>(null);
+const examCategories = ref<any[]>([]);
+const srcVisible = ref(false);
+const activeSource = ref<any>({});
+const gradingVisible = ref(false);
+const gradingExamId = ref<number | null>(null);
+const gradingExamTitle = ref('');
 
 const currentMessages = computed(() => messages.value);
 
@@ -567,7 +218,6 @@ const stripActionBlocks = (t: string): string =>
     .replace(/```exam_card\s*[\s\S]*?```/g, '')
     .trim();
 
-// 服务端行 -> 本地消息（含卡片状态还原；无落库卡片时回退解析正文）
 const normalizeServerMessage = (item: any): ChatMessage => {
   const msg: ChatMessage = {
     id: item.id,
@@ -582,11 +232,11 @@ const normalizeServerMessage = (item: any): ChatMessage => {
       msg.toolName = cardData.tool_name;
       msg.toolCallId = cardData.tool_call_id;
       msg.arguments = cardData.arguments;
-      msg.riskLevel = cardData.risk_level || 'high';
+      msg.riskLevel = cardData.risk_level || 'medium';
       msg.actionResolved = cardData.status === 'executed';
       if (!msg.content) msg.content = cardData.message || '';
     } else {
-      msg.actionCard = { ...(cardData as object), resolved: (cardData.status as ActionCard['resolved']) || 'pending' } as ActionCard;
+      msg.actionCard = { ...(cardData as object), resolved: (cardData.status as any) || 'pending' };
       msg.content = stripActionBlocks(msg.content) || msg.content;
     }
   }
@@ -602,6 +252,46 @@ const normalizeServerMessage = (item: any): ChatMessage => {
     msg.examCard = parsed.examCard;
   }
   return msg;
+};
+
+const extractActionBlocks = (text: string): {
+  text: string;
+  card: any;
+  list: any[];
+  examCard: ExamCardData | null;
+} => {
+  let clean = text || '';
+  let card: any = null;
+  let list: any[] = [];
+  let examCard: ExamCardData | null = null;
+
+  const cardMatch = clean.match(/```action_card\s*([\s\S]*?)```/);
+  if (cardMatch) {
+    try {
+      card = JSON.parse(cardMatch[1]);
+    } catch (e) { /* 降级 */ }
+    clean = clean.replace(cardMatch[0], '').trim();
+  }
+
+  const listMatch = clean.match(/```action_list\s*([\s\S]*?)```/);
+  if (listMatch) {
+    try {
+      const parsed = JSON.parse(listMatch[1]);
+      if (Array.isArray(parsed)) list = parsed;
+    } catch (e) { /* 降级 */ }
+    clean = clean.replace(listMatch[0], '').trim();
+  }
+
+  const examMatch = clean.match(/```exam_card\s*([\s\S]*?)```/);
+  if (examMatch) {
+    try {
+      const parsed = JSON.parse(examMatch[1]);
+      if (parsed && parsed.exam_id) examCard = parsed;
+    } catch (e) { /* 降级 */ }
+    clean = clean.replace(examMatch[0], '').trim();
+  }
+
+  return { text: clean, card, list, examCard };
 };
 
 const refreshSessions = async (): Promise<void> => {
@@ -659,33 +349,16 @@ const selectSession = async (id: number): Promise<void> => {
   scrollToBottom();
 };
 
-const deleteSession = async (id: number): Promise<void> => {
-  try {
-    await request.delete(`/api/v1/admin/ai/sessions/${id}`);
-  } catch (e) {
-    return; /* 拦截器已提示 */
-  }
+const handleDeleteSession = async (id: number): Promise<void> => {
   await refreshSessions();
   if (activeSessionId.value === id) {
     if (sessions.value.length > 0) {
       activeSessionId.value = sessions.value[0].id;
-      await loadMessages(activeSessionId.value as number);
+      await loadMessages(sessions.value[0].id);
       scrollToBottom();
     } else {
       await startNewSession();
     }
-  }
-};
-
-const renameSession = async (s: CloudSession): Promise<void> => {
-  try {
-    const { ElMessageBox } = await import('element-plus');
-    const { value } = await ElMessageBox.prompt('重命名会话', { inputValue: s.title, inputValidator: (v: string) => !!v?.trim() });
-    const title = String(value).trim().slice(0, 120);
-    await request.put(`/api/v1/admin/ai/sessions/${s.id}`, { title });
-    s.title = title;
-  } catch (e) {
-    /* 取消或失败时静默 */
   }
 };
 
@@ -696,7 +369,6 @@ const scrollToBottom = async () => {
   }
 };
 
-// 打字机智能吸底锁：仅用户处于底部附近才跟随，用户上滑读史时视口静止
 const isNearBottom = (): boolean => {
   const box = messagesWrapRef.value;
   if (!box) return true;
@@ -707,7 +379,6 @@ const followScroll = (): void => {
   if (isNearBottom()) scrollToBottom();
 };
 
-// 仿微信向上游标分页：触顶拉更早 20 条 + 视口高度数学补偿，零跳屏
 const handleScroll = async (): Promise<void> => {
   const chatBox = messagesWrapRef.value;
   if (!chatBox || chatBox.scrollTop >= 60 || !hasMore.value || loadingHistory.value) return;
@@ -734,291 +405,279 @@ const handleScroll = async (): Promise<void> => {
       hasMore.value = false;
     }
   } catch (e) {
-    /* 历史拉取失败时静默，保持视口不动 */
+    /* 静默 */
   } finally {
     loadingHistory.value = false;
   }
 };
 
-// 极简轻量 Markdown / HTML 转义渲染
-const renderMarkdown = (text: string) => {
-  if (!text) return '';
-  return marked.parse(text) as string;
-};
-
-// ---- 风险三档展示：high 红 / medium 蓝 / low 灰蓝 ----
-const riskLabel = (level?: string): string => {
-  if (level === 'high') return '高';
-  if (level === 'medium') return '中';
-  if (level === 'low') return '低';
-  return '未知';
-};
-
-const riskHeaderClass = (level?: string): string => {
-  if (level === 'high') return 'high-risk';
-  if (level === 'medium') return 'med-risk';
-  return 'low-risk';
-};
-
-// 新建题目参数 → 结构化预览（兼容 {key,text} 与 {content,is_correct} 两种选项形状）
-const draftPreview = (args: any): {
-  title: string; typeLabel: string; difficulty: string; score: number | string;
-  options: Array<{ label: string; text: string; correct: boolean }>;
-  answerText: string; explanation: string;
-} => {
-  const a = args || {};
-  const typeMap: Record<string, string> = { single: '单选题', multiple: '多选题', judge: '判断题', fill: '填空题', short: '简答题' };
-  const rawAns = Array.isArray(a.answer) ? a.answer.map((x: any) => String(x ?? '').trim()) : [];
-  const ansSet = new Set(rawAns.map((s: string) => s.toUpperCase()));
-  const rawOpts = Array.isArray(a.options) ? a.options : [];
-  const options = rawOpts.map((o: any, i: number) => {
-    const label = String(o.key ?? String.fromCharCode(65 + i));
-    const text = String(o.text ?? o.content ?? '');
-    const correct = ansSet.has(label.toUpperCase()) || ansSet.has(text.toUpperCase()) || o.is_correct === true;
-    return { label, text, correct };
-  });
-  return {
-    title: String(a.title || '（无题干）'),
-    typeLabel: typeMap[String(a.type)] || String(a.type || '题目'),
-    difficulty: String(a.difficulty || 'medium'),
-    score: a.score ?? 10,
-    options,
-    answerText: rawAns.join('、') || '—',
-    explanation: String(a.explanation || '')
-  };
-};
-
-// ---- 组卷确认卡：参数补全表单（分类/时间窗/限时/阅卷模式，内置默认值）----
-interface ExamDraftForm {
-  category_id: number | null;
-  timeRange: [string, string] | [];
-  is_timed: boolean;
-  time_limit: number;
-  grading_mode: string;
-}
-
-const examCategories = ref<any[]>([]);
-const questionCategories = ref<any[]>([]);
-
-// 溯源抽屉响应式状态
-const traceVisible = ref(false);
-const traceQuestion = ref<any>(null);
-
-const openBatchTrace = (q: any) => {
-  traceQuestion.value = q;
-  traceVisible.value = true;
-};
-
-const goQuestions = () => {
-  router.push('/questions');
-};
-
+const examCategoriesLoaded = ref(false);
 const loadExamCategories = async (): Promise<void> => {
+  if (examCategoriesLoaded.value) return;
   try {
     const res: any = await request.get('/api/v1/admin/categories', { params: { target_type: 'exam' } });
     examCategories.value = Array.isArray(res) ? res : (res.items || []);
   } catch (e) {
     examCategories.value = [];
   }
+  examCategoriesLoaded.value = true;
 };
 
-const loadQuestionCategories = async (): Promise<void> => {
+const getPendingSnapshot = async (): Promise<string> => {
   try {
-    const res: any = await request.get('/api/v1/admin/categories', { params: { target_type: 'question' } });
-    questionCategories.value = Array.isArray(res) ? res : (res.items || []);
+    const res: any = await request.get('/api/v1/admin/tasks', { params: { size: 100, status: 'published' } });
+    const items = res.items || [];
+    const lines: string[] = [];
+    for (const t of items.slice(0, 10)) {
+      const pending = t.pending_count || 0;
+      if (pending > 0) {
+        lines.push(`- 《${t.title?.substring(0, 40) || '未命名'}》(id=${t.id}) 待批 ${pending} 份`);
+      }
+    }
+    return lines.join('\n') || '暂无';
   } catch (e) {
-    questionCategories.value = [];
+    return '暂无';
   }
 };
 
-interface BatchQuestionsForm {
-  category_id: number | null;
-}
+const buildPreamble = async (userText: string): Promise<string> => {
+  const roleText = userStore.isSuper() ? '超级管理员' : (userStore.role === 'admin' ? '管理员' : '出题人');
+  const pending = await getPendingSnapshot();
+  const profileParts: string[] = [];
+  if (userStore.name) profileParts.push(`真实姓名=${userStore.name}`);
+  if (userStore.position) profileParts.push(`职务=${userStore.position}`);
+  if (userStore.bio) profileParts.push(`背景与学科介绍=${userStore.bio}`);
 
-const batchFormOf = (m: ChatMessage): BatchQuestionsForm => {
-  const holder = m as any;
-  if (!holder.batchForm) {
-    holder.batchForm = {
-      category_id: questionCategories.value.length > 0 ? questionCategories.value[0].id : null
-    };
-  }
-  if (holder.batchForm.category_id == null && questionCategories.value.length > 0) {
-    holder.batchForm.category_id = questionCategories.value[0].id;
-  }
-  return holder.batchForm as BatchQuestionsForm;
+  return [
+    `[系统隐藏上下文 | 用户不可见]:`,
+    `当前用户=${userStore.username}(${roleText})${profileParts.length ? '，个人画像=[' + profileParts.join(', ') + ']' : ''},`,
+    `当前待阅试卷：${pending}`,
+    `当前页面=AI助理全屏工作台。`,
+    `请基于以上身份、用户背景与业务上下文回答老师的提问，称呼亲切自然，保持专业、扁平、无废话。`,
+    '',
+    `老师提问: ${userText}`
+  ].join('\n');
 };
 
-const confirmBatchQuestionsDraft = async (m: ChatMessage): Promise<void> => {
-  if (m.actionResolved || sending.value) return;
-  const f = batchFormOf(m);
-  const merged = {
-    ...(m.arguments || {}),
-    category_id: f.category_id ?? undefined
+const usePreset = (text: string) => {
+  input.value = text;
+  send();
+};
+
+const send = async (customText?: string): Promise<void> => {
+  const isCustom = typeof customText === 'string';
+  const text = (isCustom ? customText : input.value).trim();
+  if (!text || sending.value) return;
+
+  if (activeSessionId.value == null) {
+    await startNewSession();
+    if (activeSessionId.value == null) return;
+  }
+  const sessionId = activeSessionId.value as number;
+
+  if (!isCustom) {
+    input.value = '';
+  }
+
+  // 添加用户消息
+  messages.value.push({ role: 'user', content: text });
+  followScroll();
+
+  // 添加 thinking 状态消息
+  const streamingMsg: ChatMessage = {
+    role: 'assistant',
+    content: '',
+    quote: text.length > 30 ? text.substring(0, 30) + '...' : text,
+    isThinking: true
   };
-  sending.value = true;
-  try {
-    const res: any = await request.post('/api/v1/admin/ai/chat/execute_tool', {
-      tool_name: 'batch_create_questions_draft',
-      arguments: merged,
-      tool_call_id: m.toolCallId,
-      message_id: m.id ?? null
-    });
-    m.actionResolved = true;
-    ElMessage.success(res?.message || '题目已批量存入题库');
+  messages.value.push(streamingMsg);
+  followScroll();
 
-    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${m.toolName}，后端返回的结果是：${JSON.stringify(res)}`;
-    await send(systemMsg);
+  sending.value = true;
+  const quote = streamingMsg.quote as string;
+
+  try {
+    const history = messages.value
+      .filter(m => !m.isThinking && m.role !== 'system' && m !== streamingMsg)
+      .slice(-6)
+      .map(m => ({ role: m.role, content: m.content }));
+
+    await loadExamCategories();
+    const preamble = await buildPreamble(text);
+    const token = localStorage.getItem('tiku_tob_token') || '';
+
+    const resp = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api'}/v1/admin/ai/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        message: preamble,
+        display_text: text,
+        history,
+        session_id: sessionId
+      })
+    });
+
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        localStorage.removeItem('tiku_tob_token');
+        window.location.href = '/admin/login';
+        return;
+      }
+      throw new Error(`HTTP ${resp.status}`);
+    }
+
+    const reader = resp.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder('utf-8');
+    let buf = '';
+    let streamFailed = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buf += decoder.decode(value, { stream: true });
+      const frames = buf.split('\n\n');
+      buf = frames.pop() || '';
+
+      for (const frame of frames) {
+        const line = frame.trim();
+        if (!line.startsWith('data:')) continue;
+
+        let ev: any;
+        try {
+          ev = JSON.parse(line.slice(5).trim());
+        } catch (e) {
+          continue;
+        }
+
+        if (ev.type === 'delta' && ev.text) {
+          streamingMsg.isThinking = false;
+          streamingMsg.content += ev.text;
+          followScroll();
+        } else if (ev.type === 'action_required') {
+          // 移除 thinking 消息，插入工具确认卡
+          const idx = messages.value.indexOf(streamingMsg);
+          if (idx !== -1) messages.value.splice(idx, 1);
+
+          messages.value.push({
+            role: 'assistant',
+            content: ev.message || '',
+            quote,
+            actionRequired: true,
+            toolName: ev.tool_name,
+            toolCallId: ev.tool_call_id,
+            arguments: ev.arguments,
+            riskLevel: ev.risk_level || 'medium',
+            actionResolved: false,
+            ai_rag_sources: []
+          });
+          followScroll();
+        } else if (ev.type === 'done') {
+          streamingMsg.isThinking = false;
+          if (ev.assistant_message_id) streamingMsg.id = ev.assistant_message_id;
+          if (ev.user_message_id) {
+            const um = [...messages.value].reverse().find(m => m.role === 'user' && !m.id);
+            if (um) um.id = ev.user_message_id;
+          }
+          // 解析可能的卡片
+          const parsed = extractActionBlocks(streamingMsg.content || '');
+          streamingMsg.content = parsed.text || '(无回复)';
+          streamingMsg.actionCard = parsed.card;
+          streamingMsg.actionList = parsed.list;
+          streamingMsg.examCard = parsed.examCard;
+          followScroll();
+        } else if (ev.type === 'error') {
+          streamFailed = true;
+          streamingMsg.isThinking = false;
+          streamingMsg.content = `AI 服务响应超时或未开启，请稍后再试${ev.message ? '：' + ev.message : ''}`;
+        }
+      }
+
+      if (streamFailed) break;
+    }
+
+    if (!streamFailed) {
+      const parsed = extractActionBlocks(streamingMsg.content || '');
+      streamingMsg.content = parsed.text || '(无回复)';
+      streamingMsg.actionCard = parsed.card;
+      streamingMsg.actionList = parsed.list;
+      streamingMsg.examCard = parsed.examCard;
+    }
+
+    // 刷新会话列表
+    await refreshSessions();
+    followScroll();
+
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '批量入库失败');
+    const idx = messages.value.indexOf(streamingMsg);
+    if (idx !== -1) messages.value.splice(idx, 1);
+
+    const detail = e?.response?.data?.detail || e?.message || '';
+    if (String(detail).includes('额度')) {
+      messages.value.push({ role: 'assistant', content: '今日 AI 额度已用尽，请联系管理员分配或补充。' });
+    } else {
+      messages.value.push({ role: 'assistant', content: 'AI 服务响应超时或未开启，请稍后再试。' });
+    }
   } finally {
     sending.value = false;
+    followScroll();
   }
 };
 
-const fmtLocalDateTime = (d: Date): string => {
-  const p = (n: number): string => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`;
-};
-
-const defaultExamTimeRange = (): [string, string] => {
-  const now = new Date();
-  return [fmtLocalDateTime(now), fmtLocalDateTime(new Date(now.getTime() + 7 * 86400000))];
-};
-
-const examHasShort = (m: ChatMessage): boolean =>
-  ((m.arguments?.questions) || []).some((q: any) => q?.type === 'short');
-
-const examFormOf = (m: ChatMessage): ExamDraftForm => {
-  const holder = m as any;
-  if (!holder.examForm) {
-    holder.examForm = {
-      category_id: null as number | null,
-      timeRange: defaultExamTimeRange(),
-      is_timed: true,
-      time_limit: 30,
-      grading_mode: examHasShort(m) ? 'ai_auto' : 'manual'
-    };
-  }
-  // 分类列表后加载到达时补默认第一项
-  if (holder.examForm.category_id == null && examCategories.value.length > 0) {
-    holder.examForm.category_id = examCategories.value[0].id;
-  }
-  return holder.examForm as ExamDraftForm;
-};
-
-const examTypeSummary = (args: any): string => {
-  const qs = (args?.questions) || [];
-  const label: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', fill: '填空', short: '简答' };
-  const counts: Record<string, number> = {};
-  for (const q of qs) counts[String(q?.type)] = (counts[String(q?.type)] || 0) + 1;
-  const parts = Object.entries(counts).map(([t, n]) => `${n}道${label[t] || t}`);
-  return `共 ${qs.length} 题 · ` + parts.join(' + ');
-};
-
-const confirmExamDraft = async (m: ChatMessage): Promise<void> => {
-  if (m.actionResolved || sending.value) return;
-  const f = examFormOf(m);
-  const merged = {
-    ...(m.arguments || {}),
-    category_id: f.category_id ?? undefined,
-    start_time: (f.timeRange as string[])?.[0],
-    end_time: (f.timeRange as string[])?.[1],
-    is_timed: f.is_timed,
-    time_limit: f.is_timed ? f.time_limit : 0,
-    grading_mode: f.grading_mode
-  };
+const confirmToolCall = async (msg: ChatMessage): Promise<void> => {
+  if (msg.actionResolved || sending.value) return;
   sending.value = true;
   try {
     const res: any = await request.post('/api/v1/admin/ai/chat/execute_tool', {
-      tool_name: 'create_exam_draft',
-      arguments: merged,
-      tool_call_id: m.toolCallId,
-      message_id: m.id ?? null
+      tool_name: msg.toolName,
+      arguments: msg.arguments,
+      tool_call_id: msg.toolCallId,
+      message_id: msg.id ?? null
     });
-    // 服务端已将 action_card_data.status 置 executed，本地同步防回退
-    m.actionResolved = true;
-    ElMessage.success(`试卷草稿创建成功，ID: ${res.exam_id}`);
-  } catch (e) {
-    /* 拦截器已提示（400 校验信息等），卡片保持待确认可改后重提 */
+
+    msg.actionResolved = true;
+
+    if (msg.toolName === 'create_exam_draft' && res.data?.exam_id) {
+      ElMessage.success(`试卷草稿创建成功，ID: ${res.data.exam_id}`);
+    } else if (msg.toolName === 'create_question_draft' && res.data?.question_ids) {
+      ElMessage.success(`已成功生成 ${res.data.count} 道题目草稿`);
+    } else if (msg.toolName === 'delete_exam' && res.data?.deleted_id) {
+      ElMessage.success(`试卷已删除: ${res.data.title}`);
+    } else {
+      ElMessage.success('操作已执行');
+    }
+
+    // 发送系统回执给 AI
+    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${msg.toolName}，后端返回的结果是：${JSON.stringify(res.data || res)}`;
+    await send(systemMsg);
+
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '执行失败');
   } finally {
     sending.value = false;
   }
 };
 
-// ---- v1.2 Step5: Action Card / Action List 协议解析 ----
-
-// 前端动作白名单：出题人仅允许唤起站内批阅抽屉与跳转试卷管理，严禁人员/额度/全局看板动作
-const ACTION_WHITELIST: Record<string, string[]> = {
-  open_grading_drawer: ['super_admin', 'admin', 'creator', 'teacher'],
-  go_exams: ['super_admin', 'admin', 'creator', 'teacher'],
-  TRANSFER_QUOTA: ['super_admin', 'admin'],
+const cancelToolCall = async (msg: ChatMessage): Promise<void> => {
+  msg.actionResolved = true;
+  const systemMsg = `[系统消息]: 我拒绝了操作 ${msg.toolName} 的执行。`;
+  await send(systemMsg);
 };
 
-const isActionAllowed = (target: string): boolean => {
-  const roles = ACTION_WHITELIST[target];
-  if (!roles) return false;
-  return roles.includes(userStore.role);
-};
-
-const extractActionBlocks = (text: string): {
-  text: string;
-  card: ActionCard | null;
-  list: ActionListItem[] | null;
-  examCard: ExamCardData | null;
-} => {
-  let clean = text || '';
-  let card: ActionCard | null = null;
-  let list: ActionListItem[] | null = null;
-  let examCard: ExamCardData | null = null;
-
-  const cardMatch = clean.match(/```action_card\s*([\s\S]*?)```/);
-  if (cardMatch) {
-    try {
-      const parsed = JSON.parse(cardMatch[1]);
-      card = { ...parsed, resolved: 'pending' };
-    } catch (e) {
-      /* 模型输出非标准 JSON 时降级为纯文本展示 */
-    }
-    clean = clean.replace(cardMatch[0], '').trim();
-  }
-
-  const listMatch = clean.match(/```action_list\s*([\s\S]*?)```/);
-  if (listMatch) {
-    try {
-      const parsed = JSON.parse(listMatch[1]);
-      if (Array.isArray(parsed)) list = parsed;
-    } catch (e) {
-      /* 降级为纯文本展示 */
-    }
-    clean = clean.replace(listMatch[0], '').trim();
-  }
-
-  const examMatch = clean.match(/```exam_card\s*([\s\S]*?)```/);
-  if (examMatch) {
-    try {
-      const parsed = JSON.parse(examMatch[1]);
-      if (parsed && parsed.exam_id) examCard = parsed;
-    } catch (e) {
-      /* 降级为纯文本展示 */
-    }
-    clean = clean.replace(examMatch[0], '').trim();
-  }
-
-  return { text: clean, card, list, examCard };
-};
-
-
-// 试卷导出卡片下载触发逻辑 (支持标准 Word .docx 文档下载)
-const downloadExamCard = async (examCard: ExamCardData): Promise<void> => {
+const downloadExamCard = async (card: ExamCardData): Promise<void> => {
   try {
     const token = localStorage.getItem('tiku_tob_token') || '';
-    const res = await fetch(examCard.download_url, {
+    const res = await fetch(card.download_url, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) throw new Error('试卷导出下载失败');
+    if (!res.ok) throw new Error('下载失败');
 
-    // 优先从响应头 Content-Disposition 中提取 RFC 5987 / filename 文件名
-    let finalFileName = `${examCard.title || '试卷'}.docx`;
+    let finalFileName = `${card.title || '试卷'}.docx`;
     const disposition = res.headers.get('Content-Disposition') || '';
     if (disposition) {
       const fnMatchStar = disposition.match(/filename\*=UTF-8''([^;]+)/i);
@@ -1043,318 +702,34 @@ const downloadExamCard = async (examCard: ExamCardData): Promise<void> => {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
-    ElMessage.success(`《${examCard.title}》已成功下载为 Word 试卷文档`);
+    ElMessage.success(`《${card.title}》已成功下载为 Word 试卷文档`);
   } catch (e: any) {
     ElMessage.error(e?.message || '试卷导出失败，请重试');
   }
 };
 
-// 批阅抽屉联动（action_list [去批改] 原地唤出）
-const gradingVisible = ref(false);
-const gradingExamId = ref<number | null>(null);
-const gradingExamTitle = ref('');
-
-const handleCardAction = (action: { type: string; label: string; target: string; params?: any }): void => {
-  if (!isActionAllowed(action.target)) {
-    ElMessage.error('当前角色无权执行该操作');
-    return;
-  }
-  if (action.target === 'open_grading_drawer') {
-    gradingExamId.value = action.params?.exam_id ?? null;
-    gradingExamTitle.value = '';
-    gradingVisible.value = true;
-  } else if (action.target === 'go_exams') {
-    router.push('/exams');
-  }
+const showSource = (source: any): void => {
+  activeSource.value = source;
+  srcVisible.value = true;
 };
 
-const handleDrawerGraded = (): void => {
-  refreshPendingSnapshot();
-};
-
-const confirmActionCard = async (m: ChatMessage): Promise<void> => {
-  const card = m.actionCard;
-  if (!card || card.resolved !== 'pending') return;
-  if (!isActionAllowed(card.actionType)) {
-    ElMessage.error('当前角色无权执行该操作');
-    return;
-  }
-  try {
-    if (card.actionType === 'TRANSFER_QUOTA') {
-      const payload = card.payload || {};
-      const target = payload.target_username || payload.target_email || '';
-      const amount = Number(payload.amount || 0);
-      if (!target || !amount) {
-        ElMessage.error('卡片参数缺失（目标用户/数量），无法执行');
-        return;
-      }
-      const members: any = await request.get('/api/v1/admin/members', { params: { keyword: target, size: 20 } });
-      const hit = (members.items || []).find((x: any) => x.username === target);
-      if (!hit) {
-        ElMessage.error(`未找到用户 ${target}`);
-        return;
-      }
-      await request.post(`/api/v1/admin/members/${hit.id}/refill`, { amount });
-      ElMessage.success('额度划拨已执行');
-      card.resolved = 'done';
-    } else {
-      ElMessage.error(`未知操作类型 ${card.actionType}，已拒绝执行`);
-    }
-  } catch (e) {
-    /* 拦截器已提示（越权 403 等），卡片保持待确认 */
-  }
-};
-
-// 待阅快照（出题人仅注入其私有试卷，后端列表接口已按 creator_id 隔离）
-const pendingSnapshotLines = ref<string[]>([]);
-
-const refreshPendingSnapshot = async (): Promise<void> => {
-  try {
-    const res: any = await request.get('/api/v1/admin/exams', { params: { size: 100 } });
-    const items = res.items || [];
-    const pending = items.filter((e: any) => (e.pending_count || 0) > 0);
-    const totalPending = pending.reduce((s: number, e: any) => s + (e.pending_count || 0), 0);
-    pendingSnapshotLines.value = [
-      `待阅试卷=${pending.length}套, 待批答卷=${totalPending}份`,
-      ...pending.slice(0, 10).map((e: any) => `待批:《${e.title}》(exam_id=${e.id}, ${e.pending_count}份待批改)`),
-    ];
-  } catch (e) {
-    pendingSnapshotLines.value = [];
-  }
-};
-
-const buildPreamble = (userText: string) => {
-  const roleText = userStore.role === 'super_admin' ? '超级管理员' : (userStore.role === 'admin' ? '管理员' : '出题人');
-  const profileParts: string[] = [];
-  if (userStore.name) profileParts.push(`真实姓名=${userStore.name}`);
-  if (userStore.position) profileParts.push(`职务=${userStore.position}`);
-  if (userStore.bio) profileParts.push(`背景与学科介绍=${userStore.bio}`);
-
-  return [
-    `[系统隐藏上下文 | 用户不可见]:`,
-    `当前用户=${userStore.username}(${roleText})${profileParts.length ? '，个人画像=[' + profileParts.join(', ') + ']' : ''}, 剩余AI额度=${userStore.quotaRemaining}次,`,
-    ...pendingSnapshotLines.value,
-    `当前页面=AI助理全屏工作台。`,
-    `请基于以上身份、用户背景与业务上下文回答老师的问题; 称呼亲切自然，保持专业、扁平、无废话。`,
-    ``
-  ].join('\n') + `\n老师提问: ${userText}`;
-};
-
-const usePreset = (text: string) => {
-  input.value = text;
-  send();
-};
-
-const send = async (customText?: string) => {
-  const isCustom = typeof customText === 'string';
-  const text = (isCustom ? customText : input.value).trim();
-  if (!text || sending.value) return;
-  // 无选中会话时先云端新建（换端/首登场景）
-  if (activeSessionId.value == null) {
-    await startNewSession();
-    if (activeSessionId.value == null) return;
-  }
-  const sessionId = activeSessionId.value as number;
-
-  if (!isCustom) {
-    input.value = '';
-  }
-  messages.value.push({ role: 'user', content: text });
-  followScroll();
-
-  sending.value = true;
-  // SSE 流式：先放一条占位消息，delta 到达即打字机追加（吸底锁保护阅读）
-  const streamingMsg: ChatMessage = { role: 'assistant', content: '', quote: text.length > 30 ? text.substring(0, 30) + '…' : text };
-  messages.value.push(streamingMsg);
-  followScroll();
-  const quote = streamingMsg.quote as string;
-
-  const finishStreamText = (): void => {
-    const parsed = extractActionBlocks(streamingMsg.content || '');
-    streamingMsg.content = parsed.text || '(无回复)';
-    streamingMsg.actionCard = parsed.card;
-    streamingMsg.actionList = parsed.list;
-    streamingMsg.examCard = parsed.examCard;
-  };
-
-  try {
-    const history = messages.value
-      .filter(m => !m.isThinking && !m.actionRequired && m.role !== 'system' && m !== streamingMsg)
-      .slice(-6, -1)
-      .map((m) => ({ role: m.role, content: m.content }));
-
-    // 出题人仅注入其私有试卷快照（后端已隔离），附带待阅清单供 action_list grounding
-    await refreshPendingSnapshot();
-    const token = localStorage.getItem('tiku_tob_token') || '';
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 180000);
-    let resp: Response;
-    try {
-      resp = await fetch('/api/v1/admin/ai/chat/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: buildPreamble(text), display_text: text, history, session_id: sessionId }),
-        signal: controller.signal
-      });
-    } finally {
-      window.clearTimeout(timer);
-    }
-    if (resp.status === 401) {
-      localStorage.removeItem('tiku_tob_token');
-      window.location.href = '/admin/login';
-      return;
-    }
-    if (!resp.ok || !resp.body) {
-      let detail = '';
-      try {
-        const errJson = await resp.json();
-        detail = errJson?.detail || '';
-      } catch (e) { /* 非 JSON 错误体 */ }
-      throw { response: { data: { detail } } };
-    }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buf = '';
-    let streamFailed = false;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const frames = buf.split('\n\n');
-      buf = frames.pop() || '';
-      for (const frame of frames) {
-        const line = frame.trim();
-        if (!line.startsWith('data:')) continue;
-        let ev: any;
-        try {
-          ev = JSON.parse(line.slice(5).trim());
-        } catch (e) {
-          continue;
-        }
-        if (ev.type === 'delta' && ev.text) {
-          streamingMsg.content += ev.text;
-          followScroll();
-        } else if (ev.type === 'action_required') {
-          finishStreamText();
-          // 根除空气泡幽灵：占位消息无文本即彻底剔除，不留空泡外壳
-          if (streamingMsg.content.trim() === '') {
-            messages.value = messages.value.filter(m => m !== streamingMsg);
-          }
-          messages.value.push({
-            role: 'assistant',
-            id: ev.assistant_message_id,
-            content: ev.message || '',
-            quote,
-            actionRequired: true,
-            toolName: ev.tool_name,
-            toolCallId: ev.tool_call_id,
-            arguments: ev.arguments,
-            riskLevel: ev.risk_level || 'medium',
-            actionResolved: false
-          });
-          userStore.quotaRemaining = ev.quota_remaining ?? userStore.quotaRemaining;
-        } else if (ev.type === 'done') {
-          userStore.quotaRemaining = ev.quota_remaining ?? userStore.quotaRemaining;
-          if (ev.assistant_message_id) streamingMsg.id = ev.assistant_message_id;
-          if (ev.user_message_id) {
-            const um = [...messages.value].reverse().find(m => m.role === 'user' && m.id == null);
-            if (um) um.id = ev.user_message_id;
-          }
-        } else if (ev.type === 'error') {
-          streamFailed = true;
-          streamingMsg.content = `AI 服务响应超时或未开启，请稍后再试。${ev.message ? '（' + ev.message + '）' : ''}`;
-        }
-      }
-      if (streamFailed) break;
-    }
-    if (!streamFailed) finishStreamText();
-    // 服务端已重命名首问标题/刷新排序，此处同步侧边栏
-    await refreshSessions();
-    followScroll();
-  } catch (e: any) {
-    // 流中断/失败：移除占位消息并降级为纯文本提示
-    messages.value = messages.value.filter(m => m !== streamingMsg);
-
-    const detail = e?.response?.data?.detail || e?.message || '';
-    if (String(detail).includes('额度')) {
-      messages.value.push({ role: 'assistant', content: '今日 AI 额度已用尽，请联系管理员分配或补充。' });
-    } else {
-      messages.value.push({ role: 'assistant', content: 'AI 服务响应超时或未开启，请稍后再试。' });
-    }
-  } finally {
-    sending.value = false;
-  }
-};
-
-const executeAction = async (m: ChatMessage) => {
-  if (sending.value || m.actionResolved) return;
-  sending.value = true;
-  try {
-    let finalArgs = m.arguments;
-    if (m.toolName === 'batch_create_questions_draft') {
-      const f = batchFormOf(m);
-      finalArgs = {
-        ...(m.arguments || {}),
-        category_id: f.category_id ?? undefined
-      };
-    }
-    const res: any = await request.post('/api/v1/admin/ai/chat/execute_tool', {
-      tool_name: m.toolName,
-      arguments: finalArgs,
-      tool_call_id: m.toolCallId,
-      message_id: m.id ?? null
-    });
-    // 服务端已将 action_card_data.status 置 executed，本地同步防回退
-    m.actionResolved = true;
-    ElMessage.success(res?.message || '操作已执行');
-    
-    // 把结果当做隐形系统回执直接发给 AI，不写入用户输入框
-    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${m.toolName}，后端返回的结果是：${JSON.stringify(res)}`;
-    await send(systemMsg);
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '执行失败');
-  } finally {
-    sending.value = false;
-  }
-};
-
-const cancelAction = async (m: ChatMessage) => {
-  m.actionResolved = true;
-
-  const systemMsg = `[系统消息]: 我拒绝了操作 ${m.toolName} 的执行。`;
-  await send(systemMsg);
-};
-
-const cancelMarkCard = (m: ChatMessage): void => {
-  if (m.actionCard) m.actionCard.resolved = 'cancelled';
-};
-
-const copyToClipboard = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text);
-    ElMessage.success('已复制到剪贴板');
-  } catch (err) {
-    ElMessage.error('复制失败');
-  }
-};
-
-const submitFeedback = async (content: string, rating: 'up' | 'down') => {
+const submitFeedback = async (rating: 'up' | 'down'): Promise<void> => {
   try {
     await request.post('/api/v1/admin/ai/chat/feedback', {
-      message_content: content,
-      rating: rating
+      rating
     });
-    ElMessage.success('感谢您的反馈！');
-  } catch (err) {
+    ElMessage.success('感谢您的反馈');
+  } catch (e) {
     ElMessage.error('反馈提交失败');
   }
 };
 
+const handleDrawerGraded = (): void => {
+  // 刷新待阅快照
+};
+
 onMounted(() => {
   initCloud();
-  loadExamCategories();
-  loadQuestionCategories();
 });
 </script>
 
@@ -1366,250 +741,6 @@ onMounted(() => {
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
   overflow: hidden;
-}
-
-.session-sidebar {
-  width: 240px;
-  background: #f8fafc;
-  border-right: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  padding: 16px;
-}
-
-.new-chat-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  color: white;
-  padding: 10px 16px;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.new-chat-btn:hover {
-  opacity: 0.9;
-}
-
-.session-list {
-  flex: 1;
-  overflow-y: auto;
-  margin-top: 16px;
-}
-
-.session-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  color: #475569;
-  cursor: pointer;
-  margin-bottom: 4px;
-  font-size: 13px;
-  transition: all 0.15s;
-}
-
-.session-item:hover {
-  background: #e2e8f0;
-}
-
-.session-item.active {
-  background: #e0f2fe;
-  color: #0369a1;
-  font-weight: 600;
-}
-
-.session-title {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.del-icon {
-  display: none;
-  color: #94a3b8;
-}
-
-.session-item:hover .del-icon {
-  display: block;
-}
-
-.del-icon:hover {
-  color: #ef4444;
-}
-
-.quota-footer {
-  padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
-}
-
-.quota-card {
-  background: #ffffff;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  font-size: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.send-btn {
-  width: 80px;
-  border-radius: 8px;
-}
-
-.action-card {
-  margin-top: 12px;
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid #fee2e2;
-  width: 100%;
-  max-width: 420px;
-  transition: max-width 0.2s ease;
-}
-
-.action-card.wide-card {
-  max-width: 680px;
-}
-
-.action-header.high-risk {
-  background: linear-gradient(135deg, #fecaca 0%, #fff1f2 100%);
-  border-bottom: 1px solid #fee2e2;
-}
-
-.action-header.low-risk {
-  background: linear-gradient(135deg, #bfdbfe 0%, #eff6ff 100%);
-  border-bottom: 1px solid #dbeafe;
-}
-
-.action-header.med-risk {
-  background: linear-gradient(135deg, #a5f3fc 0%, #ecfeff 100%);
-  border-bottom: 1px solid #cffafe;
-}
-
-.action-header {
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.action-header.resolved {
-  background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
-  border-bottom-color: #d1fae5;
-}
-
-.header-icon {
-  font-size: 16px;
-}
-
-.header-title {
-  font-weight: 700;
-  color: #1e293b;
-  font-size: 14px;
-}
-
-.header-badge {
-  background: #f87171;
-  color: #fff;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-  margin-left: auto;
-}
-
-.header-badge.resolved {
-  background: #10b981;
-}
-
-.action-body {
-  padding: 16px;
-}
-
-.action-desc {
-  font-size: 13px;
-  color: #334155;
-  line-height: 1.6;
-  margin-bottom: 12px;
-}
-
-.action-code pre {
-  margin: 0 0 16px 0;
-  padding: 10px;
-  background: #f8fafc;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #475569;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.action-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.btn-confirm {
-  width: 100%;
-  padding: 10px;
-  background: #ef4444;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-confirm:hover {
-  background: #dc2626;
-}
-
-.btn-confirm-medium {
-  width: 100%;
-  padding: 10px;
-  background: #0284c7;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-confirm-medium:hover {
-  background: #0369a1;
-}
-
-.btn-cancel {
-  width: 100%;
-  padding: 10px;
-  background: #fff;
-  color: #475569;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-cancel:hover {
-  background: #f8fafc;
-  border-color: #94a3b8;
 }
 
 .chat-main {
@@ -1634,6 +765,10 @@ onMounted(() => {
   gap: 6px;
   font-weight: 700;
   color: #1e293b;
+}
+
+.sparkle {
+  color: #7c3aed;
 }
 
 .messages-wrap {
@@ -1714,252 +849,37 @@ onMounted(() => {
   color: #64748b;
 }
 
-.message-row {
+.thinking-indicator {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  max-width: 85%;
   margin-bottom: 20px;
 }
 
-.user-avatar {
-  width: 36px;
-  height: 36px;
+.thinking-indicator .dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #0284c7;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
+  animation: bounce 1.4s infinite ease-in-out both;
 }
 
-.ai-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed, #4f46e5);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-}
+.thinking-indicator .dot:nth-child(1) { animation-delay: -0.32s; }
+.thinking-indicator .dot:nth-child(2) { animation-delay: -0.16s; }
 
-.content-cell {
-  flex: 1;
-}
-
-.sender-name {
-  font-size: 12px;
-  font-weight: 700;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-
-.bubble-content {
-  background: #f8fafc;
-  padding: 12px 16px;
-  border-radius: 12px;
-  line-height: 1.6;
-  color: #1e293b;
-  font-size: 14px;
-  max-width: 85%;
-  border: 1px solid #e2e8f0;
-}
-
-.quote-bar {
-  font-size: 12px;
-  color: #64748b;
-  border-left: 3px solid #bae6fd;
-  padding-left: 8px;
-  margin-bottom: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.action-list-card {
-  margin-top: 12px;
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-  max-width: 440px;
-}
-
-.action-list-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.action-list-row:last-child {
-  border-bottom: none;
-}
-
-.action-list-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.action-list-title {
-  font-weight: 600;
-  color: #0f172a;
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.draft-preview {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  color: #334155;
-}
-
-.draft-title {
-  font-weight: 700;
-  color: #0f172a;
-  margin-bottom: 8px;
-  line-height: 1.6;
-}
-
-.draft-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #64748b;
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.draft-opts {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.draft-opt {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 6px 10px;
-  color: #64748b;
-}
-
-.draft-opt.correct {
-  background-color: #f0fdf4;
-  border-color: #86efac;
-  color: #166534;
-  font-weight: 600;
-}
-
-.draft-opt-key {
-  font-weight: 800;
-}
-
-.draft-opt-mark {
-  margin-left: auto;
-}
-
-.draft-row {
-  line-height: 1.7;
-}
-
-.draft-label {
-  font-weight: 700;
-  color: #475569;
-}
-
-.exam-draft-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  color: #334155;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.batch-draft-card {
-  background: #f8fafc;
-  border: 1px solid #e0f2fe;
-}
-
-.batch-draft-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.batch-draft-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.batch-draft-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #0369a1;
-  white-space: nowrap;
-}
-
-.batch-doc-tag {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.exam-draft-title {
-  font-weight: 800;
-  color: #0f172a;
-  margin-bottom: 6px;
-}
-
-.exam-draft-summary {
-  color: #0284c7;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.exam-link {
-  color: #0284c7;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.exam-link:hover {
-  text-decoration: underline;
-}
-
-.message-row.user .bubble-content {
-  background: #e0f2fe;
-  border-color: #bae6fd;
-  color: #0369a1;
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
 }
 
 .input-container {
   padding: 16px 32px 24px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .input-box {
@@ -1967,13 +887,13 @@ onMounted(() => {
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   padding: 8px 12px;
+  margin-bottom: 8px;
 }
 
 .input-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 8px;
 }
 
 .tip-text {
@@ -1982,177 +902,7 @@ onMounted(() => {
 }
 
 .send-btn {
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  border: none;
-}
-
-/* v1.3: 豆包风格极简文档展示卡片 (纯 CSS 拟物纸张 + 网格 + 操作浮岛) */
-.doubao-doc-card {
-  position: relative;
-  width: 100%;
-  max-width: 440px;
-  min-height: 100px;
-  background: #ffffff;
-  /* 豆包标志性微灰网格底纹 */
-  background-image: 
-    linear-gradient(to right, rgba(226, 232, 240, 0.45) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(226, 232, 240, 0.45) 1px, transparent 1px);
-  background-size: 16px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 16px 20px;
-  margin-top: 10px;
-  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  overflow: hidden;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.doubao-doc-card:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
-}
-
-/* 拟物化纸张底层视觉装饰（右侧斜倾微凸起纸张层） */
-.doubao-doc-sheet {
-  position: absolute;
-  right: 14px;
-  top: -12px;
-  width: 130px;
-  height: 125px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  transform: rotate(5deg);
-  pointer-events: none;
-  z-index: 1;
-  box-shadow: -2px 4px 12px rgba(0, 0, 0, 0.03);
-  opacity: 0.85;
-}
-
-.sheet-line {
-  position: absolute;
-  left: 14px;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 3px;
-}
-
-.sheet-line-1 {
-  top: 24px;
-  width: 50px;
-  background: #cbd5e1;
-}
-
-.sheet-line-2 {
-  top: 36px;
-  width: 75px;
-}
-
-.sheet-box {
-  position: absolute;
-  left: 14px;
-  top: 50px;
-  width: 90px;
-  height: 45px;
-  background: #edf2f7;
-  border-radius: 6px;
-  opacity: 0.6;
-}
-
-/* 左上角文档图标 */
-.doubao-doc-icon-wrap {
-  position: relative;
-  z-index: 2;
-  width: 32px;
-  height: 32px;
+  width: 80px;
   border-radius: 8px;
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 10px;
-}
-
-.doubao-doc-svg {
-  display: block;
-}
-
-/* 标题与副文本 */
-.doubao-doc-main {
-  position: relative;
-  z-index: 2;
-  padding-right: 90px; /* 为右侧浮岛避让 */
-}
-
-.doubao-doc-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1e293b;
-  line-height: 1.4;
-  margin-bottom: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.doubao-doc-sub {
-  font-size: 12px;
-  color: #94a3b8;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.sub-dot {
-  color: #cbd5e1;
-}
-
-.doc-format-badge {
-  background: #eff6ff;
-  color: #2563eb;
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  border: 1px solid #dbeafe;
-}
-
-/* 右下角白色药丸操作浮岛 */
-.doubao-doc-actions {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 3px 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.doubao-action-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 5px;
-  border-radius: 6px;
-  color: #475569;
-  font-size: 15px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-
-.doubao-action-btn:hover {
-  background: #f1f5f9;
-  color: #2563eb;
 }
 </style>

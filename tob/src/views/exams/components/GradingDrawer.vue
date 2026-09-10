@@ -1,8 +1,11 @@
-<!--
-  * [变更日志]
-  * 修改时间：2026-09-07
-  * AI模型：Muse Spark
-  * 修改内容：[v1.2 Step3 新建: 主观题批阅抽屉 GradingDrawer (行内待办下钻/进度/简答题作答+标准答案+采分点/AI初评建议/打分微调/确认发布+下一份)]
+﻿<!--
+ * [变更日志]
+ * 修改时间：2026-09-07
+ * AI模型：Muse Spark
+ * 修改内容：[v1.2 Step3 新建: 主观题批阅抽屉 GradingDrawer (行内待办下钻/进度/简答题作答+标准答案+采分点/AI初评建议/打分微调/确认发布+下一份)]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[适配 SaaS 租户隔离：所有接口经 X-Tenant-ID 透传]
 -->
 <template>
   <el-drawer
@@ -48,7 +51,7 @@
           <div class="student-answer">{{ firstAnswer(q) }}</div>
         </div>
         <div v-if="q.ai_suggested_score != null" class="ai-suggest">
-          🤖 AI 初评建议分：{{ q.ai_suggested_score }} 分 (满分 {{ q.eq_score }} 分)
+          AI 初评建议分：{{ q.ai_suggested_score }} 分 (满分 {{ q.eq_score }} 分)
           <span v-if="q.ai_comment"> | 理由：{{ q.ai_comment }}</span>
         </div>
         <div class="grade-row score-row">
@@ -86,7 +89,7 @@
           一键采信 AI
         </el-button>
         <el-button type="primary" size="large" :loading="publishing" :disabled="!detail" @click="publishAndNext">
-          ✔ 确认发布成绩
+          确认发布成绩
         </el-button>
       </div>
     </template>
@@ -160,7 +163,6 @@ const loadDetail = async (recordId: number): Promise<void> => {
   scoreMap.value = {};
   for (const q of res.questions || []) {
     if (q.type === 'short') {
-      // 打分输入框预填 AI 建议分，无建议则预填 0，允许老师手动滑动/输入微调
       scoreMap.value[q.question_id] = q.ai_suggested_score != null ? q.ai_suggested_score : (q.final_score ?? 0);
     }
   }
