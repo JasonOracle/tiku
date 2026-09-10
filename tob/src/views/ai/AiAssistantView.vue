@@ -32,6 +32,9 @@
         <div v-if="currentMessages.length === 0 && !loadingMessages" class="welcome-screen">
           <WelcomePrompts @select-prompt="usePreset" />
         </div>
+        <div v-else-if="!loadingMessages && currentMessages.length === 0" class="welcome-screen">
+          <WelcomePrompts @select-prompt="usePreset" />
+        </div>
 
         <template v-for="item in currentMessages" :key="item.id ?? item._tmpId">
           <!-- 用户消息 -->
@@ -273,14 +276,18 @@ const loadMessages = async (sessionId: number): Promise<void> => {
 };
 
 const initCloud = async (): Promise<void> => {
-  await refreshSessions();
-  if (sessions.value.length === 0) {
-    await startNewSession();
-    return;
+  try {
+    await refreshSessions();
+    if (sessions.value.length === 0) {
+      await startNewSession();
+      return;
+    }
+    activeSessionId.value = sessions.value[0].id;
+    await loadMessages(activeSessionId.value as number);
+    scrollToBottom();
+  } catch (e) {
+    /* 初始化失败时静默，显示空状态 */
   }
-  activeSessionId.value = sessions.value[0].id;
-  await loadMessages(activeSessionId.value as number);
-  scrollToBottom();
 };
 
 const startNewSession = async (): Promise<void> => {
