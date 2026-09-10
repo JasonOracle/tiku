@@ -165,11 +165,28 @@ def ai_verify_record(record_id: int, ctx: dict = Depends(require_admin),
         raise HTTPException(status_code=404, detail="记录不存在")
     task = db.query(Task).filter(Task.id == rec.task_id).first()
     sources = _rag_hits(db, tid, task.title if task else "")
+
+    # 格式化题目与作答给 AI 阅卷模型，避免使用抽象的 resource_id
+    formatted_qa = []
+    for idx, a in enumerate(rec.answers or [], 1):
+        rid = a.get("resource_id") if isinstance(a, dict) else None
+        user_ans = a.get("answer") if isinstance(a, dict) else a
+        q_text = ""
+        q_type = ""
+        if rid:
+            r = db.query(ResourceItem).filter(ResourceItem.id == rid).first()
+            if r:
+                q_text = r.content
+                q_type = r.type
+        formatted_qa.append(f"第{idx}题 ({q_type or '题目'}): {q_text}\n  - 考生回答: {user_ans}")
+    
+    qa_str = "\n".join(formatted_qa)
+
     if ai_available():
         try:
             raw = _ask(
-                prompt=f"任务《{task.title if task else ''}》作答{rec.answers}，请给出0-100分与评语(JSON {{\"score\": int, \"comments\": str}})。参考知识：{chr(10).join(s['chunk_content'] for s in sources)}",
-                system="你是企业任务核验员，只输出JSON。",
+                prompt=f"试卷《{task.title if task else ''}》满分100分。考生答卷明细如下:\n{qa_str}\n\n请对此答卷给出0-100的参考评判总分与详细打分意见评语(评语中必须明确指出具体哪道题打得好、哪道题有缺失，严禁在评语中使用 resource_id 编号！用‘第X题’来指代！)。\n返回格式(JSON): {{\"score\": int, \"comments\": str}}\n参考知识: {chr(10).join(s['chunk_content'] for s in sources)}",
+                system="你是企业考核专业阅卷官，只输出JSON。评语必须人性化且清晰指明第X题，绝对禁止出现 resource_id 字段编号。",
                 json_mode=True, db=db, tenant_id=tid,
             )
             verdict = extract_json(raw) or {}

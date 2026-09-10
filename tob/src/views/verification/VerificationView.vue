@@ -200,10 +200,17 @@ const triggerAi = async (row: any) => {
 const openDrawer = async (row: any) => {
   drawerVisible.value = true;
   drawerLoading.value = true;
-  detailData.value = null;
+  detailData.value = { ...row };
   try {
     const res: any = await request.get(`/api/v1/admin/verifications/${row.record_id}`);
-    detailData.value = res;
+    detailData.value = {
+      ...row,
+      ...res,
+      task_title: res.task_title || row.task_title,
+      nickname: res.nickname || row.nickname,
+      username: res.username || row.username,
+      submit_time: res.submit_time || row.submit_time
+    };
     confirmForm.final_score = res.ai_result?.suggested_score ?? (res.score || 0);
     confirmForm.comments = res.comments || res.ai_result?.comments || '';
   } catch (e) {
