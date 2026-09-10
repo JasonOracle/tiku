@@ -510,7 +510,8 @@ const send = async (customText?: string): Promise<void> => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${token}`,
+        'X-Tenant-ID': userStore.tenantId || ''
       },
       body: JSON.stringify({
         message: preamble,
