@@ -1,4 +1,8 @@
 <!--
+ * [变更日志]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[彻底清洗：通用化看板文案，旧考试/额度词汇已删除]
   * [变更日志]
   * 修改时间：2026-09-07
   * AI模型：Muse Spark
@@ -12,8 +16,8 @@
     <!-- 顶部 Banner -->
     <div class="banner">
       <div class="banner-text">
-        <h1>智能考试 · 数据驱动 · 助力成长</h1>
-        <p>用科技让教育更高效 · 让每一次考试更有价值</p>
+        <h1>任务数据看板 · 助力组织成长</h1>
+        <p>用数据让每一次任务更有价值</p>
       </div>
       <img class="banner-img" :src="bannerUrl" alt="数据看板插画" />
     </div>
@@ -45,8 +49,8 @@
       <div class="card trend-card">
         <div class="card-head">
           <div>
-            <div class="card-title"><el-icon class="title-icon"><TrendCharts /></el-icon>学生成绩趋势分析</div>
-            <div class="card-sub">近 7 天考试人次与平均分变化趋势</div>
+            <div class="card-title"><el-icon class="title-icon"><TrendCharts /></el-icon>成员任务趋势分析</div>
+            <div class="card-sub">近 7 天提交人次与平均分变化趋势</div>
           </div>
           <div class="range-tabs">
             <span
@@ -64,8 +68,8 @@
       <div class="card donut-card">
         <div class="card-head">
           <div>
-            <div class="card-title"><el-icon class="title-icon"><PieChart /></el-icon>试卷分类占比</div>
-            <div class="card-sub">各分类试卷在总数中的占比</div>
+            <div class="card-title"><el-icon class="title-icon"><PieChart /></el-icon>任务分类占比</div>
+            <div class="card-sub">各分类任务在总数中的占比</div>
           </div>
           <el-select v-model="donutFilter" size="small" style="width: 110px">
             <el-option label="全部类型" value="all" />
@@ -89,7 +93,7 @@
     <div class="bottom-row">
       <div class="card">
         <div class="card-head">
-          <div class="card-title"><span class="title-dot"></span>最近考试动态</div>
+          <div class="card-title"><span class="title-dot"></span>最近提交动态</div>
           <span class="more">更多 ></span>
         </div>
         <div v-for="e in recentExams" :key="e.time + e.name" class="dyn-row">
@@ -100,21 +104,21 @@
             {{ e.status }}
           </el-tag>
         </div>
-        <el-empty v-if="!recentExams.length" description="暂无考试动态" :image-size="60" />
+        <el-empty v-if="!recentExams.length" description="暂无动态" :image-size="60" />
       </div>
 
       <div class="card">
         <div class="card-head">
-          <div class="card-title">◇ AI 额度使用情况</div>
+          <div class="card-title">◇ AI 调用情况</div>
           <span class="more">↗ ></span>
         </div>
         <div class="quota-body">
           <div ref="ringRef" class="ring-chart"></div>
           <div class="quota-info">
-            <div class="quota-label">今日已用</div>
+            <div class="quota-label">今日调用</div>
             <div class="quota-num">{{ quota.used }} <span class="quota-total">/ {{ quota.total }}</span></div>
             <el-progress :percentage="quota.pct" :show-text="false" stroke-width="8" />
-            <div class="quota-left">剩余额度</div>
+            <div class="quota-left">累计调用</div>
             <div class="quota-left-num">{{ quota.left }} <el-tag v-if="quota.days" size="small" type="info" effect="plain">预计可用 {{ quota.days }}</el-tag></div>
           </div>
         </div>
@@ -185,10 +189,10 @@ const kpis = computed(() => {
   const dl = stats.value?.deltas || { exams: '—', records: '—', ai_usage: '—' };
   const sp = stats.value?.sparks || { exams: [], records: [], ai: [] };
   return [
-    { key: 'exams', label: '试卷总数', value: fmt(k.exams), delta: dl.exams, down: isDown(dl.exams), bg: 'linear-gradient(135deg,#3b82f6,#60a5fa)', icon: Document, spark: sp.exams, color: '#3b82f6' },
-    { key: 'users', label: '考试人次', value: fmt(k.records), delta: dl.records, down: isDown(dl.records), bg: 'linear-gradient(135deg,#22c55e,#4ade80)', icon: User, spark: sp.records, color: '#22c55e' },
-    { key: 'ai', label: 'AI 额度消耗', value: fmt(k.ai_usage), delta: dl.ai_usage, down: isDown(dl.ai_usage), bg: 'linear-gradient(135deg,#8b5cf6,#a78bfa)', icon: Cpu, spark: sp.ai, color: '#8b5cf6' },
-    { key: 'pending', label: '待阅试卷', value: fmt(k.pending), delta: '—', down: false, bg: 'linear-gradient(135deg,#f43f5e,#fb7185)', icon: Clock, spark: sp.records.map(() => 0), color: '#f43f5e' }
+    { key: 'exams', label: '任务总数', value: fmt(k.exams), delta: dl.exams, down: isDown(dl.exams), bg: 'linear-gradient(135deg,#3b82f6,#60a5fa)', icon: Document, spark: sp.exams, color: '#3b82f6' },
+    { key: 'users', label: '提交人次', value: fmt(k.records), delta: dl.records, down: isDown(dl.records), bg: 'linear-gradient(135deg,#22c55e,#4ade80)', icon: User, spark: sp.records, color: '#22c55e' },
+    { key: 'ai', label: 'AI 调用次数', value: fmt(k.ai_usage), delta: dl.ai_usage, down: isDown(dl.ai_usage), bg: 'linear-gradient(135deg,#8b5cf6,#a78bfa)', icon: Cpu, spark: sp.ai, color: '#8b5cf6' },
+    { key: 'pending', label: '待核验', value: fmt(k.pending), delta: '—', down: false, bg: 'linear-gradient(135deg,#f43f5e,#fb7185)', icon: Clock, spark: sp.records.map(() => 0), color: '#f43f5e' }
   ];
 });
 
@@ -281,12 +285,12 @@ const initCharts = () => {
     c.setOption({
       grid: { left: 36, right: 16, top: 32, bottom: 28 },
       tooltip: { trigger: 'axis' },
-      legend: { top: 0, right: 0, textStyle: { fontSize: 11, color: '#64748b' }, data: ['平均分', '考试人次'] },
+      legend: { top: 0, right: 0, textStyle: { fontSize: 11, color: '#64748b' }, data: ['平均分', '提交人次'] },
       xAxis: { type: 'category', data: trend.map((t) => t.day), axisLine: { lineStyle: { color: '#e2e8f0' } }, axisTick: { show: false }, axisLabel: { color: '#94a3b8', fontSize: 11 } },
       yAxis: { type: 'value', max: 100, splitLine: { lineStyle: { color: '#f1f5f9' } }, axisLabel: { color: '#94a3b8', fontSize: 11 } },
       series: [
         { name: '平均分', data: trend.map((t) => t.avg), ...lineStyle('#3b82f6') },
-        { name: '考试人次', data: trend.map((t) => t.count), ...lineStyle('#14b8a6') }
+        { name: '提交人次', data: trend.map((t) => t.count), ...lineStyle('#14b8a6') }
       ]
     });
     charts.push(c);
@@ -299,7 +303,7 @@ const initCharts = () => {
       graphic: [
         { type: 'text', left: 'center', top: '42%', style: { text: '总计', fontSize: 12, fill: '#94a3b8', textAlign: 'center' } },
         { type: 'text', left: 'center', top: '50%', style: { text: String(total), fontSize: 22, fontWeight: 800, fill: '#0f172a', textAlign: 'center' } },
-        { type: 'text', left: 'center', top: '60%', style: { text: '试卷总数', fontSize: 12, fill: '#94a3b8', textAlign: 'center' } }
+        { type: 'text', left: 'center', top: '60%', style: { text: '任务总数', fontSize: 12, fill: '#94a3b8', textAlign: 'center' } }
       ],
       series: [{
         type: 'pie',

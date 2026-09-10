@@ -1,8 +1,8 @@
 /**
  * [变更日志]
- * 修改时间：2026-09-08
- * AI模型：OpenCode / Gemini 底层
- * 修改内容：[1. baseURL 优化：在 Cloudflare Pages 静态托管域名下自动直连 Vercel 后端，解决 200 重写导致的 POST 405 Method Not Allowed]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[多租户透传：成员端自动携带 X-Tenant-ID]
  */
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
@@ -28,6 +28,12 @@ http.interceptors.request.use(
     const token = localStorage.getItem('tiku_toc_token');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    const url = config.url || '';
+    const isAuth = url.includes('/auth/login');
+    if (!isAuth && config.headers) {
+      const tid = localStorage.getItem('tiku_toc_tenant') || '';
+      if (tid) (config.headers as any)['X-Tenant-ID'] = tid;
     }
     return config;
   },

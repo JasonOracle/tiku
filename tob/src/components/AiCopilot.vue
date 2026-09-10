@@ -1,21 +1,14 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-09
- * AI模型：Gemini 系列
- * 修改内容：[页面映射规范更新: 原「题海管理」更名为「题目管理」，原「试卷与组卷」更名为「试卷管理」]
- * 修改时间：2026-09-08
- * AI模型：Gemini 系列
- * 修改内容：[前端隐藏上下文 buildPreamble 注入用户个人资料画像(姓名/职务/背景)，使抽屉式AI助手同步具备个性化认知]
- * 修改时间：2026-09-06 21:00:00
- * AI模型：ZCode (GLM)
- * 修改内容：[v1.2 新增 AI Copilot 助手抽屉: 前端状态快照注入(Frontend State Preamble)——把当前老师身份/
- *          停留页面/待批阅数/剩余额度硬拼进 Prompt 前导, 后端纯透传大模型, 零 RAG 成本]
+ * AI模型：Muse Spark
+ * 修改内容：[彻底清洗：对接新溯源对话接口并展示引用，旧额度/ sessions 体系已删除]
 -->
 <template>
   <el-drawer v-model="visible" title="✨ AI 助手" size="420px" :append-to-body="true">
     <div class="copilot-wrap">
       <div class="quota-line">
-        <span>🔋 今日剩余 AI 额度：<strong>{{ userStore.quotaRemaining }}</strong> 次</span>
+        <span>📚 基于企业公共知识库回答，自动附带参考溯源</span>
         <span v-if="!aiAvailable" class="warn">AI 未配置</span>
       </div>
 
@@ -24,8 +17,8 @@
           <div class="bubble">{{ m.content }}</div>
         </div>
         <div v-if="messages.length === 0" class="empty-tip">
-          <p>你好，{{ userStore.username }}！我是你的 AI 数字员工。</p>
-          <p>试试问我：「我今天该做什么？」、「怎么组一份期末卷？」</p>
+          <p>你好，{{ userStore.username }}！我是你的 AI 助手。</p>
+          <p>试试问我：「报销标准是什么？」、「帮我创建一组安全培训条目？」</p>
         </div>
       </div>
 
@@ -41,7 +34,6 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
-import { ElMessage } from 'element-plus';
 import request from '../utils/request';
 import { useUserStore } from '../store/user';
 
@@ -58,26 +50,9 @@ const aiAvailable = ref(true);
 const chatAreaRef = ref<HTMLElement | null>(null);
 
 const pageName = (path: string) =>
-  ({ '/questions': '题目管理', '/exams': '试卷管理', '/grading': '阅卷大厅', '/categories': '分类配置',
-    '/users': '用户与明细', '/banners': 'Banner设置', '/messages': '消息中心', '/members': '成员与额度',
-    '/audit': '审计日志' } as any)[path] || '工作台';
-
-// 前端状态快照注入: 拼装隐藏上下文前导, 让 AI 零成本获得"上帝视角"
-const buildPreamble = (userText: string) => {
-  const roleText = userStore.role === 'super_admin' ? '超级管理员' : '普通教师(老师)';
-  const profileParts: string[] = [];
-  if (userStore.name) profileParts.push(`真实姓名=${userStore.name}`);
-  if (userStore.position) profileParts.push(`职务=${userStore.position}`);
-  if (userStore.bio) profileParts.push(`背景与学科介绍=${userStore.bio}`);
-
-  return [
-    `[系统隐藏上下文 | 用户不可见]:`,
-    `当前用户=${userStore.username}(${roleText})${profileParts.length ? '，个人画像=[' + profileParts.join(', ') + ']' : ''}, 剩余AI额度=${userStore.quotaRemaining}次,`,
-    `当前停留页面=${pageName(route.path)}。`,
-    `请基于以上身份、用户背景与页面上下文回答老师的问题; 称呼亲切自然，保持简洁、可执行。`,
-    ``
-  ].join('\n') + `\n老师提问: ${userText}`;
-};
+  ({ '/resources': '题目管理', '/tasks': '试卷管理', '/verification': '阅卷管理', '/categories': '分类配置',
+    '/members': '成员管理', '/banners': 'Banner设置', '/messages': '消息中心', '/kb': 'AI知识库',
+    '/audit': '审计日志', '/dashboard': '数据看板' } as any)[path] || '工作台';
 
 const scrollBottom = async () => {
   await nextTick();
@@ -94,18 +69,21 @@ const send = async () => {
   try {
     const history = messages.value.slice(-6, -1).map((m) => ({ role: m.role, content: m.content }));
     const res: any = await request.post('/api/v1/admin/ai/chat', {
-      message: buildPreamble(text),
+      message: text,
       history
     }, { timeout: 120000 }); // 大模型回复较慢, 覆盖全局 10s 超时
-    userStore.quotaRemaining = res.quota_remaining ?? userStore.quotaRemaining;
-    messages.value.push({ role: 'assistant', content: res.reply || '(空回复)' });
+    const reply = res.content || res.reply || '(空回复)';
+    const sources = res.ai_rag_sources || [];
+    messages.value.push({ role: 'assistant', content: reply });
+    if (sources.length) {
+      messages.value.push({
+        role: 'assistant',
+        content: '📚 参考溯源：' + sources.map((s: any) => s.document_name || s.file_name || '').filter(Boolean).join('、')
+      });
+    }
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || '';
-    if (String(detail).includes('额度')) {
-      messages.value.push({ role: 'assistant', content: '今日 AI 额度已用尽，请联系超级管理员在「成员与AI额度」中分配或补充。' });
-    } else {
-      aiAvailable.value = false;
-      messages.value.push({ role: 'assistant', content: 'AI 服务暂时不可用，请稍后再试。' });
+    aiAvailable.value = false;
+    messages.value.push({ role: 'assistant', content: 'AI 服务暂时不可用，请稍后再试。' });
     }
   } finally {
     sending.value = false;

@@ -19,6 +19,11 @@ tiku/
 └── product.md               # 产品需求规格说明书
 ```
 
+> 🎯 **黄金标杆文件指引 (Gold Standard Reference)**
+> 在进行 v1.4 重构及后续开发时，强制参考以下文件作为代码组织、逻辑封装和样式规范的最高标杆：
+> - **后端标杆**：`backend/app/api/admin/admin_members.py` (重点参考其路由组织、依赖注入与基于 `tenant_id` 的沙箱过滤机制)
+> - **前端标杆**：`tob/src/views/users/UsersView.vue` (重点参考 Vue3 `<script setup>` 结构、Element Plus 交互及 API 调用规范)
+
 ---
 
 ## 2. 核心架构机制：多租户物理隔离 (Multi-Tenant Isolation)

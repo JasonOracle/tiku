@@ -1,142 +1,137 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-07 01:05:00
- * AI模型：Gemini 系列
- * 修改内容：[重构为「用户管理」模块: 支持超级管理员、管理员、出题人三级角色管理；新增名字/真实姓名、手机号输入与展示]
+ * 修改时间：2026-09-11
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[员工编辑画像打通: 1. 列表表格新增性别、职业、年龄展示列，直观呈现补充信息；2. openDialog 稳健兼容回显画像字段]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[彻底清洗重写：手机号静默录入+租户成员列表，旧账号/额度体系已删除]
 -->
 <template>
   <div class="page-card">
     <div class="filter-bar">
-      <el-input v-model="keyword" placeholder="搜索账号或姓名..." clearable style="width: 220px" @change="loadMembers" />
-      <el-button type="primary" class="primary-btn" @click="openCreate">
-        <el-icon><Plus /></el-icon> 新增用户账号
+      <el-input v-model="keyword" placeholder="搜索手机号 / 姓名 / 昵称" clearable
+                style="width: 280px" @change="doSearch" @keyup.enter="doSearch" />
+      <el-button type="primary" class="add-btn" @click="openDialog">
+        <el-icon><Plus /></el-icon> 录入成员
       </el-button>
     </div>
 
     <el-table :data="members" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="username" label="账号" min-width="120" />
-      <el-table-column label="姓名" min-width="120">
+      <el-table-column prop="user_id" label="ID" width="70" />
+      <el-table-column prop="phone" label="手机号" min-width="130" />
+      <el-table-column label="姓名" min-width="110">
         <template #default="{ row }">
-          <span style="font-weight: 700">{{ row.name || '—' }}</span>
+          <span style="font-weight: 700">{{ row.display_name || '—' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="手机号" min-width="130">
+      <el-table-column label="昵称" min-width="110">
         <template #default="{ row }">
-          <span>{{ row.phone || '—' }}</span>
+          <span>{{ row.nickname || '—' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="角色" width="120">
+      <el-table-column label="性别" width="70">
         <template #default="{ row }">
-          <el-tag v-if="row.role === 'super_admin'" type="danger" size="small">超级管理员</el-tag>
+          <span v-if="row.gender === 'male'" style="color: #2563eb;">男</span>
+          <span v-else-if="row.gender === 'female'" style="color: #db2777;">女</span>
+          <span v-else-if="row.gender === 'secret'" style="color: #64748b;">保密</span>
+          <span v-else style="color: #cbd5e1;">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="age" label="年龄" width="70">
+        <template #default="{ row }">
+          <span>{{ row.age ? `${row.age} 岁` : '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="occupation" label="职业" min-width="110">
+        <template #default="{ row }">
+          <span>{{ row.occupation || '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="角色" width="100">
+        <template #default="{ row }">
+          <el-tag v-if="row.role === 'owner'" type="danger" size="small">所有者</el-tag>
           <el-tag v-else-if="row.role === 'admin'" type="warning" size="small">管理员</el-tag>
-          <el-tag v-else type="primary" size="small">出题人</el-tag>
+          <el-tag v-else type="primary" size="small">成员</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column label="状态" width="80">
         <template #default="{ row }">
-          <el-tag :type="row.status ? 'success' : 'info'" size="small">{{ row.status ? '正常' : '已禁用' }}</el-tag>
+          <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
+            {{ row.status === 'active' ? '启用' : '禁用' }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="每日AI额度" width="120">
-        <template #default="{ row }">
-          <span style="font-weight: 700">{{ row.ai_quota_limit }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="今日余额" width="140">
-        <template #default="{ row }">
-          <el-progress :percentage="row.ai_quota_limit ? Math.min(100, Math.round(row.daily_ai_quota / row.ai_quota_limit * 100)) : 0"
-                       :stroke-width="10" :color="row.daily_ai_quota > 0 ? '#0284c7' : '#ef4444'" />
-          <span style="font-size: 12px; color: #64748b">{{ row.daily_ai_quota }} / {{ row.ai_quota_limit }} 次</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" width="170" />
-      <el-table-column label="操作" width="220" fixed="right">
-        <template #default="{ row }">
-          <el-button type="primary" text size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button type="success" text size="small" @click="openRefill(row)">补额度</el-button>
-          <el-button :type="row.status ? 'warning' : 'success'" text size="small" @click="toggleStatus(row)" :disabled="row.role === 'super_admin'">
-            {{ row.status ? '禁用' : '启用' }}
-          </el-button>
+      <el-table-column label="操作" width="100" fixed="right">
+        <template #default="scope">
+          <el-button size="small" @click="openDialog(scope.row)">编辑</el-button>
         </template>
       </el-table-column>
     </el-table>
 
     <div class="pagination-bar">
       <el-pagination v-model:current-page="page" :page-size="size" :total="total"
-                     layout="total, prev, pager, next" @current-change="loadMembers" />
+                     layout="total, prev, pager, next" @current-change="doSearch" />
     </div>
 
-    <!-- 新增弹窗 -->
-    <el-dialog v-model="createVisible" title="新增用户账号" width="460px" destroy-on-close>
-      <el-form label-width="100px">
-        <el-form-item label="账号" required>
-          <el-input v-model="createForm.username" placeholder="3-50位用户名" />
-        </el-form-item>
-        <el-form-item label="真实姓名" required>
-          <el-input v-model="createForm.name" placeholder="请输入姓名" />
-        </el-form-item>
+    <!-- 录入/编辑弹窗 -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? '编辑成员' : '录入成员'"
+      width="560px"
+      destroy-on-close
+      class="member-dialog"
+    >
+      <el-form :model="form" label-width="88px" size="default">
         <el-form-item label="手机号" required>
-          <el-input v-model="createForm.phone" placeholder="请输入手机号" />
+          <el-input v-model="form.phone" placeholder="11 位手机号（录入必填）" maxlength="11" :disabled="!!editingId" />
         </el-form-item>
-        <el-form-item label="分配角色" required>
-          <el-select v-model="createForm.role" style="width: 100%">
-            <el-option v-if="userStore.isSuper()" label="管理员" value="admin" />
-            <el-option label="出题人" value="teacher" />
-          </el-select>
+        <el-form-item label="姓名">
+          <el-input v-model="form.display_name" placeholder="成员展示名" maxlength="50" />
         </el-form-item>
-        <el-form-item label="初始密码" required>
-          <el-input v-model="createForm.password" type="password" show-password placeholder="至少6位" />
-        </el-form-item>
-        <el-form-item label="每日AI额度">
-          <el-input-number v-model="createForm.ai_quota_limit" :min="0" :max="10000" />
-          <span style="font-size: 12px; color: #94a3b8; margin-left: 8px">AI出题/组卷/聊天每日额度</span>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="doCreate">创建</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 编辑弹窗 -->
-    <el-dialog v-model="editVisible" :title="`编辑账号：${editing?.username}`" width="460px" destroy-on-close>
-      <el-form label-width="100px">
-        <el-form-item label="真实姓名">
-          <el-input v-model="editForm.name" placeholder="请输入姓名" />
-        </el-form-item>
-        <el-form-item label="手机号">
-          <el-input v-model="editForm.phone" placeholder="请输入手机号" />
-        </el-form-item>
-        <el-form-item v-if="userStore.isSuper() && editing?.role !== 'super_admin'" label="分配角色">
-          <el-select v-model="editForm.role" style="width: 100%">
+        <el-form-item label="角色">
+          <el-select v-model="form.role" style="width: 100%">
+            <el-option label="成员" value="member" />
             <el-option label="管理员" value="admin" />
-            <el-option label="出题人" value="teacher" />
+            <el-option label="所有者" value="owner" />
           </el-select>
         </el-form-item>
-        <el-form-item label="重置密码">
-          <el-input v-model="editForm.password" type="password" show-password placeholder="留空则不修改" />
+        <el-form-item label="昵称">
+          <el-input v-model="form.nickname" placeholder="选填" maxlength="50" />
         </el-form-item>
-        <el-form-item label="每日AI额度">
-          <el-input-number v-model="editForm.ai_quota_limit" :min="0" :max="10000" />
+        <el-form-item label="邮箱">
+          <el-input v-model="form.email" placeholder="选填" maxlength="100" />
+        </el-form-item>
+        <el-form-item label="职业">
+          <el-input v-model="form.occupation" placeholder="选填" maxlength="100" />
+        </el-form-item>
+        <el-form-item label="年龄">
+          <el-input-number v-model="form.age" :min="1" :max="150" placeholder="选填" style="width: 120px" />
+        </el-form-item>
+        <el-form-item label="性别">
+          <el-select v-model="form.gender" style="width: 100%">
+            <el-option label="未设置" value="" />
+            <el-option label="男" value="male" />
+            <el-option label="女" value="female" />
+            <el-option label="保密" value="secret" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="简介">
+          <el-input v-model="form.bio" type="textarea" :rows="3"
+                    placeholder="选填，个人简介" maxlength="500" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-radio-group v-model="form.status">
+            <el-radio value="active">启用</el-radio>
+            <el-radio value="disabled">禁用</el-radio>
+          </el-radio-group>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="doEdit">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 补额度 -->
-    <el-dialog v-model="refillVisible" :title="`为 ${refilling?.username} 补充今日 AI 余额`" width="380px" destroy-on-close>
-      <el-form label-width="100px">
-        <el-form-item label="补充次数">
-          <el-input-number v-model="refillAmount" :min="1" :max="10000" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="refillVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="doRefill">确认补充</el-button>
+        <div class="dialog-footer">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -147,33 +142,35 @@ import { ref, reactive, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
 import request from '../../utils/request';
-import { useUserStore } from '../../store/user';
 
-const userStore = useUserStore();
 const members = ref<any[]>([]);
 const loading = ref(false);
-const keyword = ref('');
 const page = ref(1);
 const size = 20;
 const total = ref(0);
+const keyword = ref('');
 const saving = ref(false);
+const dialogVisible = ref(false);
+const editingId = ref<number | null>(null);
 
-const createVisible = ref(false);
-const createForm = reactive({ username: '', name: '', phone: '', role: 'teacher', password: '', ai_quota_limit: 20 });
+const form = reactive({
+  phone: '',
+  display_name: '',
+  role: 'member' as string,
+  nickname: '',
+  email: '',
+  occupation: '',
+  age: undefined as number | undefined,
+  gender: '' as string,
+  bio: '',
+  status: 'active' as string
+});
 
-const editVisible = ref(false);
-const editing = ref<any>(null);
-const editForm = reactive({ name: '', phone: '', role: 'teacher', password: '', ai_quota_limit: 0 });
-
-const refillVisible = ref(false);
-const refilling = ref<any>(null);
-const refillAmount = ref(10);
-
-const loadMembers = async () => {
+const doSearch = async () => {
   loading.value = true;
   try {
     const res: any = await request.get('/api/v1/admin/members', {
-      params: { keyword: keyword.value || undefined, page: page.value, size }
+      params: { page: page.value, size, keyword: keyword.value }
     });
     members.value = res.items || [];
     total.value = res.total || 0;
@@ -182,86 +179,83 @@ const loadMembers = async () => {
   }
 };
 
-const openCreate = () => {
-  createForm.username = '';
-  createForm.name = '';
-  createForm.phone = '';
-  createForm.role = userStore.isSuper() ? 'admin' : 'teacher';
-  createForm.password = '';
-  createForm.ai_quota_limit = 20;
-  createVisible.value = true;
-};
-
-const doCreate = async () => {
-  if (!createForm.username.trim() || !createForm.password) {
-    ElMessage.error('请填写账号和密码');
-    return;
+const openDialog = (row?: any) => {
+  if (row) {
+    editingId.value = row.user_id;
+    Object.assign(form, {
+      phone: row.phone || '',
+      display_name: row.display_name || '',
+      role: row.role || 'member',
+      nickname: row.nickname || '',
+      email: row.email || '',
+      occupation: row.occupation || '',
+      age: row.age,
+      gender: row.gender || '',
+      bio: row.bio || '',
+      status: row.status || 'active'
+    });
+  } else {
+    editingId.value = null;
+    Object.assign(form, {
+      phone: '', display_name: '', role: 'member',
+      nickname: '', email: '', occupation: '',
+      age: undefined, gender: '', bio: '', status: 'active'
+    });
   }
-  saving.value = true;
-  try {
-    await request.post('/api/v1/admin/members', { ...createForm });
-    ElMessage.success('创建成功');
-    createVisible.value = false;
-    loadMembers();
-  } finally {
-    saving.value = false;
+  dialogVisible.value = true;
+};
+
+const save = async () => {
+  if (!editingId.value) {
+    // 新建
+    if (!/^1[3-9]\d{9}$/.test(form.phone.trim())) {
+      ElMessage.error('请输入正确的 11 位手机号');
+      return;
+    }
+    saving.value = true;
+    try {
+      await request.post('/api/v1/admin/members', {
+        phone: form.phone.trim(),
+        name: form.display_name.trim(),
+        role: form.role,
+        nickname: form.nickname.trim() || undefined,
+        email: form.email.trim() || undefined,
+        occupation: form.occupation.trim() || undefined,
+        age: form.age || undefined,
+        gender: form.gender || undefined,
+        bio: form.bio.trim() || undefined
+      });
+      ElMessage.success('成员添加成功（默认密码 123456）');
+      dialogVisible.value = false;
+      doSearch();
+    } finally {
+      saving.value = false;
+    }
+  } else {
+    // 编辑
+    saving.value = true;
+    try {
+      await request.put(`/api/v1/admin/members/${editingId.value}`, {
+        display_name: form.display_name.trim() || null,
+        role: form.role,
+        status: form.status,
+        nickname: form.nickname.trim() || null,
+        email: form.email.trim() || null,
+        occupation: form.occupation.trim() || null,
+        age: form.age || null,
+        gender: form.gender || null,
+        bio: form.bio.trim() || null
+      });
+      ElMessage.success('成员信息已更新');
+      dialogVisible.value = false;
+      doSearch();
+    } finally {
+      saving.value = false;
+    }
   }
 };
 
-const openEdit = (row: any) => {
-  editing.value = row;
-  editForm.name = row.name || '';
-  editForm.phone = row.phone || '';
-  editForm.role = row.role || 'teacher';
-  editForm.password = '';
-  editForm.ai_quota_limit = row.ai_quota_limit;
-  editVisible.value = true;
-};
-
-const doEdit = async () => {
-  saving.value = true;
-  try {
-    const payload: any = {
-      name: editForm.name,
-      phone: editForm.phone,
-      role: editForm.role,
-      ai_quota_limit: editForm.ai_quota_limit
-    };
-    if (editForm.password) payload.password = editForm.password;
-    await request.put(`/api/v1/admin/members/${editing.value.id}`, payload);
-    ElMessage.success('已保存');
-    editVisible.value = false;
-    loadMembers();
-  } finally {
-    saving.value = false;
-  }
-};
-
-const openRefill = (row: any) => {
-  refilling.value = row;
-  refillAmount.value = 10;
-  refillVisible.value = true;
-};
-
-const doRefill = async () => {
-  saving.value = true;
-  try {
-    await request.post(`/api/v1/admin/members/${refilling.value.id}/refill`, { amount: refillAmount.value });
-    ElMessage.success(`已为 ${refilling.value.username} 补充 ${refillAmount.value} 次`);
-    refillVisible.value = false;
-    loadMembers();
-  } finally {
-    saving.value = false;
-  }
-};
-
-const toggleStatus = async (row: any) => {
-  await request.put(`/api/v1/admin/members/${row.id}`, { status: !row.status });
-  ElMessage.success(row.status ? '已禁用' : '已启用');
-  loadMembers();
-};
-
-onMounted(loadMembers);
+onMounted(doSearch);
 </script>
 
 <style scoped>
@@ -276,16 +270,21 @@ onMounted(loadMembers);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.primary-btn {
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  border: none;
-}
+.add-btn { font-weight: 600; }
 
 .pagination-bar {
   display: flex;
   justify-content: flex-end;
   margin-top: 20px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

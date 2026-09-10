@@ -64,7 +64,7 @@ const size = 15;
 const total = ref(0);
 
 const typeTag = (t: string) => (t === 'ai_error' ? 'danger' : t === 'grading' ? 'warning' : t === 'exam_draft' ? 'success' : 'info');
-const typeLabel = (t: string) => ({ grading: '阅卷', exam_draft: '组卷', ai_error: 'AI异常', system: '系统' } as any)[t] || '系统';
+const typeLabel = (t: string) => ({ verification: '核验', task_draft: '任务', grading: '核验', exam_draft: '任务', ai_error: 'AI异常', system: '系统' } as any)[t] || '系统';
 
 const loadList = async () => {
   loading.value = true;

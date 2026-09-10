@@ -1,6 +1,27 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-10
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[修正试卷分类加载参数 target_type 为 task，解决分类下拉列表为空的Bug]
+ * 修改时间：2026-09-10
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 精简前端请求流，移除客户端臃肿的临时上下文拼接，全面托付后端权威档案与本地 Mem0 长期记忆; 2. onMounted 补充调用 userStore.loadProfile() 确保个人状态实时刷新]
+ * 修改时间：2026-09-10
+ * AI模型：Gemini 系列
+ * 修改内容：[接入 SessionSidebar 的 @renamed 局部状态同步，会话重命名后无刷新实时更新侧边栏标题]
+ * 修改时间：2026-09-10
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[全面恢复 v1.3 工具调用确认卡片: 接入 ToolCallCard 支持全题目预览/分类选择/考试时长/主观题批阅模式/知识溯源联动]
+ * 修改时间：2026-09-10
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[修复 execute_tool 工具名映射: 正确兼容 create_exam/create_exam_draft 及其成功提示与后续流转]
+ * 修改时间：2026-09-10
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[移除底部冗余的全局 thinking-indicator，统一由 MessageBubble 内部的骨架屏呈现单点思考态]
+ * 修改时间：2026-09-10
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[1. 修复 currentMessages 未声明导致的页面白屏崩溃; 2. 移除重复的 ExamCardData interface 声明; 3. 规范 ActionCard confirm/cancel 事件传参]
+ * 修改时间：2026-09-10
  * AI模型：Agnes-2.5-Flash
  * 修改内容：[v1.3 核心业务卡片回补: SSE流式对话 + 试卷卡片 + 工具调用确认 + 溯源抽屉]
 -->
@@ -13,6 +34,7 @@
       @new="startNewSession"
       @select="selectSession"
       @delete="handleDeleteSession"
+      @renamed="handleRenamedSession"
     />
 
     <!-- 右侧聊天主区域 -->
@@ -32,9 +54,6 @@
         <div v-if="currentMessages.length === 0 && !loadingMessages" class="welcome-screen">
           <WelcomePrompts @select-prompt="usePreset" />
         </div>
-        <div v-else-if="!loadingMessages && currentMessages.length === 0" class="welcome-screen">
-          <WelcomePrompts @select-prompt="usePreset" />
-        </div>
 
         <template v-for="item in currentMessages" :key="item.id ?? item._tmpId">
           <!-- 用户消息 -->
@@ -48,9 +67,9 @@
           </div>
           <!-- AI 消息 -->
           <div v-else class="message-row assistant-row">
-            <!-- 1. 常规 Markdown 气泡（无论有无卡片，回复文本都正常展示） -->
+            <!-- 1. 常规 Markdown 气泡（无论有无卡片，回复文本或思考中都正常展示） -->
             <MessageBubble
-              v-if="item.content"
+              v-if="item.content || item.isThinking"
               :role="item.role"
               :content="item.content"
               :username="userStore.username"
@@ -61,12 +80,21 @@
               @show-source="showSource"
               @feedback="submitFeedback"
             />
-            <!-- 2. 独立结构化风险操作卡（只有显式下发 actionCard 时展示） -->
+            <!-- 2. 全功能业务操作确认卡 (v1.3 核心工具调用卡，含试题列表/分类/时长/溯源抽屉) -->
+            <ToolCallCard
+              v-if="item.actionRequired || (item.actionCard && isToolOperation(item))"
+              :message="toToolCallMessage(item)"
+              :categories="examCategories"
+              @confirm="handleToolConfirm"
+              @cancel="handleToolCancel"
+              @show-source="showSource"
+            />
+            <!-- 2.1 降级/普通结构化操作卡 -->
             <ActionCard
-              v-if="item.actionCard && item.actionCard.title"
+              v-else-if="item.actionCard && item.actionCard.title"
               :card-data="item.actionCard"
-              @confirm="handleActionConfirm(item)"
-              @cancel="handleActionCancel(item)"
+              @confirm="handleActionConfirm(item.actionCard)"
+              @cancel="handleActionCancel(item.actionCard)"
             />
             <!-- 3. 试卷生成导出卡 -->
             <ExamCard
@@ -76,11 +104,6 @@
             />
           </div>
         </template>
-
-        <div v-if="sending" class="thinking-indicator">
-          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-          <span style="margin-left: 8px; color: #64748b; font-size: 13px;">AI 正在思考...</span>
-        </div>
       </div>
 
       <div class="input-container">
@@ -129,22 +152,13 @@ import { useUserStore } from '../../store/user';
 import request from '../../utils/request';
 import SessionSidebar from './components/SessionSidebar.vue';
 import MessageBubble from './components/MessageBubble.vue';
+import ToolCallCard from './components/ToolCallCard.vue';
 import ActionCard from './components/ActionCard.vue';
 import ExamCard from './components/ExamCard.vue';
 import WelcomePrompts from './components/WelcomePrompts.vue';
 import TraceDrawer from '../resources/components/TraceDrawer.vue';
 import GradingDrawer from '../exams/components/GradingDrawer.vue';
 import type { ChatMessage, ActionCardPayload, ExamCardData } from './types';
-
-interface ExamCardData {
-  type: string;
-  exam_id: number;
-  title: string;
-  total_score: number;
-  question_count: number;
-  download_url: string;
-  created_at?: string;
-}
 
 interface CloudSession {
   id: number;
@@ -158,6 +172,7 @@ const messagesWrapRef = ref<HTMLElement | null>(null);
 const sessions = ref<CloudSession[]>([]);
 const activeSessionId = ref<number | null>(null);
 const messages = ref<ChatMessage[]>([]);
+const currentMessages = computed(() => messages.value);
 const hasMore = ref(true);
 const loadingHistory = ref(false);
 const loadingMessages = ref(false);
@@ -324,6 +339,13 @@ const handleDeleteSession = async (id: number): Promise<void> => {
   }
 };
 
+const handleRenamedSession = (id: number, newTitle: string): void => {
+  const item = sessions.value.find(s => s.id === id);
+  if (item) {
+    item.title = newTitle;
+  }
+};
+
 const scrollToBottom = async () => {
   await nextTick();
   if (messagesWrapRef.value) {
@@ -377,7 +399,7 @@ const examCategoriesLoaded = ref(false);
 const loadExamCategories = async (): Promise<void> => {
   if (examCategoriesLoaded.value) return;
   try {
-    const res: any = await request.get('/api/v1/admin/categories', { params: { target_type: 'exam' } });
+    const res: any = await request.get('/api/v1/admin/categories', { params: { target_type: 'task' } });
     examCategories.value = Array.isArray(res) ? res : (res.items || []);
   } catch (e) {
     examCategories.value = [];
@@ -467,7 +489,6 @@ const send = async (customText?: string): Promise<void> => {
       .map(m => ({ role: m.role, content: m.content }));
 
     await loadExamCategories();
-    const preamble = await buildPreamble(text);
     const token = localStorage.getItem('tiku_tob_token') || '';
 
     const resp = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api'}/v1/admin/ai/chat/stream`, {
@@ -478,7 +499,7 @@ const send = async (customText?: string): Promise<void> => {
         'X-Tenant-ID': userStore.tenantId || ''
       },
       body: JSON.stringify({
-        message: preamble,
+        message: text,
         display_text: text,
         history,
         session_id: sessionId
@@ -581,6 +602,12 @@ const send = async (customText?: string): Promise<void> => {
             content: ev.message || '',
             quote,
             actionCard,
+            actionRequired: true,
+            toolName,
+            toolCallId: ev.tool_call_id || `action_${Date.now()}`,
+            arguments: args,
+            riskLevel,
+            actionResolved: false,
             ragSources: []
           } as ChatMessage);
           followScroll();
@@ -638,6 +665,79 @@ const send = async (customText?: string): Promise<void> => {
   }
 };
 
+const isToolOperation = (msg: ChatMessage): boolean => {
+  if (msg.actionRequired) return true;
+  const toolName = msg.toolName || msg.actionCard?.actionType || '';
+  return ['create_exam', 'create_exam_draft', 'batch_questions', 'create_question_draft', 'delete_exam', 'delete_question'].includes(toolName);
+};
+
+const toToolCallMessage = (msg: ChatMessage): any => {
+  const toolName = msg.toolName || (msg.actionCard?.actionType === 'create_exam' ? 'create_exam_draft' : (msg.actionCard?.actionType === 'batch_questions' ? 'create_question_draft' : msg.actionCard?.actionType)) || 'create_exam_draft';
+  const args = msg.arguments || msg.actionCard?.rawParams || {};
+  return {
+    id: msg.id,
+    role: 'assistant',
+    actionRequired: true,
+    toolName,
+    toolCallId: msg.toolCallId || msg.actionCard?.actionId || '',
+    arguments: args,
+    riskLevel: msg.riskLevel || msg.actionCard?.riskLevel || 'medium',
+    actionResolved: msg.actionResolved || msg.actionCard?.status === 'confirmed',
+    content: msg.content || msg.actionCard?.summary || ''
+  };
+};
+
+const handleToolConfirm = async (toolMsg: any): Promise<void> => {
+  const targetMsg = messages.value.find(m => m.id === toolMsg.id || m.toolCallId === toolMsg.toolCallId || m.actionCard?.actionId === toolMsg.toolCallId);
+  const toolName = toolMsg.toolName || 'create_exam_draft';
+  const args = toolMsg.arguments || {};
+  if (sending.value) return;
+  sending.value = true;
+  try {
+    const res: any = await request.post('/api/v1/admin/ai/chat/execute_tool', {
+      tool_name: toolName,
+      arguments: args,
+      tool_call_id: String(toolMsg.toolCallId || ''),
+      message_id: toolMsg.id ?? null
+    });
+
+    if (targetMsg) {
+      targetMsg.actionResolved = true;
+      if (targetMsg.actionCard) targetMsg.actionCard.status = 'confirmed';
+    }
+
+    if ((toolName === 'create_exam_draft' || toolName === 'create_exam') && res.data?.exam_id) {
+      ElMessage.success(`试卷草稿创建成功，ID: ${res.data.exam_id}`);
+    } else if ((toolName === 'create_question_draft' || toolName === 'batch_questions') && res.data?.question_ids) {
+      ElMessage.success(`已成功生成 ${res.data.count} 道题目草稿`);
+    } else if (toolName === 'delete_exam' && res.data?.deleted_id) {
+      ElMessage.success(`试卷已删除: ${res.data.title}`);
+    } else if (toolName === 'delete_question' && res.data?.deleted_question_id) {
+      ElMessage.success(`题目已删除: #${res.data.deleted_question_id}`);
+    } else {
+      ElMessage.success('操作已执行');
+    }
+
+    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${toolName}，后端返回的结果是：${JSON.stringify(res.data || res)}`;
+    await send(systemMsg);
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '执行失败');
+  } finally {
+    sending.value = false;
+  }
+};
+
+const handleToolCancel = async (toolMsg: any): Promise<void> => {
+  const targetMsg = messages.value.find(m => m.id === toolMsg.id || m.toolCallId === toolMsg.toolCallId || m.actionCard?.actionId === toolMsg.toolCallId);
+  if (targetMsg) {
+    targetMsg.actionResolved = true;
+    if (targetMsg.actionCard) targetMsg.actionCard.status = 'cancelled';
+  }
+  const toolName = toolMsg.toolName || '未知操作';
+  const systemMsg = `[系统消息]: 我拒绝了操作 ${toolName} 的执行。`;
+  await send(systemMsg);
+};
+
 const confirmToolCall = async (msg: ChatMessage): Promise<void> => {
   if (msg.actionCard?.status !== 'pending' || sending.value) return;
   sending.value = true;
@@ -652,9 +752,9 @@ const confirmToolCall = async (msg: ChatMessage): Promise<void> => {
 
     if (msg.actionCard) msg.actionCard.status = 'confirmed';
 
-    if (toolName === 'create_exam_draft' && res.data?.exam_id) {
+    if ((toolName === 'create_exam_draft' || toolName === 'create_exam') && res.data?.exam_id) {
       ElMessage.success(`试卷草稿创建成功，ID: ${res.data.exam_id}`);
-    } else if (toolName === 'create_question_draft' && res.data?.question_ids) {
+    } else if ((toolName === 'create_question_draft' || toolName === 'batch_questions') && res.data?.question_ids) {
       ElMessage.success(`已成功生成 ${res.data.count} 道题目草稿`);
     } else if (toolName === 'delete_exam' && res.data?.deleted_id) {
       ElMessage.success(`试卷已删除: ${res.data.title}`);
@@ -752,6 +852,7 @@ const handleDrawerGraded = (): void => {
 };
 
 onMounted(() => {
+  userStore.loadProfile();
   initCloud();
 });
 </script>

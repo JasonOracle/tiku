@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-10
+AI模型：OpenCode / Gemini 底层
+修改内容：[新增超管专属接口 GET /tenants/{tenant_id}/members：支持视察特定企业成员，租户严格隔离，所有者置顶]
 修改时间：2026-09-09
 AI模型：Muse Spark
 修改内容：[新建上帝视图：租户大盘管理，仅超管可访问；新增空库一次性引导]
@@ -10,7 +13,7 @@ from typing import Any, Dict
 from app.core.database import get_db
 from app.core.security import get_password_hash
 from app.api.deps import require_super_admin
-from app.models.saas import SysTenant, SysUser, SysTenantUser
+from app.models.saas import SysTenant, SysUser, SysTenantUser, SysUserProfile
 
 router = APIRouter()
 
@@ -102,3 +105,48 @@ def update_tenant(tenant_id: int, payload: dict, _: SysUser = Depends(require_su
         "short_name": t.short_name, "industry": t.industry, "scale": t.scale,
         "contact_name": t.contact_name, "contact_phone": t.contact_phone,
         "remark": t.remark}}
+
+
+@router.get("/tenants/{tenant_id}/members")
+def list_tenant_members(tenant_id: int, page: int = 1, size: int = 50, keyword: str = "",
+                        _: SysUser = Depends(require_super_admin), db: Session = Depends(get_db)):
+    """超管上帝视角：视察指定租户下的所有组织成员（带租户严格隔离，不污染全局上下文）。"""
+    t = db.query(SysTenant).filter(SysTenant.id == tenant_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="企业不存在")
+    q = db.query(SysTenantUser, SysUser).join(SysUser, SysUser.id == SysTenantUser.user_id).filter(
+        SysTenantUser.tenant_id == tenant_id
+    )
+    if keyword.strip():
+        kw = f"%{keyword.strip()}%"
+        q = q.filter((SysUser.phone.like(kw)) | (SysUser.display_name.like(kw)))
+    # 所有者优先展示
+    q = q.order_by(
+        (SysTenantUser.role == "owner").desc(),
+        (SysTenantUser.role == "admin").desc(),
+        SysTenantUser.id.desc()
+    )
+    total = q.count()
+    rows = q.offset((page - 1) * size).limit(size).all()
+    items = []
+    for rel, u in rows:
+        profile = db.query(SysUserProfile).filter(SysUserProfile.user_id == u.id).first()
+        items.append({
+            "user_id": u.id,
+            "phone": u.phone,
+            "display_name": u.display_name or u.username or "—",
+            "nickname": profile.nickname if profile else None,
+            "email": profile.email if profile else None,
+            "role": rel.role,
+            "status": rel.status,
+            "created_at": rel.created_at.strftime("%Y-%m-%d %H:%M:%S") if rel.created_at else ""
+        })
+    return {"code": 200, "data": {
+        "tenant_id": t.id,
+        "tenant_name": t.name,
+        "total": total,
+        "page": page,
+        "size": size,
+        "items": items
+    }}
+

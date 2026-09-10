@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-11
+AI模型：OpenCode / Gemini 底层
+修改内容：[彻底修复成员管理员工画像数据丢失Bug: 1. list_members 列表接口补充返回 occupation, age, gender, bio 扩展字段；2. update_member 更新后完整回传画像数据，避免编辑保存刷新后重置为空白]
 修改时间：2026-09-09
 AI模型：Muse Spark
 修改内容：[成员搜索 + PUT 编辑；手机号 UPSERT 录入不变]
@@ -81,6 +84,10 @@ def list_members(ctx: dict = Depends(require_admin), db: Session = Depends(get_d
             "display_name": u.display_name,
             "nickname": profile.nickname if profile else None,
             "email": profile.email if profile else None,
+            "occupation": profile.occupation if profile else None,
+            "age": profile.age if profile else None,
+            "gender": profile.gender if profile else None,
+            "bio": profile.bio if profile else None,
             "role": r.role,
             "status": r.status
         })
@@ -153,7 +160,38 @@ def update_member(user_id: int, payload: dict, ctx: dict = Depends(require_admin
         "user_id": uid, "phone": user.phone,
         "display_name": user.display_name, "nickname": profile.nickname if profile else None,
         "email": profile.email if profile else None,
+        "occupation": profile.occupation if profile else None,
+        "age": profile.age if profile else None,
+        "gender": profile.gender if profile else None,
+        "bio": profile.bio if profile else None,
         "role": rel.role, "status": rel.status}}
+
+
+@router.delete("/{user_id}")
+def delete_member(user_id: int, ctx: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """删除成员关联并物理销毁其在本地 Mem0 中的全部向量记忆"""
+    from app.services import memory_service
+    tenant_id = ctx["tenant_id"]
+    uid = int(user_id)
+    if str(uid) == str(ctx["user"].id):
+        raise HTTPException(status_code=400, detail="不能删除当前登录账号")
+
+    rel = db.query(SysTenantUser).filter(
+        SysTenantUser.tenant_id == tenant_id, SysTenantUser.user_id == uid).first()
+    if not rel:
+        raise HTTPException(status_code=404, detail="成员不存在或不属于本租户")
+
+    db.delete(rel)
+    write_audit(db, tenant_id, ctx["user"], "delete", "member", uid, f"移除成员 #{uid}")
+    db.commit()
+
+    # 级联清除该用户在此租户下的 Mem0 本地向量记忆
+    try:
+        memory_service.delete_all_user_memories(tenant_id, uid)
+    except Exception:
+        pass
+
+    return {"code": 200, "message": "成员已删除，相关记忆已清理"}
 
 
 def _ensure_profile(db: Session, user_id: int,

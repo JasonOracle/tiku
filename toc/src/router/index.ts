@@ -1,8 +1,8 @@
 /**
  * [变更日志]
- * 修改时间：2026-09-04 00:08:00
- * AI模型：Gemini 底层
- * 修改内容：[1. 补充 /profile 个人中心与 /history 历史记录路由]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[通用化名词映射：测评/考试→任务，题目收藏→资源收藏，我的测试→我的任务]
  */
 import { createRouter, createWebHistory, RouteRecordRaw, RouteLocationNormalized, NavigationGuardNext } from 'vue-router';
 
@@ -11,31 +11,31 @@ const routes: Array<RouteRecordRaw> = [
     path: '/',
     name: 'Home',
     component: () => import('../views/index/IndexView.vue'),
-    meta: { title: '智题库 - 轻测评刷题' }
+    meta: { title: '企业空间' }
   },
   {
     path: '/login',
     name: 'Login',
     component: () => import('../views/login/LoginView.vue'),
-    meta: { title: '用户登录/注册' }
+    meta: { title: '成员登录' }
   },
   {
-    path: '/quiz',
-    name: 'Quiz',
-    component: () => import('../views/quiz/QuizView.vue'),
-    meta: { title: '在线测评' }
+    path: '/task',
+    name: 'Task',
+    component: () => import('../views/task/TaskView.vue'),
+    meta: { title: '任务执行' }
   },
   {
     path: '/report',
     name: 'Report',
     component: () => import('../views/report/ReportView.vue'),
-    meta: { title: '分析报告' }
+    meta: { title: '结果报告' }
   },
   {
     path: '/favorite',
     name: 'Favorite',
     component: () => import('../views/favorite/FavoriteView.vue'),
-    meta: { title: '我的题目收藏夹' }
+    meta: { title: '我的资源收藏' }
   },
   {
     path: '/profile',
@@ -47,13 +47,13 @@ const routes: Array<RouteRecordRaw> = [
     path: '/history',
     name: 'History',
     component: () => import('../views/history/HistoryView.vue'),
-    meta: { title: '历史答题记录' }
+    meta: { title: '历史任务记录' }
   },
   {
-    path: '/my-tests',
-    name: 'MyTests',
-    component: () => import('../views/mytests/MyTestsView.vue'),
-    meta: { title: '我的测试' }
+    path: '/my-tasks',
+    name: 'MyTasks',
+    component: () => import('../views/my-tasks/MyTasksView.vue'),
+    meta: { title: '我的任务' }
   }
 ];
 

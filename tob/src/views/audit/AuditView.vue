@@ -13,9 +13,9 @@
           <el-option label="AI 员工" value="ai" />
         </el-select>
         <el-select v-model="filters.target_type" placeholder="全部对象" clearable style="width: 150px" @change="loadLogs">
-          <el-option label="题目" value="question" />
-          <el-option label="试卷" value="exam" />
-          <el-option label="答卷" value="record" />
+          <el-option label="条目" value="resource" />
+          <el-option label="任务" value="exam" />
+          <el-option label="提交" value="record" />
           <el-option label="成员" value="admin" />
         </el-select>
         <el-input v-model="filters.keyword" placeholder="搜索动作摘要..." clearable style="width: 220px" @change="loadLogs" />

@@ -29,12 +29,20 @@ services:
     container_name: tiku_backend
     restart: always
     environment:
+      # 与 nginx.conf（backend:8000）及端口映射 8000:8000 对齐，覆盖 Dockerfile 默认 7860
+      PORT: "8000"
       DATABASE_URL: "mysql+pymysql://root:rootpassword@tiku_mysql:3306/tiku_db?charset=utf8mb4"
-      SECRET_KEY: "tiku_super_secret_key_2026_change_in_production"
+      # ⚠️ 生产务必改掉默认 SECRET_KEY（JWT 签名根密钥）
+      SECRET_KEY: "${SECRET_KEY:-tiku_super_secret_key_2026_change_in_production}"
+      # AI 网关（服务端环境级；租户也可在管理后台按企业覆盖）
+      XIAO_HONG_SHU_API_KEY: "${XIAO_HONG_SHU_API_KEY}"
+      XIAO_HONG_SHU_API_KEY2: "${XIAO_HONG_SHU_API_KEY2}"
       SENSENOVA_API_KEY: "${SENSENOVA_API_KEY}"
       SENSENOVA_API_KEY2: "${SENSENOVA_API_KEY2}"
       AGNES_API_KEY: "${AGNES_API_KEY}"
       AGNES_API_KEY2: "${AGNES_API_KEY2}"
+      # 向量检索：本地/MySQL 保持 0；仅 TiDB 生产按 DEPLOY.md 开 1
+      TIDB_VECTOR: "${TIDB_VECTOR:-0}"
     ports:
       - "8000:8000"
     depends_on:

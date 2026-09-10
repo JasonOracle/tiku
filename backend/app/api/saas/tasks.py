@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-10
+AI模型：OpenCode / Gemini 底层
+修改内容：[admin_list_tasks 补充支持 keyword/category_id/status 检索过滤]
 修改时间：2026-09-09
 AI模型：Muse Spark
 修改内容：[彻底清洗扩展：资源/任务全量CRUD+详情/统计/复制/批量/导入，容忍旧表单字段并映射双写]
@@ -228,11 +231,18 @@ def create_task(payload: Dict[str, Any], ctx: dict = Depends(require_admin),
 
 @router.get("/tasks")
 def admin_list_tasks(ctx: dict = Depends(require_member), db: Session = Depends(get_db),
-                     page: int = 1, size: int = 10):
+                     page: int = 1, size: int = 10, keyword: str = "",
+                     category_id: Optional[int] = None, status: str = ""):
     tid = ctx["tenant_id"]
     q = db.query(Task).filter(Task.tenant_id == tid)
     if ctx.get("role") == "member":
         q = q.filter(Task.status == "published")
+    elif status.strip():
+        q = q.filter(Task.status == status.strip())
+    if keyword.strip():
+        q = q.filter(Task.title.like(f"%{keyword.strip()}%"))
+    if category_id:
+        q = q.filter(Task.category_id == category_id)
     q = q.order_by(Task.id.desc())
     total = q.count()
     items = q.offset((page - 1) * size).limit(size).all()

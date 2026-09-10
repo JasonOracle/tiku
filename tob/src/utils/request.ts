@@ -1,8 +1,8 @@
 /**
  * [变更日志]
- * 修改时间：2026-09-08
- * AI模型：OpenCode / Gemini 底层
- * 修改内容：[1. baseURL 优化：支持环境变量 VITE_API_BASE_URL，在 Cloudflare Pages 静态托管域名下自动直连 Vercel 后端，解决 200 重写导致的 405 Method Not Allowed]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[多租户透传：所有业务请求自动携带 X-Tenant-ID，登录接口除外]
  */
 import axios from 'axios';
 import type { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
@@ -31,6 +31,13 @@ request.interceptors.request.use(
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // 多租户上下文透传（登录/初始化接口除外）
+    const url = config.url || '';
+    const isAuth = url.includes('/auth/login') || url.includes('/auth/init');
+    if (!isAuth && config.headers) {
+      const tid = localStorage.getItem('tiku_tob_tenant') || '';
+      if (tid) (config.headers as any)['X-Tenant-ID'] = tid;
+    }
     return config;
   },
   (error: any) => {
@@ -52,10 +59,16 @@ request.interceptors.response.use(
     return res;
   },
   (error) => {
-    const msg = error.response?.data?.detail || '网络开小差了，请稍后再试';
+    const detail = error.response?.data?.detail || '';
+    const msg = detail || '网络开小差了，请稍后再试';
     if (error.response?.status === 401) {
       localStorage.removeItem('tiku_tob_token');
       window.location.href = '/admin/login';
+      return Promise.reject(error);
+    }
+    // 缺租户上下文由路由守卫接管（一键跳转大盘），此处不再满屏弹红字
+    if (detail.includes('X-Tenant-ID') || detail.includes('视察企业')) {
+      return Promise.reject(error);
     }
     ElMessage.error(msg);
     return Promise.reject(error);

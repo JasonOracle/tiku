@@ -1,8 +1,8 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-03
- * AI模型：Gemini 底层
- * 修改内容：[1. 实现 B 端毛玻璃拟态登录与系统初始化组件; 2. 绑定 Element Plus 与 Pinia]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[彻底清洗：纯手机号登录直连统一接口，初始化超管按钮已删除（改走种子脚本）]
 -->
 <template>
   <div class="login-container">
@@ -14,8 +14,8 @@
       </div>
 
       <el-form :model="form" :rules="rules" ref="formRef" label-position="top" size="large">
-        <el-form-item label="管理员账号" prop="username">
-          <el-input v-model="form.username" placeholder="请输入账号名">
+        <el-form-item label="手机号" prop="phone">
+          <el-input v-model="form.phone" placeholder="请输入手机号" maxlength="11">
             <template #prefix>
               <el-icon><User /></el-icon>
             </template>
@@ -33,9 +33,6 @@
         <div class="btn-group">
           <el-button type="primary" class="submit-btn" :loading="loading" @click="handleLogin">
             立即登录
-          </el-button>
-          <el-button class="init-btn" @click="handleInit">
-            初始化超管
           </el-button>
         </div>
       </el-form>
@@ -58,12 +55,12 @@ const formRef = ref<FormInstance>();
 const loading = ref(false);
 
 const form = reactive({
-  username: '',
+  phone: '',
   password: ''
 });
 
 const rules = {
-  username: [{ required: true, message: '请输入账号名', trigger: 'blur' }],
+  phone: [{ required: true, message: '请输入手机号', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 };
 
@@ -73,24 +70,14 @@ const handleLogin = async () => {
     if (!valid) return;
     loading.value = true;
     try {
-      const res: any = await request.post('/api/v1/admin/auth/login', form);
-      userStore.setToken(res.token, res.admin?.username || form.username);
+      const res: any = await request.post('/api/v1/auth/login', {
+        phone: form.phone,
+        password: form.password,
+      });
+      userStore.applyLoginPayload(res);
       ElMessage.success('登录成功');
-      router.push('/');
-    } finally {
-      loading.value = false;
-    }
-  });
-};
-
-const handleInit = async () => {
-  if (!formRef.value) return;
-  await formRef.value.validate(async (valid: boolean) => {
-    if (!valid) return;
-    loading.value = true;
-    try {
-      await request.post('/api/v1/admin/auth/init', form);
-      ElMessage.success('超级管理员初始化成功，请重新点击登录');
+      if (userStore.isSuperAdmin) router.push('/super-admin/tenants');
+      else router.push('/');
     } finally {
       loading.value = false;
     }

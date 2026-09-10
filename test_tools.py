@@ -1,67 +1,22 @@
-import sys
+"""
+[变更日志]
+修改时间：2026-09-09
+AI模型：Muse Spark
+修改内容：[彻底清洗重写：AI 网关契约校验（元组解包回归），旧工具注册表调试已删除]
+用法: cd backend && python ../test_tools.py（仅校验网关形状，不消耗额度断言内容）
+"""
 import os
-import json
+import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "backend"))
 
-from app.services.ai_service import chat_completion
-from app.services.ai_tools_registry import get_allowed_tools
+from app.services.ai_service import ai_available, chat_completion, extract_json
 
-tools = get_allowed_tools("super_admin")
-
-try:
-    content, tool_calls = chat_completion(
-        prompt="现在题海有多少道题目",
-        system="你是智题库平台的 AI 助手。你必须使用提供的工具查询数据库。",
-        tools=tools
-    )
-    print("First call tool_calls:", json.dumps(tool_calls, indent=2, ensure_ascii=False))
-    
-    if tool_calls:
-        tc = tool_calls[0]
-        # Simulate admin_ai.py bug
-        history = [{"role": "user", "content": "现在题海有多少道题目"}, tc]
-        history.append({
-            "role": "tool",
-            "tool_call_id": tc.get("id"),
-            "name": tc.get("function").get("name"),
-            "content": json.dumps({"questions_count": 100}, ensure_ascii=False)
-        })
-        
-        content2, tool_calls2 = chat_completion(
-            prompt="",
-            system="你是智题库平台的 AI 助手。",
-            history=history,
-            tools=tools
-        )
-        print("Second call content with bug:", content2)
-except Exception as e:
-    print("Error with bug:", e)
-
-
-try:
-    if tool_calls:
-        tc = tool_calls[0]
-        # Simulate correct approach
-        history = [{"role": "user", "content": "现在题海有多少道题目"}]
-        history.append({
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [tc]
-        })
-        history.append({
-            "role": "tool",
-            "tool_call_id": tc.get("id"),
-            "name": tc.get("function").get("name"),
-            "content": json.dumps({"questions_count": 100}, ensure_ascii=False)
-        })
-        
-        content2, tool_calls2 = chat_completion(
-            prompt="",
-            system="你是智题库平台的 AI 助手。",
-            history=history,
-            tools=tools
-        )
-        print("Second call content (correct):", content2)
-except Exception as e:
-    print("Error with correct approach:", e)
+print("ai_available:", ai_available())
+out = chat_completion(prompt='{"ok": true}', system="只输出JSON。", json_mode=True)
+assert isinstance(out, tuple) and len(out) == 2, f"网关必须返回 (content, tool_calls) 元组，实际 {type(out)}"
+content, tool_calls = out
+print("content type:", type(content).__name__, "| tool_calls:", tool_calls)
+parsed = extract_json(content or "")
+print("extract_json:", parsed)
+print("OK: gateway contract holds")

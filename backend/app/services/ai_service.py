@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-10
+AI模型：OpenCode / Gemini 底层
+修改内容：[致命协议对齐: chat_completion_stream 在 yield tool_calls 之后必须继续 yield done，使上层消费生成器能够正常捕获并触发操作确认协议]
 修改时间：2026-09-08
 AI模型：Gemini 系列
 修改内容：[强化 extract_json: 增加对大模型长输出末尾被截断时的括号/引号自动对齐补齐机制，保障大批题目组卷稳定性]
@@ -141,6 +144,35 @@ def ai_available() -> bool:
     return len(get_ai_providers()) > 0
 
 
+def get_embedding(text: str, provider: Optional[Dict[str, str]] = None,
+                  timeout: float = 30.0) -> Optional[List[float]]:
+    """OpenAI 兼容 embeddings（尽力而为）：取 {api_url 基址}/embeddings。
+    失败返回 None（调用方回退关键词检索），绝不抛异常。"""
+    try:
+        providers = [provider] if provider and provider.get("api_key") else get_ai_providers()
+        if not providers:
+            return None
+        p = providers[0]
+        base = (p.get("api_url") or "").rstrip("/")
+        if base.endswith("/chat/completions"):
+            base = base[: -len("/chat/completions")]
+        url = base + "/embeddings"
+        resp = _get_shared_client().post(
+            url,
+            json={"model": p.get("model"), "input": text[:2000]},
+            headers={"Authorization": f"Bearer {p['api_key']}", "Content-Type": "application/json"},
+            timeout=timeout,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json().get("data") or []
+        if data and isinstance(data[0].get("embedding"), list):
+            return [float(x) for x in data[0]["embedding"]]
+        return None
+    except Exception:
+        return None
+
+
 def chat_completion(
     prompt: str,
     system: str = "你是一名严谨、专业的中文助理。",
@@ -151,10 +183,14 @@ def chat_completion(
     tools: Optional[List[dict]] = None,
     tool_choice: Optional[str] = "auto",
     history: Optional[List[dict]] = None,
+    provider: Optional[Dict[str, str]] = None,
 ) -> tuple[Optional[str], Optional[List[dict]]]:
     """单轮调用大模型, 返回文本。按顺序故障转移 (SenseNova Key1 -> Key2 -> Agnes Key1 -> Key2)。
-    任何提供商失败抛异常后自动切下一个 API Key。"""
+    任何提供商失败抛异常后自动切下一个 API Key。
+    :param provider: 租户级覆盖 ({"name","api_url","api_key","model"})，优先试用，失败回退全局列表。"""
     providers = get_ai_providers()
+    if provider and provider.get("api_key") and provider.get("api_url"):
+        providers = [provider, *[p for p in providers if p.get("api_key") != provider.get("api_key")]]
     if not providers:
         raise AiServiceError("未配置任何有效的 AI API Key (SENSENOVA_API_KEY / SENSENOVA_API_KEY2 / AGNES_API_KEY / AGNES_API_KEY2)")
 
@@ -324,6 +360,7 @@ def chat_completion_stream(
                         for _, frag in sorted(tool_frags.items())
                     ]
                     yield {"type": "tool_calls", "tool_calls": normalized}
+                    yield {"type": "done"}
                 else:
                     if not saw_text:
                         print(f"[ai_stream] empty completion provider={provider['name']} delta_keys={sorted(delta_keys)}")

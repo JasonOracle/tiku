@@ -1,70 +1,128 @@
 <!--
-  * [变更日志]
-  * 修改时间：2026-09-07
-  * AI模型：Muse Spark
-  * 修改内容：[新建: AI 模型配置预留静态页 (主力/备用 Key 本地保存, 演示环境不落库)]
-  -->
+ * [变更日志]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[彻底清洗重写：租户级网关覆盖（脱敏回显+连通测试+总开关），旧本机localStorage stub已删除]
+-->
 <template>
   <div class="page-card">
     <div class="page-title">AI 模型配置</div>
-    <div class="page-sub">预留页面：演示环境下配置保存在本机浏览器，不会写入服务端。</div>
+    <div class="page-sub">
+      本企业专属网关覆盖；留空则继承服务端环境配置。密钥仅脱敏回显，置空提交表示沿用旧值。
+      <el-tag size="small" :type="source === 'tenant' ? 'success' : 'info'" effect="plain" style="margin-left: 8px">
+        当前生效：{{ source === 'tenant' ? '企业专属' : '服务端环境' }} · {{ envModel }}
+      </el-tag>
+    </div>
 
-    <el-form label-width="140px" style="max-width: 640px; margin-top: 20px">
-      <el-form-item label="主力模型网关">
-        <el-input v-model="form.primaryUrl" placeholder="https://…" />
+    <el-form label-width="140px" style="max-width: 680px; margin-top: 20px" v-loading="loading">
+      <el-form-item label="企业 AI 总开关">
+        <el-switch v-model="form.enabled" />
+        <span class="hint">关闭后本企业 AI 出题/对话/核验全部走人工兜底</span>
       </el-form-item>
-      <el-form-item label="主力 API Key">
-        <el-input v-model="form.primaryKey" type="password" show-password placeholder="留空则使用服务端配置" />
+      <el-form-item label="对话网关地址">
+        <el-input v-model="form.chat_api_url" placeholder="https://…/v1/chat/completions" />
       </el-form-item>
-      <el-form-item label="备用 API Key">
-        <el-input v-model="form.backupKey" type="password" show-password placeholder="故障转移备用 Key" />
+      <el-form-item label="对话 API Key">
+        <el-input v-model="form.chat_api_key" type="password" show-password placeholder="置空=沿用旧值" />
       </el-form-item>
-      <el-form-item label="阅卷模型">
-        <el-input v-model="form.gradingModel" placeholder="如 dots3-note-prev" />
+      <el-form-item label="对话模型">
+        <el-input v-model="form.chat_model" placeholder="如 dots3-note-prev" />
+      </el-form-item>
+      <el-form-item label="向量模型">
+        <el-input v-model="form.embed_model" placeholder="选填，默认跟随对话网关" />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="saveLocal">保存到本机</el-button>
-        <el-button @click="clearLocal">清空本机配置</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存到服务端</el-button>
+        <el-button :loading="testing" @click="testConn">连通测试</el-button>
+        <el-button type="danger" plain @click="clearKey">清除专属 Key 回退环境</el-button>
+      </el-form-item>
+      <el-form-item v-if="testResult" label="测试结果">
+        <el-tag :type="testResult.ok ? 'success' : 'danger'" size="small">
+          {{ testResult.ok ? `连通正常 · ${testResult.latency_ms}ms · ${testResult.source}` : '失败' }}
+        </el-tag>
+        <div v-if="testResult.reply" class="reply">{{ testResult.reply }}</div>
       </el-form-item>
     </el-form>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
+import { reactive, ref, onMounted } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import request from '../../utils/request';
 
-const KEY = 'tiku_ai_config_preview';
+const loading = ref(false);
+const saving = ref(false);
+const testing = ref(false);
+const source = ref('env');
+const envModel = ref('');
+const testResult = ref<any>(null);
 
 const form = reactive({
-  primaryUrl: '',
-  primaryKey: '',
-  backupKey: '',
-  gradingModel: ''
+  enabled: true,
+  chat_api_url: '',
+  chat_api_key: '',
+  chat_model: '',
+  embed_model: ''
 });
 
-onMounted(() => {
+const load = async () => {
+  loading.value = true;
   try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) Object.assign(form, JSON.parse(raw));
-  } catch (e) {
-    /* 忽略损坏的本地配置 */
+    const res: any = await request.get('/api/v1/admin/ai/config');
+    form.enabled = res.enabled ?? true;
+    form.chat_api_url = res.chat_api_url || '';
+    form.chat_api_key = res.chat_api_key_masked || '';
+    form.chat_model = res.chat_model || '';
+    form.embed_model = res.embed_model || '';
+    source.value = res.source || 'env';
+    envModel.value = res.env_model || '';
+  } finally {
+    loading.value = false;
   }
-});
-
-const saveLocal = () => {
-  localStorage.setItem(KEY, JSON.stringify(form));
-  ElMessage.success('已保存到本机浏览器（演示环境，不影响服务端）');
 };
 
-const clearLocal = () => {
-  localStorage.removeItem(KEY);
-  form.primaryUrl = '';
-  form.primaryKey = '';
-  form.backupKey = '';
-  form.gradingModel = '';
-  ElMessage.success('本机配置已清空');
+const save = async () => {
+  saving.value = true;
+  try {
+    await request.put('/api/v1/admin/ai/config', { ...form });
+    ElMessage.success('企业 AI 配置已保存');
+    testResult.value = null;
+    load();
+  } finally {
+    saving.value = false;
+  }
 };
+
+const testConn = async () => {
+  testing.value = true;
+  try {
+    const res: any = await request.post('/api/v1/admin/ai/config/test', { ...form }, { timeout: 120000 });
+    testResult.value = res;
+    if (res.ok) ElMessage.success(`连通正常（${res.latency_ms}ms）`);
+  } finally {
+    testing.value = false;
+  }
+};
+
+const clearKey = async () => {
+  try {
+    await ElMessageBox.confirm('清除企业专属 Key 并回退服务端环境配置？', '提示', { type: 'warning' });
+  } catch (e) {
+    return;
+  }
+  saving.value = true;
+  try {
+    await request.put('/api/v1/admin/ai/config', { clear_key: true });
+    ElMessage.success('已回退环境配置');
+    form.chat_api_key = '';
+    load();
+  } finally {
+    saving.value = false;
+  }
+};
+
+onMounted(load);
 </script>
 
 <style scoped>
@@ -85,5 +143,23 @@ const clearLocal = () => {
   font-size: 12px;
   color: #94a3b8;
   margin-top: 4px;
+  line-height: 2;
+}
+
+.hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-left: 10px;
+}
+
+.reply {
+  font-size: 13px;
+  color: #334155;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 </style>

@@ -152,7 +152,7 @@ export const useModelCenterStore = defineStore('modelCenter', () => {
     if (!base) throw new Error('BaseURL 不能为空');
 
     try {
-      const res: any = await request.post('/api/v1/admin/ai/models/probe', {
+      const res: any = await request.post('/api/v1/admin/ai/models/list', {
         base_url: base,
         api_key: apiKey || undefined
       });
@@ -162,7 +162,6 @@ export const useModelCenterStore = defineStore('modelCenter', () => {
       }
       return models;
     } catch (err: any) {
-      // 若后端中继不可用则回退直连探测
       const rawMsg = err?.response?.data?.detail || err?.message || '获取模型失败，请确认通道网络与 Key';
       throw new Error(rawMsg);
     }
@@ -186,7 +185,7 @@ export const useModelCenterStore = defineStore('modelCenter', () => {
     if (!ch) throw new Error('通道不存在');
 
     try {
-      const res: any = await request.post('/api/v1/admin/ai/models/probe', {
+      const res: any = await request.post('/api/v1/admin/ai/models/list', {
         base_url: ch.baseUrl,
         api_key: ch.apiKey || undefined
       });

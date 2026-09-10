@@ -1,5 +1,23 @@
 """
 [变更日志]
+修改时间：2026-09-11
+AI模型：OpenCode / Gemini 底层
+修改内容：[打通组织人事与试卷资产全景问答: 1. _build_system_prompt 自动查询并权威注入所属企业成员总数、各成员姓名/角色/职业/性别/年龄画像全景; 2. 注入企业试卷总数、各出卷人统计及近期试卷明细; 3. 支持自然语言直接询问‘有几个人叫啥、个人资料、最近某老师出了什么试卷’并一键输出结构化明细]
+修改时间：2026-09-10
+AI模型：Gemini 系列
+修改内容：[个人资料与长期记忆闭环: 1. _build_system_prompt 联合查询并权威注入当前用户的结构化档案(姓名/昵称/职业/年龄/简介等)，绝无遗漏; 2. 接入本地 Mem0 长期记忆召回(recall); 3. 流式对话完成(done)后异步触发 Mem0 长期偏好提炼(remember_async)，不阻塞 SSE 流]
+修改时间：2026-09-10
+AI模型：OpenCode / Gemini 底层
+修改内容：[工具链全功能补齐: 1. 明确定义并补齐 delete_question (删除题目草稿/归档题目) 工具与 execute_tool 执行闭环; 2. 完善单题/多题/整卷生成与题目/试卷安全删除的完整工具链]
+修改时间：2026-09-10
+AI模型：OpenCode / Gemini 底层
+修改内容：[智能组卷升级: 1. TOOL_DEFINITIONS 及 System Prompt 全面升级支持输出原创 questions 全量试题对象; 2. execute_tool_endpoint 正确落库真实试题 ResourceItem 与 TaskResource 关联合同; 3. 工具确认 action_required 携带完整题目并与知识库 RAG 切片强制绑定]
+修改时间：2026-09-10
+AI模型：OpenCode / Gemini 底层
+修改内容：[工具别名兼容: execute_tool_endpoint 增加对前端 create_exam 和 batch_questions 别名的自动对齐映射，彻底解决‘未知工具: create_exam’报错]
+修改时间：2026-09-10
+AI模型：OpenCode / Gemini 底层
+修改内容：[致命Bug修复: 解决 ai_service 产出 tool_calls 时未 yield done 导致后端漏发 action_required 工具确认事件的问题，确保出题/组卷卡片正常触发]
 修改时间：2026-09-09
 AI模型：Muse Spark
 修改内容：[租户网关覆盖+向量检索抽象接入，旧 LIKE 直查已迁移至 vector_store]
@@ -10,7 +28,8 @@ from typing import Any, Dict, List, Optional
 from app.core.database import get_db
 from app.api.deps import require_admin, require_member, require_super_admin
 from app.api.saas.ops import write_audit
-from app.models.saas import ResourceItem, Task, TaskResource, TaskRecord, KbDocument, KbChunk
+from app.models.saas import ResourceItem, Task, TaskResource, TaskRecord, KbDocument, KbChunk, SysUser, SysUserProfile
+from app.services import memory_service
 from app.models.saas import AiSession, AiMessage, AiTenantConfig, SysUser
 from app.services.ai_service import chat_completion, extract_json, ai_available, AiServiceError
 from app.services.ai_service import get_embedding, chat_completion_stream
@@ -508,26 +527,50 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "create_exam_draft",
-            "description": "AI 智能组卷：根据用户需求生成试卷草稿（含题型/题数/难度配置），返回可确认的试卷结构。",
+            "description": "AI 智能组卷：根据用户需求原创生成整套试卷草稿，必须包含全量原创试题列表（含题型/题干/选项/答案/解析/分值），供用户在前端卡片中全面预览、调整参数与一键保存。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "title": {"type": "string", "description": "试卷标题"},
-                    "description": {"type": "string", "description": "试卷描述/需求说明"},
-                    "specs": {
+                    "description": {"type": "string", "description": "试卷描述/出卷背景说明"},
+                    "difficulty": {"type": "string", "enum": ["easy", "medium", "hard"], "description": "试卷难度"},
+                    "category_id": {"type": "integer", "description": "试卷分类ID"},
+                    "is_timed": {"type": "boolean", "description": "是否限时"},
+                    "time_limit": {"type": "integer", "description": "考试限时（分钟）"},
+                    "grading_mode": {"type": "string", "enum": ["manual", "ai_auto"], "description": "主观题阅卷模式"},
+                    "questions": {
                         "type": "array",
-                        "items": {"type": "object", "properties": {
-                            "q_type": {"type": "string", "enum": ["single", "multiple", "judge", "fill", "short"]},
-                            "count": {"type": "integer"}
-                        }}
-                    },
-                    "difficulty": {"type": "string", "enum": ["easy", "medium", "hard"]},
-                    "category_id": {"type": "integer"},
-                    "is_timed": {"type": "boolean"},
-                    "time_limit": {"type": "integer"},
-                    "grading_mode": {"type": "string", "enum": ["manual", "ai_auto"]}
+                        "description": "整套试卷包含的原创试题全量列表",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "enum": ["single", "multiple", "judge", "fill", "short"], "description": "题型: single单选/multiple多选/judge判断/fill填空/short简答"},
+                                "title": {"type": "string", "description": "完整题干内容"},
+                                "options": {
+                                    "type": "array",
+                                    "description": "选项列表（单选/多选题必填，判断/填空/简答题传空数组）",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "key": {"type": "string", "description": "选项标识，如 A, B, C, D"},
+                                            "text": {"type": "string", "description": "选项文本"}
+                                        },
+                                        "required": ["key", "text"]
+                                    }
+                                },
+                                "answer": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "正确答案数组（单选如['A']，多选如['A','B']，判断如['正确']或['错误']，简答/填空传参考关键词或答案）"
+                                },
+                                "score": {"type": "integer", "description": "本题分值，默认10分"},
+                                "explanation": {"type": "string", "description": "题目解析与答案依据"}
+                            },
+                            "required": ["type", "title", "answer"]
+                        }
+                    }
                 },
-                "required": ["title", "specs"]
+                "required": ["title", "questions"]
             }
         }
     },
@@ -562,6 +605,20 @@ TOOL_DEFINITIONS = [
                 }
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_question",
+            "description": "删除指定题目（根据题目ID或题干关键词进行安全软删除）。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question_id": {"type": "integer", "description": "题目 ID"},
+                    "keyword": {"type": "string", "description": "按题干关键词匹配最近一条题目"}
+                }
+            }
+        }
     }
 ]
 
@@ -589,20 +646,142 @@ def _get_pending_snapshot(db: Session, tid: int, limit: int = 10) -> str:
         return ""
 
 
-def _build_system_prompt(ctx: dict, db: Session) -> str:
-    """构建系统提示词（含角色/上下文）。"""
+def _get_tenant_organization_snapshot(db: Session, tid: int) -> str:
+    """查询所属企业的全部组织成员姓名、角色、职业、性别、年龄等画像明细。"""
+    try:
+        from app.models.saas import SysTenantUser, SysUser, SysUserProfile, SysTenant
+        t = db.query(SysTenant).filter(SysTenant.id == tid).first()
+        t_name = t.name if t else f"企业#{tid}"
+        rows = db.query(SysTenantUser, SysUser).join(
+            SysUser, SysUser.id == SysTenantUser.user_id
+        ).filter(
+            SysTenantUser.tenant_id == tid, SysTenantUser.status == "active"
+        ).order_by(
+            (SysTenantUser.role == "owner").desc(),
+            (SysTenantUser.role == "admin").desc(),
+            SysTenantUser.id.asc()
+        ).all()
+        if not rows:
+            return f"- 当前企业【{t_name}】暂无其他成员记录"
+        
+        lines = [f"企业名称: 【{t_name}】 (当前团队在职成员共 {len(rows)} 人):"]
+        role_map = {"owner": "所有者", "admin": "管理员", "member": "普通成员/教师"}
+        gender_map = {"male": "男", "female": "女", "secret": "保密"}
+        
+        for idx, (rel, u) in enumerate(rows, 1):
+            profile = db.query(SysUserProfile).filter(SysUserProfile.user_id == u.id).first()
+            p_items = []
+            if profile:
+                if profile.occupation: p_items.append(f"职业: {profile.occupation}")
+                if profile.gender and profile.gender in gender_map: p_items.append(f"性别: {gender_map[profile.gender]}")
+                if profile.age: p_items.append(f"年龄: {profile.age}岁")
+                if profile.bio: p_items.append(f"简介: {profile.bio[:30]}")
+            extra_str = f" ({', '.join(p_items)})" if p_items else ""
+            lines.append(f"  {idx}. {u.display_name or u.phone} [角色: {role_map.get(rel.role, '成员')}, 手机号: {u.phone}]{extra_str}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _get_tenant_tasks_snapshot(db: Session, tid: int) -> str:
+    """查询所属企业试卷资产全景：试卷总数、各老师/创建人出题出卷量、最近一份/近期试卷明细。"""
+    try:
+        from app.models.saas import Task, SysUser, TaskResource
+        tasks = db.query(Task).filter(Task.tenant_id == tid).order_by(Task.id.desc()).all()
+        if not tasks:
+            return "- 当前企业团队尚未创建任何试卷"
+        
+        total_count = len(tasks)
+        # 各创建人出卷量统计
+        creator_stats = {}
+        creator_names = {}
+        for t in tasks:
+            cid = t.creator_id
+            creator_stats[cid] = creator_stats.get(cid, 0) + 1
+            if cid not in creator_names and cid:
+                u = db.query(SysUser).filter(SysUser.id == cid).first()
+                creator_names[cid] = u.display_name or u.phone if u else f"用户#{cid}"
+        
+        stat_lines = []
+        for cid, cnt in creator_stats.items():
+            name = creator_names.get(cid, "系统/未知")
+            stat_lines.append(f"{name}: 出卷 {cnt} 份")
+        
+        lines = [
+            f"企业试卷总数: 共 {total_count} 套试卷",
+            f"各老师出卷统计: {', '.join(stat_lines)}",
+            "近期创建/出卷明细（按时间倒序，最新在前）:"
+        ]
+        
+        # 取最近 5 份试卷详细信息
+        status_map = {"draft": "草稿/未上架", "published": "已发布/已上架", "archived": "已归档"}
+        for idx, t in enumerate(tasks[:5], 1):
+            c_name = creator_names.get(t.creator_id, "未知出题人")
+            created_str = t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "近期"
+            q_cnt = db.query(TaskResource).filter(TaskResource.task_id == t.id).count()
+            lines.append(
+                f"  {idx}. 《{t.title}》 [出卷人: {c_name}] (状态: {status_map.get(t.status, t.status)}, 包含题目: {q_cnt}道, 阅卷方式: {t.verification_mode}, 创建时间: {created_str})"
+            )
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _build_system_prompt(ctx: dict, db: Session, query: str = "") -> str:
+    """构建权威系统提示词（含角色/企业组织成员全景/企业试卷资产全景/结构化用户画像/Mem0长期记忆/待阅上下文/工具规范）。"""
     role_text = "超级管理员" if ctx["role"] == "super" else ("管理员" if ctx["role"] == "admin" else "出题人")
     pending = _get_pending_snapshot(db, ctx["tenant_id"])
-    parts = [
-        f"你是企业培训 AI 智能助管，角色={role_text}，租户={ctx['tenant_id']}。",
-        f"当前待阅试卷：{pending or '暂无'}",
-        "你可以调用以下工具完成任务：",
-        "- create_exam_draft: 智能组卷",
-        "- create_question_draft: 批量出题",
-        "- delete_exam: 删除试卷",
-        "请根据用户意图选择合适的工具或直接回答。"
+    org_snapshot = _get_tenant_organization_snapshot(db, ctx["tenant_id"])
+    tasks_snapshot = _get_tenant_tasks_snapshot(db, ctx["tenant_id"])
+    tid = ctx["tenant_id"]
+    user = ctx["user"]
+
+    # 1. 结构化用户画像查询（MySQL 权威事实：即时更新，零延迟）
+    profile = db.query(SysUserProfile).filter(SysUserProfile.user_id == user.id).first()
+    gender_map = {"male": "男", "female": "女", "secret": "保密"}
+    gender_text = gender_map.get(profile.gender, "") if profile and profile.gender else ""
+
+    profile_lines = [
+        f"- 账号/手机号: {user.phone or user.username or '未知'}",
+        f"- 姓名: {user.display_name or '未设置'}",
+        f"- 昵称: {profile.nickname or '未设置'}" if profile and profile.nickname else "",
+        f"- 职务/职业: {profile.occupation or '未设置'}" if profile and profile.occupation else "",
+        f"- 性别: {gender_text}" if gender_text else "",
+        f"- 年龄: {profile.age}岁" if profile and profile.age is not None else "",
+        f"- 个人简介与专长: {profile.bio}" if profile and profile.bio else ""
     ]
-    return "\n".join(parts)
+    valid_profile = "\n".join([line for line in profile_lines if line])
+
+    # 2. 本地 Mem0 长期偏好与历史记忆召回 (跨会话语义检索)
+    mem0_context = ""
+    if query:
+        try:
+            mem0_context = memory_service.recall(tid, user.id, query, limit=3)
+        except Exception:
+            mem0_context = ""
+
+    parts = [
+        f"你是企业培训 AI 智能助管，当前系统角色={role_text}，租户企业ID={ctx['tenant_id']}。",
+        "【当前交互对象档案（结构化权威信息，请在交谈中自然称呼并知悉其背景）】:",
+        valid_profile or "- 暂无详细档案",
+        "",
+        "【企业团队成员花名册与详细资料（只读权威事实，当用户询问有几个人、都叫啥、资料信息时，必须如实、清晰罗列）】:",
+        org_snapshot,
+        "",
+        "【企业试卷与出题资产全景（只读权威事实，当用户询问一共出了多少试卷、最近一份试卷是什么、某某老师出的试卷明细时，必须基于此事实权威清晰作答）】:",
+        tasks_snapshot,
+        "",
+        mem0_context if mem0_context else "",
+        f"当前待阅试卷：{pending or '暂无'}",
+        "",
+        "你可以调用以下工具完成业务操作：",
+        "1. create_exam_draft: 智能组卷。当用户提出出卷、组卷、整套试题测评需求（如‘出一套关于...的试卷’、‘组一套10道题试卷’）时，必须调用本工具！在 questions 列表中输出全量原创试题。",
+        "2. create_question_draft: 批量或单道出题。当用户提出‘出1道单选题’、‘出一道题’、‘根据材料批量出题’等非整卷需求时调用。",
+        "3. delete_exam: 删除试卷。当用户明确要求删除指定试卷或草稿时调用。",
+        "4. delete_question: 删除题目。当用户明确要求删除某道题目或根据关键词清理题库题目时调用。",
+        "请准确识别用户意图，保持亲切、专业、直接。若用户询问团队成员、出卷统计或试卷明细，直接调取上述事实以清晰结构化列表作答；当涉及组卷、出题、删除操作时，优先发起工具调用以便系统在前端渲染出交互确认卡片。"
+    ]
+    return "\n".join([p for p in parts if p is not None])
 
 
 async def _stream_chat(
@@ -659,7 +838,7 @@ async def _stream_chat(
     ).order_by(AiMessage.id.desc()).limit(12).all()
     history = [{"role": m.role, "content": m.content} for m in reversed(history_msgs)]
     
-    system_prompt = _build_system_prompt(ctx, db)
+    system_prompt = _build_system_prompt(ctx, db, query=message)
     provider = _tenant_provider(db, tid)
     
     try:
@@ -678,8 +857,7 @@ async def _stream_chat(
             timeout=180.0,
             tools=TOOL_DEFINITIONS,
             tool_choice="auto",
-            history=history,
-            provider=provider
+            history=history
         ):
             etype = ev.get("type")
             if etype == "delta":
@@ -689,27 +867,61 @@ async def _stream_chat(
                     yield f"data: {{\"type\":\"delta\",\"text\":{json.dumps(text, ensure_ascii=False)}}}\n\n"
             elif etype == "tool_calls":
                 for tc in ev.get("tool_calls", []):
-                    idx = tc.get("index", 0)
-                    frag = tool_calls_buf.setdefault(idx, {"id": "", "name": "", "arguments": ""})
-                    if tc.get("id"):
-                        frag["id"] = tc["id"]
                     func = tc.get("function") or {}
-                    if func.get("name"):
-                        frag["name"] = func["name"]
-                    if func.get("arguments"):
-                        frag["arguments"] += func["arguments"]
+                    tool_name = func.get("name", "")
+                    raw_args = func.get("arguments", "{}")
+                    try:
+                        args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
+                    except Exception:
+                        args = {}
+                    tool_call_id = tc.get("id") or f"call_{assistant_msg_id}"
+                    tool_calls_buf[len(tool_calls_buf)] = {
+                        "id": tool_call_id,
+                        "name": tool_name,
+                        "arguments": args
+                    }
             elif etype == "done":
                 # 持久化 assistant 消息
                 assistant_msg.content = full_content
                 db.commit()
                 yield f"data: {{\"type\":\"done\",\"assistant_message_id\":{assistant_msg_id},\"user_message_id\":{user_msg_id}}}\n\n"
+
+                # 异步提炼并沉淀用户交互偏好到本地 Mem0（非阻塞，后台线程）
+                if full_content and not full_content.startswith("AI 服务响应超时"):
+                    memory_service.remember_async(tid, uid, message, full_content)
                 # 触发工具调用确认
                 for frag in tool_calls_buf.values():
                     tool_name = frag.get("name", "")
-                    try:
-                        args = json.loads(frag.get("arguments") or "{}")
-                    except Exception:
-                        args = {}
+                    args = frag.get("arguments") or {}
+                    # 针对组卷和出题工具自动关联知识库检索溯源
+                    if tool_name in ("create_exam_draft", "create_question_draft"):
+                        # 针对整卷或材料真实检索
+                        overall_query = str(args.get("title") or args.get("material") or "")
+                        try:
+                            overall_sources = _rag_hits(db, tid, overall_query, limit=3) if overall_query else []
+                        except Exception:
+                            overall_sources = []
+
+                        # 针对每道题进行独立精细化匹配判定，避免无脑全量挂载
+                        if isinstance(args.get("questions"), list):
+                            for q in args["questions"]:
+                                if not isinstance(q, dict):
+                                    continue
+                                # 若大模型自己声明了来源，保留；否则基于题干真实检索
+                                if not q.get("ai_rag_sources"):
+                                    q_title = str(q.get("title") or "").strip()
+                                    matched_sources = []
+                                    if q_title:
+                                        try:
+                                            matched_sources = _rag_hits(db, tid, q_title, limit=1)
+                                        except Exception:
+                                            matched_sources = []
+                                    # 仅当真实命中相关切片时才挂载，未命中则严格不挂
+                                    if matched_sources:
+                                        q["ai_rag_sources"] = matched_sources
+
+                        if overall_sources:
+                            args["ai_rag_sources"] = overall_sources
                     yield f"data: {{\"type\":\"action_required\"," \
                           f"\"tool_name\":\"{tool_name}\"," \
                           f"\"tool_call_id\":\"{frag['id']}\"," \
@@ -755,7 +967,13 @@ def execute_tool_endpoint(
     import time as _time
     from app.models.saas import Task, ResourceItem, TaskResource
     
-    tool_name = str(payload.get("tool_name") or "")
+    tool_name = str(payload.get("tool_name") or "").strip()
+    # 兼容前端传入的规范别名映射
+    alias_map = {
+        "create_exam": "create_exam_draft",
+        "batch_questions": "create_question_draft"
+    }
+    tool_name = alias_map.get(tool_name, tool_name)
     arguments = payload.get("arguments") or {}
     tool_call_id = str(payload.get("tool_call_id") or "")
     message_id = payload.get("message_id")
@@ -785,41 +1003,87 @@ def execute_tool_endpoint(
     if tool_name == "create_exam_draft":
         title = str(arguments.get("title") or "AI 智能组卷").strip()
         description = str(arguments.get("description") or "")
-        specs = arguments.get("specs") or [{"q_type": "single", "count": 5}]
-        difficulty = str(arguments.get("difficulty") or "medium")
         category_id = arguments.get("category_id")
         is_timed = bool(arguments.get("is_timed", False))
         time_limit = int(arguments.get("time_limit") or 0)
         grading_mode = str(arguments.get("grading_mode") or "manual")
-        
-        sources = _rag_hits(db, tid, title)
+        start_time = None
+        deadline = None
+        if arguments.get("start_time"):
+            try:
+                from datetime import datetime as _dt
+                start_time = _dt.fromisoformat(str(arguments["start_time"]).replace("Z", ""))
+            except Exception:
+                start_time = None
+        if arguments.get("deadline"):
+            try:
+                from datetime import datetime as _dt
+                deadline = _dt.fromisoformat(str(arguments["deadline"]).replace("Z", ""))
+            except Exception:
+                deadline = None
+
+        sources = arguments.get("ai_rag_sources") or _rag_hits(db, tid, title)
         t = Task(
             tenant_id=tid, title=title, description=description,
             category_id=category_id,
             is_timed=is_timed, time_limit=time_limit,
+            start_time=start_time, deadline=deadline,
             verification_mode="ai_auto" if grading_mode == "ai_auto" else "manual",
             creator_id=uid, status="draft", ai_rag_sources=sources
         )
         db.add(t)
         db.flush()
-        
+
+        raw_questions = arguments.get("questions")
         qids: List[int] = []
-        for i, spec in enumerate(specs):
-            qtype = str(spec.get("q_type") or "single")
-            count = int(spec.get("count") or 3)
-            for j in range(count):
+
+        if isinstance(raw_questions, list) and len(raw_questions) > 0:
+            for idx, q in enumerate(raw_questions):
+                if not isinstance(q, dict):
+                    continue
+                q_type = str(q.get("type") or "single")
+                q_content = str(q.get("title") or q.get("content") or f"试题 {idx + 1}")
+                q_opts = q.get("options") or []
+                q_ans = q.get("answer") or q.get("correct_answer") or []
+                q_score = int(q.get("score") or 10)
+                q_sources = q.get("ai_rag_sources") or sources
+
                 r = ResourceItem(
-                    tenant_id=tid, type=qtype,
-                    content=f"【AI 生成草稿】{title}（{qtype}题 第{j+1}题）",
-                    options=[], correct_answer=[], score=10,
-                    creator_id=uid, ai_rag_sources=sources
+                    tenant_id=tid,
+                    type=q_type,
+                    content=q_content,
+                    options=q_opts,
+                    correct_answer=q_ans,
+                    score=q_score,
+                    category_id=category_id,
+                    creator_id=uid,
+                    ai_rag_sources=q_sources
                 )
                 db.add(r)
                 db.flush()
                 qids.append(r.id)
-                db.add(TaskResource(task_id=t.id, resource_id=r.id, score=10, sort_order=len(qids)))
+                db.add(TaskResource(task_id=t.id, resource_id=r.id, score=q_score, sort_order=len(qids)))
+        else:
+            # 降级兜底兼容 specs 计数
+            specs = arguments.get("specs") or [{"q_type": "single", "count": 5}]
+            for i, spec in enumerate(specs):
+                qtype = str(spec.get("q_type") or "single")
+                count = int(spec.get("count") or 3)
+                for j in range(count):
+                    r = ResourceItem(
+                        tenant_id=tid, type=qtype,
+                        content=f"【AI 生成草稿】{title}（{qtype}题 第{j+1}题）",
+                        options=[], correct_answer=[], score=10,
+                        category_id=category_id,
+                        creator_id=uid, ai_rag_sources=sources
+                    )
+                    db.add(r)
+                    db.flush()
+                    qids.append(r.id)
+                    db.add(TaskResource(task_id=t.id, resource_id=r.id, score=10, sort_order=len(qids)))
+
         db.flush()
-        write_audit(db, tid, ctx["user"], "generate", "task", t.id, f"AI 组卷《{title[:30]}》")
+        write_audit(db, tid, ctx["user"], "generate", "task", t.id, f"AI 组卷《{title[:30]}》共 {len(qids)} 题")
         db.commit()
         result = {"exam_id": t.id, "question_count": len(qids), "title": title}
         
@@ -889,6 +1153,24 @@ def execute_tool_endpoint(
         db.commit()
         write_audit(db, tid, ctx["user"], "delete", "task", target.id, f"删除试卷《{target.title[:30]}》")
         result = {"deleted_id": target.id, "title": target.title}
+    elif tool_name == "delete_question":
+        question_id = arguments.get("question_id")
+        keyword = str(arguments.get("keyword") or "").strip()
+        q = db.query(ResourceItem).filter(ResourceItem.tenant_id == tid, ResourceItem.is_deleted == False)
+        if question_id:
+            try:
+                q = q.filter(ResourceItem.id == int(question_id))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="question_id 无效")
+        elif keyword:
+            q = q.filter(ResourceItem.content.contains(keyword))
+        target = q.order_by(ResourceItem.id.desc()).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="未找到符合条件的题目")
+        target.is_deleted = True
+        db.commit()
+        write_audit(db, tid, ctx["user"], "delete", "resource", target.id, f"删除题目 #{target.id}")
+        result = {"deleted_question_id": target.id, "content": target.content[:40]}
     else:
         raise HTTPException(status_code=400, detail=f"未知工具: {tool_name}")
     

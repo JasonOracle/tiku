@@ -1,11 +1,8 @@
 /**
  * [变更日志]
- * 修改时间：2026-09-08
- * AI模型：Gemini 系列
- * 修改内容：[userStore扩充个人资料字段(name, gender, position, bio, phone, email)并在loadProfile中同步]
- * 修改时间：2026-09-06 20:00:00
- * AI模型：ZCode (GLM)
- * 修改内容：[v1.2 RBAC: 增加 role 与今日 AI 额度余额 (loadProfile 从 /admin/auth/me 拉取)]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[多租户扩展：新增 tenantId/joinedTenants/上帝模式，上线 X-Tenant-ID 持久化]
  */
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
@@ -15,16 +12,26 @@ export const useUserStore = defineStore('user', () => {
   const token = ref<string>(localStorage.getItem('tiku_tob_token') || '');
   const username = ref<string>(localStorage.getItem('tiku_tob_username') || '');
   const role = ref<string>(localStorage.getItem('tiku_tob_role') || 'admin');
-  const quotaRemaining = ref<number>(0);
-  const quotaLimit = ref<number>(0);
   const name = ref<string>('');
+  const nickname = ref<string>('');
   const gender = ref<string>('');
   const position = ref<string>('');
+  const occupation = ref<string>('');
   const bio = ref<string>('');
   const phone = ref<string>('');
   const email = ref<string>('');
+  const age = ref<number | null>(null);
+  const tenantId = ref<string>(localStorage.getItem('tiku_tob_tenant') || '');
+  const joinedTenants = ref<any[]>([]);
+  const isSuperAdmin = ref<boolean>(localStorage.getItem('tiku_tob_super') === '1');
 
-  const isSuper = () => role.value === 'super_admin';
+  const isSuper = () => role.value === 'super_admin' || isSuperAdmin.value;
+
+  function setTenant(tid: string | number) {
+    tenantId.value = String(tid || '');
+    if (tid) localStorage.setItem('tiku_tob_tenant', String(tid));
+    else localStorage.removeItem('tiku_tob_tenant');
+  }
 
   function setToken(newToken: string, loginUsername: string, newRole?: string) {
     token.value = newToken;
@@ -35,20 +42,54 @@ export const useUserStore = defineStore('user', () => {
     if (newRole) localStorage.setItem('tiku_tob_role', newRole);
   }
 
+  function applyLoginPayload(res: any) {
+    // 新契约 {token,user,default_tenant_id,joined_tenants}；user 无 username 字段时用手机/展示名兜底
+    const admin = res?.admin || {};
+    const user = res?.user || {};
+    if (res?.token) {
+      setToken(res.token, admin.username || user.phone || user.display_name || '', admin.role || admin?.role);
+    }
+    if (admin.is_super_admin) {
+      isSuperAdmin.value = true;
+      localStorage.setItem('tiku_tob_super', '1');
+      if (admin.role) {
+        role.value = 'super_admin';
+        localStorage.setItem('tiku_tob_role', 'super_admin');
+      }
+    } else {
+      isSuperAdmin.value = false;
+      localStorage.removeItem('tiku_tob_super');
+    }
+    if (Array.isArray(res?.joined_tenants)) joinedTenants.value = res.joined_tenants;
+    // 上帝无默认租户：必须清掉残留视察企业，强制重新选择（否则会带着旧头进错企业）
+    if (res?.default_tenant_id) setTenant(res.default_tenant_id);
+    else setTenant('');
+  }
+
   async function loadProfile() {
     try {
-      const res: any = await request.get('/api/v1/admin/auth/me');
+      const res: any = await request.get('/api/v1/auth/me');
       if (res) {
-        role.value = res.role || 'admin';
-        quotaRemaining.value = res.daily_ai_quota || 0;
-        quotaLimit.value = res.ai_quota_limit || 0;
-        name.value = res.name || '';
+        if (res.role && res.role !== 'super') {
+          role.value = res.role;
+          localStorage.setItem('tiku_tob_role', role.value);
+        } else if (res.is_super_admin) {
+          role.value = 'super_admin';
+          localStorage.setItem('tiku_tob_role', 'super_admin');
+        }
+        isSuperAdmin.value = !!res.is_super_admin;
+        if (isSuperAdmin.value) localStorage.setItem('tiku_tob_super', '1');
+        else localStorage.removeItem('tiku_tob_super');
+        name.value = res.display_name || '';
+        nickname.value = res.nickname || '';
         gender.value = res.gender || '';
-        position.value = res.position || '';
+        occupation.value = res.occupation || '';
+        position.value = res.occupation || '';
         bio.value = res.bio || '';
-        phone.value = res.phone || '';
         email.value = res.email || '';
-        localStorage.setItem('tiku_tob_role', role.value);
+        age.value = (res.age ?? null) as number | null;
+        phone.value = res.phone || '';
+        if (Array.isArray(res.joined_tenants)) joinedTenants.value = res.joined_tenants;
       }
     } catch (e) {
       /* 未登录或接口异常时静默 */
@@ -59,31 +100,45 @@ export const useUserStore = defineStore('user', () => {
     token.value = '';
     username.value = '';
     role.value = 'admin';
+    tenantId.value = '';
+    joinedTenants.value = [];
+    isSuperAdmin.value = false;
     name.value = '';
+    nickname.value = '';
     gender.value = '';
     position.value = '';
+    occupation.value = '';
     bio.value = '';
     phone.value = '';
     email.value = '';
+    age.value = null;
     localStorage.removeItem('tiku_tob_token');
     localStorage.removeItem('tiku_tob_username');
     localStorage.removeItem('tiku_tob_role');
+    localStorage.removeItem('tiku_tob_tenant');
+    localStorage.removeItem('tiku_tob_super');
   }
 
   return {
     token,
     username,
     role,
-    quotaRemaining,
-    quotaLimit,
+    tenantId,
+    joinedTenants,
+    isSuperAdmin,
     name,
+    nickname,
     gender,
     position,
+    occupation,
     bio,
     phone,
     email,
+    age,
     isSuper,
     setToken,
+    applyLoginPayload,
+    setTenant,
     loadProfile,
     logout
   };

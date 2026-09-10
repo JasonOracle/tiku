@@ -13,7 +13,7 @@
       </svg>
       <span>首页</span>
     </button>
-    <button class="tab-item" :class="{ active: active === 'mytests' }" @click="router.push('/my-tests')">
+    <button class="tab-item" :class="{ active: active === 'mytasks' }" @click="router.push('/my-tasks')">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 11l3 3L22 4"></path>
         <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
@@ -33,7 +33,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
 
-withDefaults(defineProps<{ active?: 'home' | 'mytests' | 'profile' }>(), { active: 'home' });
+withDefaults(defineProps<{ active?: 'home' | 'mytasks' | 'profile' }>(), { active: 'home' });
 const router = useRouter();
 </script>
 

@@ -1,9 +1,9 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-04
- * AI模型：Gemini 系列
- * 修改内容：[1. 现代扁平拟物风格重构首页试卷列表：左侧精简封面微框，中间平铺展示模式与轻量指标，右侧蓝紫渐变做题胶囊按钮; 2. 解决原列表高占比挤压、竖向对齐噪音与覆盖错位问题]
- -->
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[彻底清洗：对接成员任务/分类新接口，旧试卷/横幅体系已删除]
+-->
 <template>
   <div class="mobile-container">
     <!-- Header：居中程序名 -->
@@ -19,15 +19,12 @@
       <div class="hero-card">
         <div class="hero-main">
           <div class="hero-tag"><span class="diamond">◆</span> FEATURED</div>
-          <h2 class="hero-title">{{ heroExam?.title || '2026 消防安全与自救知识全能测评' }}</h2>
+          <h2 class="hero-title">{{ heroExam?.title || '2026 企业合规与安全知识任务' }}</h2>
           <p class="hero-desc">{{ heroDesc }}</p>
           <button class="hero-btn" @click="startExam(heroExam?.id)">
             立即挑战
             <span class="arrow-circle">→</span>
           </button>
-        </div>
-        <div class="hero-art">
-          <CoverArt :cover="heroExam?.cover_url || 'preset:1'" width="120px" height="150px" />
         </div>
       </div>
     </section>
@@ -53,9 +50,6 @@
     <!-- 试卷列表 -->
     <main class="exam-list">
       <div v-for="exam in exams" :key="exam.id" class="exam-card" @click="startExam(exam.id)">
-        <div class="card-thumb">
-          <CoverArt :cover="exam.cover_url || 'preset:1'" width="56px" height="56px" />
-        </div>
         <div class="card-info">
           <div class="card-badge-row">
             <span class="mode-tag" :class="exam.is_timed ? 'timed' : 'practice'">
@@ -102,7 +96,6 @@ import http from '../../utils/http';
 import { useUserStore } from '../../store/user';
 import TabBar from '../../components/TabBar.vue';
 import BannerCarousel from '../../components/BannerCarousel.vue';
-import CoverArt from '../../components/CoverArt.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -124,13 +117,13 @@ const catIcon = (i: number) => CAT_ICONS[i % CAT_ICONS.length];
 
 const heroExam = computed(() => exams.value.find((e) => e.is_recommended) || exams.value[0] || null);
 const heroDesc = computed(() => {
-  if (!heroExam.value) return '精选试卷等你来战';
-  return heroExam.value.is_timed ? `限时 ${heroExam.value.time_limit} 分钟闭卷测试` : '不限时练习，随时开刷';
+  if (!heroExam.value) return '精选任务等你来战';
+  return heroExam.value.is_timed ? `限时 ${heroExam.value.time_limit} 分钟任务` : '企业任务，随时开做';
 });
 
 const loadBanners = async () => {
   try {
-    const res: any = await http.get('/api/v1/banners');
+    const res: any = await http.get('/api/v1/member/banners');
     banners.value = res.items || [];
     bannerInterval.value = res.interval_seconds || 4;
   } catch (e) {
@@ -140,17 +133,29 @@ const loadBanners = async () => {
 
 const loadCategories = async () => {
   try {
-    const res: any = await http.get('/api/v1/categories');
-    categories.value = res || [];
+    const res: any = await http.get('/api/v1/member/categories');
+    categories.value = res.items || [];
   } catch (e) {}
 };
 
 const loadExams = async () => {
   try {
-    const res: any = await http.get('/api/v1/exams', {
-      params: { category_id: selectedCat.value }
-    });
-    exams.value = res.items || [];
+    const res: any = await http.get('/api/v1/member/member-tasks');
+    const items = res.items || [];
+    exams.value = items
+      .filter((t: any) => !selectedCat.value || t.category_id === selectedCat.value)
+      .map((t: any) => ({
+        id: t.task_id,
+        title: t.title,
+        cover_url: 'preset:1',
+        is_timed: false,
+        time_limit: 0,
+        question_count: 0,
+        total_score: 0,
+        pass_score: 0,
+        is_recommended: false,
+        status: t.status
+      }));
   } catch (e) {}
 };
 
@@ -169,7 +174,7 @@ const startExam = async (examId?: number) => {
     router.push('/login');
     return;
   }
-  router.push({ path: '/quiz', query: { exam_id: examId } });
+  router.push({ path: '/task', query: { task_id: examId } });
 };
 
 onMounted(() => {

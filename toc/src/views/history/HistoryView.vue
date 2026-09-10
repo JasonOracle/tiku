@@ -1,12 +1,12 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-04
- * AI模型：Gemini 系列
- * 修改内容：[1. 现代扁平拟物风格重构历史记录列表：消除 NavBar 与第一项卡片黏连问题，引入分数大号高亮、细节 Pill 芯片与蓝紫渐变跳转箭头; 2. 优化时间与耗时格式化逻辑]
- -->
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[彻底清洗：对接我的提交新接口，旧答题历史体系已删除]
+-->
 <template>
   <div class="history-container">
-    <NavBar title="历史答题记录" />
+    <NavBar title="历史任务记录" />
 
     <main class="history-body">
       <div v-if="loading" class="loading-state">
@@ -16,8 +16,8 @@
 
       <div v-else-if="records.length === 0" class="empty-state">
         <div class="empty-icon">📝</div>
-        <p>暂无历史答题记录</p>
-        <button class="go-btn" @click="router.push('/')">去刷题测评</button>
+        <p>暂无历史任务记录</p>
+        <button class="go-btn" @click="router.push('/')">去查看任务</button>
       </div>
 
       <div v-else class="record-list">
@@ -28,26 +28,26 @@
           @click="goToReport(r.record_id)"
         >
           <div class="card-top">
-            <h3 class="exam-title">{{ r.exam_title || '在线知识测评' }}</h3>
-            <span :class="['pass-tag', r.passed ? 'pass' : 'fail']">
-              {{ r.passed ? '考核通过' : '未达及格线' }}
+            <h3 class="exam-title">{{ r.task_title || '企业任务' }}</h3>
+            <span :class="['pass-tag', r.score != null ? 'pass' : 'fail']">
+              {{ r.score != null ? `${r.score} 分` : statusLabel(r.status) }}
             </span>
           </div>
 
           <div class="card-body">
-            <div class="score-box" :class="{ passed: r.passed }">
-              <span class="score-val">{{ r.score }}</span>
+            <div class="score-box" :class="{ passed: r.score != null }">
+              <span class="score-val">{{ r.score ?? '—' }}</span>
               <span class="score-label">最终得分</span>
             </div>
 
             <div class="meta-info">
               <div class="meta-row">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span>耗时：{{ formatTimeSpent(r.time_spent) }}</span>
+                <span>状态：{{ statusLabel(r.status) }}</span>
               </div>
               <div class="meta-row">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                <span>提交：{{ formatDate(r.submit_time || r.start_time) }}</span>
+                <span>提交：{{ formatDate(r.submit_time) }}</span>
               </div>
             </div>
           </div>
@@ -55,7 +55,7 @@
           <div class="card-divider"></div>
 
           <div class="card-footer">
-            <span class="cta-text">查看错题解析与答题明细</span>
+            <span class="cta-text">查看作答明细与核验结果</span>
             <span class="arrow-btn">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </span>
@@ -76,13 +76,6 @@ const router = useRouter();
 const loading = ref(false);
 const records = ref<any[]>([]);
 
-const formatTimeSpent = (sec?: number) => {
-  const s = sec || 0;
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return m > 0 ? `${m}分${r}秒` : `${r}秒`;
-};
-
 const formatDate = (timeStr?: string) => {
   if (!timeStr) return '未知时间';
   const d = new Date(timeStr.replace(' ', 'T'));
@@ -94,11 +87,18 @@ const formatDate = (timeStr?: string) => {
   return `${d.getFullYear()}/${month}/${day} ${hours}:${minutes}`;
 };
 
+const statusLabel = (s?: string) => {
+  if (s === 'verified') return '已核验';
+  if (s === 'pending_verification') return '核验中';
+  if (s === 'submitted') return '已提交';
+  return '待办';
+};
+
 const loadHistory = async () => {
   loading.value = true;
   try {
-    const res: any = await http.get('/api/v1/records/history');
-    records.value = res.data?.items || res.items || [];
+    const res: any = await http.get('/api/v1/member/task-records');
+    records.value = res.items || [];
   } finally {
     loading.value = false;
   }

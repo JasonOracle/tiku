@@ -1,17 +1,14 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-06 22:40:00
- * AI模型：ZCode (GLM)
- * 修改内容：[v1.2: 报告页支持待批阅状态(圆环变"批阅中"提示)/降级查看(锁答案与解析)/多选半对"部分得分"标签/简答题AI评语展示]
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[彻底清洗重写：对接成员成绩接口（核验中/得分/评语/本人作答），旧报告与解析锁体系已删除]
 -->
 <template>
   <div class="report-container" v-if="report">
-    <!-- Header 区域：使用沉浸式导航栏（向下滚动时动态变白底） -->
-    <NavBar title="答题报告" immersive />
+    <NavBar title="任务结果" immersive />
 
-    <!-- 得分与合格指示卡片 -->
     <section class="score-card">
-      <!-- 待批阅态: 圆环中心显示批阅提示 -->
       <template v-if="report.pending">
         <div class="grading-hero">
           <div class="grading-icon">
@@ -20,9 +17,9 @@
               <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
             </svg>
           </div>
-          <div class="grading-title">批阅中</div>
+          <div class="grading-title">核验中</div>
           <div class="grading-desc">
-            本卷包含 {{ report.pending_count }} 道简答题，正在由老师/AI 批阅，成绩发布后可查看完整解析。
+            任务已提交，正在由管理员/AI 核验，核验完成后可查看得分与评语。
           </div>
         </div>
       </template>
@@ -51,86 +48,48 @@
             <circle cx="85" cy="17" r="7" :fill="report.passed ? '#10b981' : '#ef4444'" />
           </svg>
           <div class="score-inner">
-            <div><span class="score-num">{{ report.score }}</span><span class="score-label">分</span></div>
-            <span class="score-total">总分 {{ ringTotal }}</span>
+            <div><span class="score-num">{{ report.score ?? '—' }}</span><span class="score-label">分</span></div>
+            <span class="score-total">共 {{ report.items.length }} 项作答</span>
           </div>
         </div>
 
         <div class="pass-badge" :class="{ passed: report.passed }">
-          <svg v-if="report.passed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          {{ report.passed ? '考核通过' : '未达到及格线' }}
+          {{ report.passed ? '已核验通过' : '已核验' }}
+        </div>
+        <div v-if="report.comments || report.ai_comments" class="comment-box">
+          <span class="comment-title">核验评语：</span>
+          <p class="comment-text">{{ report.comments || report.ai_comments }}</p>
         </div>
       </template>
     </section>
 
-    <!-- 统计三元卡片 (批阅中隐藏) -->
-    <section class="stats-grid" v-if="!report.pending">
+    <section class="stats-grid">
       <div class="stat-box">
-        <span class="stat-icon ok">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        </span>
-        <span class="stat-val correct">{{ report.correct_count }}</span>
-        <span class="stat-lbl">答对题数</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-icon no">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </span>
-        <span class="stat-val wrong">{{ report.wrong_count }}</span>
-        <span class="stat-lbl">答错题数</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-icon time-ic">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        </span>
         <span class="stat-val time">{{ formattedTime }}</span>
         <span class="stat-lbl">作答用时</span>
       </div>
+      <div class="stat-box">
+        <span class="stat-val correct">{{ report.items.length }}</span>
+        <span class="stat-lbl">作答条目</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-val">{{ statusLabel }}</span>
+        <span class="stat-lbl">当前状态</span>
+      </div>
     </section>
 
-    <!-- 题目解析明细列表 -->
     <main class="analysis-section">
-      <h3 class="sec-title">{{ report.analysis_locked ? '我的作答明细（解析暂未开放）' : '题目答题明细与解析' }}</h3>
-
-      <div v-for="(item, idx) in report.questions_analysis" :key="idx" class="analysis-card">
+      <h3 class="sec-title">我的作答明细</h3>
+      <div v-for="(item, idx) in report.items" :key="idx" class="analysis-card">
         <div class="card-head">
           <span class="q-num">Q{{ Number(idx) + 1 }}</span>
-          <span
-            class="status-tag"
-            :class="{ correct: item.is_correct === true, partial: item.is_partial, grading: item.is_pending }"
-          >
-            {{ item.is_pending ? '批阅中' : item.is_correct === true ? '正确' : item.is_partial ? '部分得分' : '错误' }}
-          </span>
         </div>
-
-        <h4 class="q-text">{{ item.question.title }}</h4>
-
+        <h4 class="q-text">{{ item.content }}</h4>
         <div class="ans-comparison">
-          <div class="ans-box user" :class="{ wrong: item.is_correct === false }">
-            <span class="lbl">你的答案</span>
-            <span class="val">{{ item.user_answer.length ? item.user_answer.join(', ') : '未作答' }}</span>
+          <div class="ans-box user">
+            <span class="lbl">我的答案</span>
+            <span class="val">{{ fmtAnswer(item.user_answer) }}</span>
           </div>
-          <div class="ans-box correct">
-            <span class="lbl">正确答案</span>
-            <span class="val" v-if="!report.analysis_locked">{{ formatCorrect(item.correct_answer) }}</span>
-            <span class="val locked" v-else>考试结束后开放</span>
-          </div>
-        </div>
-
-        <div v-if="!report.pending" class="score-line">
-          本题得分：<strong :style="{ color: item.gained > 0 ? '#16a34a' : '#e11d48' }">{{ item.gained }}</strong> / {{ item.eq_score }} 分
-        </div>
-
-        <div v-if="item.comment" class="comment-box">
-          <span class="comment-title">批改评语：</span>
-          <p class="comment-text">{{ item.comment }}</p>
-        </div>
-
-        <div v-if="item.question.explanation" class="explanation-box">
-          <span class="exp-title">解析说明：</span>
-          <p class="exp-text">{{ item.question.explanation }}</p>
         </div>
       </div>
     </main>
@@ -156,20 +115,30 @@ const formattedTime = computed(() => {
   return m > 0 ? `${m}分${s}秒` : `${s}秒`;
 });
 
-const ringTotal = computed(() => report.value?.total_score || 100);
+const ringTotal = computed(() => {
+  const items = report.value?.items || [];
+  const total = items.reduce((a: number, i: any) => a + (i.eq_score || 0), 0);
+  return total || 100;
+});
+
 const ringOffset = computed(() => {
-  if (!report.value) return 427;
+  if (!report.value || report.value.score == null) return 427;
   const ratio = Math.min(Math.max(report.value.score / ringTotal.value, 0), 1);
   return 427 - 427 * ratio;
 });
 
-// 填空/简答题的正确答案结构化展示 (填空二维数组按空分组)
-const formatCorrect = (ans: any) => {
-  if (!Array.isArray(ans)) return String(ans ?? '');
-  if (ans.length && Array.isArray(ans[0])) {
-    return ans.map((blank: any, i: number) => `第${i + 1}空: ${blank.join(' / ')}`).join('；');
-  }
-  return ans.join(', ');
+const statusLabel = computed(() => {
+  const s = report.value?.status;
+  if (s === 'verified') return '已核验';
+  if (s === 'pending_verification') return '核验中';
+  if (s === 'submitted') return '已提交';
+  return '待办';
+});
+
+const fmtAnswer = (a: any): string => {
+  if (Array.isArray(a)) return a.length ? a.join(', ') : '未作答';
+  if (a && typeof a === 'object') return JSON.stringify(a);
+  return String(a ?? '') || '未作答';
 };
 
 onMounted(async () => {
@@ -179,7 +148,7 @@ onMounted(async () => {
     return;
   }
   try {
-    const res: any = await http.get(`/api/v1/records/${recordId}/report`);
+    const res: any = await http.get(`/api/v1/member/task-records/${recordId}`);
     report.value = res;
   } catch (e) {
     router.push('/');
@@ -266,7 +235,6 @@ onMounted(async () => {
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.18);
 }
 
-/* 批阅中 Hero */
 .grading-hero {
   display: flex;
   flex-direction: column;
@@ -320,172 +288,118 @@ onMounted(async () => {
   box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.04);
 }
 
-.stat-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 8px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
-}
-
-.stat-icon.ok { background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #166534; }
-.stat-icon.no { background: linear-gradient(135deg, #ffe4e6, #fecdd3); color: #be123c; }
-.stat-icon.time-ic { background: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0369a1; }
-
 .stat-val {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
+  color: #0f172a;
 }
 
-.stat-val.correct { color: #15803d; }
-.stat-val.wrong { color: #e11d48; }
-.stat-val.time { color: #0284c7; }
+.stat-val.correct {
+  color: #16a34a;
+}
+
+.stat-val.time {
+  color: #0284c7;
+}
 
 .stat-lbl {
-  font-size: 11px;
-  color: #64748b;
+  font-size: 12px;
+  color: #94a3b8;
   margin-top: 4px;
-  font-weight: 600;
 }
 
 .analysis-section {
-  padding: 20px 16px;
+  padding: 16px;
 }
 
 .sec-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   color: #0f172a;
-  margin: 0 0 14px;
-  padding-left: 10px;
-  border-left: 4px solid #6366f1;
+  margin: 4px 4px 12px;
 }
 
 .analysis-card {
-  background: #ffffff;
-  border-radius: 20px;
-  padding: 18px 20px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 14px 16px;
   margin-bottom: 12px;
   border: 1px solid rgba(226, 232, 240, 0.8);
-  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.04);
 }
 
 .card-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .q-num {
   font-size: 12px;
   font-weight: 800;
-  color: #0284c7;
+  color: #6366f1;
+}
+
+.q-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+
+.ans-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ans-box {
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ans-box.user {
   background: #f0f9ff;
-  padding: 2px 8px;
-  border-radius: 6px;
+  border: 1px solid #bae6fd;
 }
 
-.status-tag {
+.ans-box .lbl {
   font-size: 11px;
-  font-weight: 800;
-  padding: 2px 9px;
-  border-radius: 6px;
-  background: #ffe4e6;
-  color: #e11d48;
+  color: #94a3b8;
+  font-weight: 700;
 }
 
-.status-tag.correct {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.status-tag.partial {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.status-tag.grading {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.score-line {
-  font-size: 12px;
-  color: #64748b;
-  margin-bottom: 10px;
+.ans-box .val {
+  color: #0f172a;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .comment-box {
+  margin-top: 14px;
   background: #fffbeb;
   border: 1px solid #fde68a;
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 10px 14px;
-  margin-bottom: 10px;
-  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .comment-title {
+  font-size: 12px;
   font-weight: 800;
   color: #b45309;
 }
 
 .comment-text {
+  font-size: 13px;
+  color: #78350f;
+  line-height: 1.7;
   margin: 4px 0 0;
-  color: #92400e;
-  line-height: 1.55;
 }
-
-.ans-box.correct .val.locked {
-  color: #94a3b8;
-  font-weight: 600;
-}
-
-.q-text {
-  margin: 10px 0 14px;
-  font-size: 15px;
-  color: #0f172a;
-  font-weight: 800;
-  line-height: 1.45;
-}
-
-.ans-comparison {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.ans-box {
-  flex: 1;
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ans-box .lbl { color: #64748b; flex-shrink: 0; font-size: 12px; }
-.ans-box .val { font-weight: 800; font-size: 14px; margin-left: auto; }
-
-.ans-box.user { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
-.ans-box.user .val { color: #334155; }
-.ans-box.user.wrong { background: #fff1f2; border-color: #fecdd3; }
-.ans-box.user.wrong .val { color: #e11d48; }
-.ans-box.correct { background: #f0fdf4; border: 1px solid #dcfce7; }
-.ans-box.correct .val { color: #15803d; }
-
-.explanation-box {
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border: 1px solid #e2e8f0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  font-size: 13px;
-  margin-top: 12px;
-}
-
-.exp-title { font-weight: 800; color: #0284c7; }
-.exp-text { margin: 4px 0 0; color: #475569; line-height: 1.55; }
 </style>

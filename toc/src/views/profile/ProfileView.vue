@@ -122,19 +122,17 @@ const stats = ref({
   history_count: 0
 });
 
-// v1.3 注册资料 (昵称优先展示)
-const profile = ref<any>({ nickname: '', gender: '', position: '', phone: '', email: '' });
-const displayName = computed(() => profile.value.nickname || userStore.nickname || userStore.username || '答题学员');
-const genderLabel = computed(() => (profile.value.gender === 'male' ? '男' : profile.value.gender === 'female' ? '女' : ''));
+// 成员资料 (展示名优先展示)
+const profile = ref<any>({ display_name: '', phone: '' });
+const displayName = computed(() => profile.value.display_name || userStore.nickname || userStore.username || '企业成员');
 
 const loadProfile = async () => {
   if (!userStore.token) return;
   try {
-    const res: any = await http.get('/api/v1/users/me');
-    const data = res?.data || res;
-    if (data) {
-      profile.value = data;
-      if (data.nickname) userStore.setNickname(data.nickname);
+    const res: any = await http.get('/api/v1/member/me');
+    if (res) {
+      profile.value = res;
+      if (res.display_name) userStore.setNickname(res.display_name);
     }
   } catch (e) {
     // 静默: 回退 store 中缓存的昵称/用户名

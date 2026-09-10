@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 [变更日志]
-修改时间: 2026-09-03
-AI模型: Gemini 底层
-修改内容: [1. 使用原生 bcrypt 代替 passlib，彻底修复 python 3.12 下 bcrypt 72 字节检测异常; 2. 增加安全截断机制]
+修改时间：2026-09-09
+AI模型：Muse Spark
+修改内容：[多租户鉴权扩展：Token 支持 tenant_id/role/super 声明，保持旧 user/admin 类型兼容]
 """
 from datetime import datetime, timedelta
 from typing import Optional, Any, Dict
@@ -28,7 +28,7 @@ def get_password_hash(password: str) -> str:
     hashed = bcrypt.hashpw(password_bytes, salt)
     return hashed.decode('utf-8')
 
-def create_access_token(subject: str | Any, user_type: str = "user", expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(subject: str | Any, user_type: str = "user", expires_delta: Optional[timedelta] = None, extra: Optional[Dict[str, Any]] = None) -> str:
     """
     生成 JWT Token
     :param subject: 用户/管理员标识 (ID 或 Username)
@@ -44,7 +44,8 @@ def create_access_token(subject: str | Any, user_type: str = "user", expires_del
         "exp": expire,
         "sub": str(subject),
         "type": user_type,
-        "iat": datetime.utcnow()
+        "iat": datetime.utcnow(),
+        **(extra or {}),
     }
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt

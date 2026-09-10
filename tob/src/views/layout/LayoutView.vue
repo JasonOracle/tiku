@@ -1,5 +1,11 @@
 <!--
   * [变更日志]
+  * 修改时间：2026-09-10
+  * AI模型：OpenCode / Gemini 底层
+  * 修改内容：[将侧边栏超管菜单「我的团队」修正为「企业管理」，与「成员管理」精准划分平台级 vs 租户级边界]
+  * 修改时间：2026-09-10
+  * AI模型：OpenCode / Gemini 底层
+  * 修改内容：[1. 清除侧边栏重复渲染的超管菜单项(我的团队、审计日志); 2. 从侧边栏移除首页Banner，迁移到右上角头像下拉菜单，且通过 v-if="userStore.isSuper() || userStore.role === 'admin'" 严格限定管理员与超管可见]
   * 修改时间：2026-09-09
   * AI模型：Gemini 系列
   * 修改内容：[优化侧边栏菜单层级与文案: 1. 调整菜单排序为分类配置 -> 题目管理 -> 试卷管理; 2. 原「题海管理」更名为「题目管理」，原「试卷与组卷」更名为「试卷管理」]
@@ -35,42 +41,46 @@
       >
         <el-menu-item index="/dashboard">
           <el-icon><HomeFilled /></el-icon>
-          <span>首页</span>
+          <span>数据看板</span>
         </el-menu-item>
         <el-menu-item index="/categories">
           <el-icon><Folder /></el-icon>
           <span>分类配置</span>
         </el-menu-item>
-        <el-menu-item index="/questions">
+        <el-menu-item index="/resources">
           <el-icon><Document /></el-icon>
           <span>题目管理</span>
         </el-menu-item>
-        <el-menu-item index="/exams">
+        <el-menu-item index="/tasks">
           <el-icon><Reading /></el-icon>
           <span>试卷管理</span>
         </el-menu-item>
-        <el-menu-item index="/grading">
+        <el-menu-item index="/verification">
           <el-icon><EditPen /></el-icon>
-          <span>阅卷大厅</span>
+          <span>阅卷管理</span>
         </el-menu-item>
-        <el-menu-item index="/rag">
+        <el-menu-item index="/kb">
           <el-icon><Collection /></el-icon>
-          <span>AI 文库</span>
+          <span>AI知识库</span>
         </el-menu-item>
         <template v-if="userStore.isSuper() || userStore.role === 'admin'">
-          <el-menu-item index="/users">
+          <el-menu-item index="/members">
             <el-icon><User /></el-icon>
-            <span>用户管理</span>
+            <span>成员管理</span>
           </el-menu-item>
         </template>
         <template v-if="userStore.isSuper()">
-          <el-menu-item index="/banners">
-            <el-icon><Picture /></el-icon>
-            <span>首页Banner</span>
+          <el-menu-item index="/super-admin/tenants">
+            <el-icon><OfficeBuilding /></el-icon>
+            <span>企业管理</span>
           </el-menu-item>
           <el-menu-item index="/audit">
             <el-icon><List /></el-icon>
             <span>审计日志</span>
+          </el-menu-item>
+          <el-menu-item index="/model-center">
+            <el-icon><Cpu /></el-icon>
+            <span>模型中心</span>
           </el-menu-item>
         </template>
         <el-menu-item index="/ai-assistant">
@@ -78,12 +88,6 @@
           <span>✨ AI 助理</span>
         </el-menu-item>
       </el-menu>
-      <!-- 侧边栏底部 AI 推广卡 -->
-      <div class="side-promo">
-        <img class="promo-img" :src="promoUrl" alt="AI 赋能教育" />
-        <div class="promo-title">AI 赋能教育</div>
-        <div class="promo-sub">让每一次考试都有价值</div>
-      </div>
     </el-aside>
 
     <el-container>
@@ -92,9 +96,24 @@
           <h3 class="page-title">{{ currentTitle }}</h3>
         </div>
         <div class="header-right">
-          <div class="quota-chip" title="今日 AI 出题/组卷/聊天剩余次数" @click="router.push('/ai-assistant')" style="cursor: pointer">
-            <span class="quota-icon"><el-icon><MagicStick /></el-icon></span>
-            <span>AI 额度 <strong>{{ userStore.quotaRemaining }}</strong></span>
+          <el-select
+            v-if="userStore.isSuperAdmin"
+            v-model="inspectTenant"
+            placeholder="视察企业"
+            size="small"
+            style="width: 170px"
+            @change="switchTenant"
+          >
+            <el-option
+              v-for="t in tenantOptions"
+              :key="t.tenant_id"
+              :label="t.tenant_name"
+              :value="String(t.tenant_id)"
+            />
+          </el-select>
+          <div class="tenant-chip" :title="tenantChipTitle">
+            <span class="tenant-icon"><el-icon><OfficeBuilding /></el-icon></span>
+            <span>{{ tenantChipText }}</span>
           </div>
           <el-button type="primary" plain size="small" class="ai-copilot-head-btn" @click="router.push('/ai-assistant')">
             <el-icon style="margin-right: 4px;"><MagicStick /></el-icon> AI 助理
@@ -120,8 +139,8 @@
                 <el-dropdown-item command="profile">
                   <el-icon><User /></el-icon>个人资料
                 </el-dropdown-item>
-                <el-dropdown-item v-if="userStore.isSuper()" command="model-center">
-                  <el-icon><Cpu /></el-icon>模型中心
+                <el-dropdown-item v-if="userStore.isSuper() || userStore.role === 'admin'" command="banners">
+                  <el-icon><Picture /></el-icon>首页Banner
                 </el-dropdown-item>
                 <el-dropdown-item divided command="logout" style="color: #ef4444;">
                   <el-icon><SwitchButton /></el-icon>退出登录
@@ -145,7 +164,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Document, Reading, Folder, User, Picture, SwitchButton, Bell, List, EditPen, MagicStick, HomeFilled, Cpu, Collection } from '@element-plus/icons-vue';
+import { Document, Reading, Folder, User, Picture, SwitchButton, Bell, List, EditPen, MagicStick, HomeFilled, Cpu, Collection, OfficeBuilding } from '@element-plus/icons-vue';
 import { useUserStore } from '../../store/user';
 import request from '../../utils/request';
 import ProfileDialog from './components/ProfileDialog.vue';
@@ -161,7 +180,36 @@ const activePath = computed(() => route.path);
 const currentTitle = computed(() => (route.meta.title as string) || '仪表盘');
 const username = computed(() => userStore.username || 'Admin');
 const unreadCount = ref(0);
+const tenantOptions = ref<any[]>([]);
+const inspectTenant = ref<string>(localStorage.getItem('tiku_tob_tenant') || '');
 let pollTimer: number | undefined;
+
+const tenantChipText = computed(() => {
+  if (!userStore.isSuperAdmin) {
+    return (userStore.joinedTenants[0] && userStore.joinedTenants[0].tenant_name) || '当前企业';
+  }
+  const tid = inspectTenant.value;
+  if (!tid) return '未选择视察企业';
+  const t = tenantOptions.value.find((x: any) => String(x.tenant_id) === tid);
+  return t ? `视察：${t.tenant_name}` : `企业 ${tid}`;
+});
+
+const tenantChipTitle = computed(() => tenantChipText.value);
+
+const loadTenants = async () => {
+  if (!userStore.isSuperAdmin) return;
+  try {
+    const res: any = await request.get('/api/v1/super-admin/tenants');
+    tenantOptions.value = res.items || [];
+  } catch (e) {
+    /* 静默 */
+  }
+};
+
+const switchTenant = () => {
+  userStore.setTenant(inspectTenant.value);
+  window.location.reload();
+};
 
 const loadUnread = async () => {
   try {
@@ -175,8 +223,8 @@ const loadUnread = async () => {
 const handleDropdown = (command: string) => {
   if (command === 'profile') {
     profileVisible.value = true;
-  } else if (command === 'model-center') {
-    router.push('/model-center');
+  } else if (command === 'banners') {
+    router.push('/banners');
   } else if (command === 'logout') {
     userStore.logout();
     router.push('/login');
@@ -186,6 +234,7 @@ const handleDropdown = (command: string) => {
 onMounted(() => {
   userStore.loadProfile();
   loadUnread();
+  loadTenants();
   pollTimer = window.setInterval(loadUnread, 30000);
 });
 
@@ -209,42 +258,6 @@ onUnmounted(() => {
 
 .aside .menu {
   flex: 1;
-}
-
-.side-promo {
-  margin: 12px;
-  border-radius: 12px;
-  background: linear-gradient(160deg, #eef4ff, #e0ecff);
-  border: 1px solid #dbeafe;
-  padding: 12px;
-  text-align: center;
-}
-
-.promo-img {
-  width: 100%;
-  border-radius: 8px;
-  display: block;
-}
-
-.promo-title {
-  font-size: 13px;
-  font-weight: 800;
-  color: #0f172a;
-  margin-top: 8px;
-}
-
-.promo-sub {
-  font-size: 11px;
-  color: #64748b;
-  margin-top: 2px;
-}
-
-.menu-badge {
-  margin-left: 8px;
-}
-
-.menu-badge :deep(.el-badge__content) {
-  background-color: #ef4444;
 }
 
 .header {
@@ -271,6 +284,24 @@ onUnmounted(() => {
   padding: 5px 12px;
   border-radius: 999px;
   font-size: 13px;
+}
+
+.tenant-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(135deg, #eff6ff, #f0f9ff);
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.tenant-icon {
+  opacity: 0.7;
 }
 
 .user-info {

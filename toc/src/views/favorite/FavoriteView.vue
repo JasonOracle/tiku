@@ -1,17 +1,17 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-04
- * AI模型：Gemini 系列
- * 修改内容：[1. 现代扁平拟物风格重构收藏夹列表：左侧精简金星封面微框，中间展示题目编号、题型与答案芯片，右侧轻量红框删除按钮，与首页 IndexView 视觉对齐]
- -->
+ * 修改时间：2026-09-09
+ * AI模型：Muse Spark
+ * 修改内容：[彻底清洗：对接成员收藏新接口并移除答案展示（防泄漏），旧收藏体系已删除]
+-->
 <template>
   <div class="fav-container">
-    <NavBar title="我的收藏夹" />
+    <NavBar title="我的资源收藏" />
 
     <main class="fav-list">
       <div v-if="favorites.length === 0" class="empty-state">
         <div class="empty-icon">⭐</div>
-        <p>暂无收藏题目</p>
+        <p>暂无收藏条目</p>
       </div>
 
       <div v-for="fav in favorites" :key="fav.id" class="fav-card">
@@ -23,28 +23,17 @@
 
         <div class="card-info">
           <div class="card-badge-row">
-            <span class="q-badge">题目 #{{ fav.question_id }}</span>
-            <span class="type-tag" v-if="fav.question?.type">
-              {{ getTypeLabel(fav.question.type) }}
+            <span class="q-badge">条目 #{{ fav.resource_id }}</span>
+            <span class="type-tag" v-if="fav.type">
+              {{ getTypeLabel(fav.type) }}
             </span>
           </div>
 
-          <h3 class="q-title">{{ fav.question?.title || '题目信息已载入' }}</h3>
-
-          <div class="meta-chips">
-            <span class="chip green">
-              <span class="chip-label">正确答案</span>
-              <span class="chip-val">{{ fav.question?.answer ? fav.question.answer.join(', ') : '暂无' }}</span>
-            </span>
-          </div>
-
-          <p v-if="fav.question?.explanation" class="exp-text">
-            💡 解析：{{ fav.question.explanation }}
-          </p>
+          <h3 class="q-title">{{ fav.title || fav.content || '条目信息已载入' }}</h3>
         </div>
 
         <div class="card-action">
-          <button class="remove-btn" @click="removeFavorite(fav.question_id)" title="取消收藏">
+          <button class="remove-btn" @click="removeFavorite(fav.resource_id)" title="取消收藏">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"></polyline>
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -68,18 +57,20 @@ const favorites = ref<any[]>([]);
 const getTypeLabel = (type: string) => {
   if (type === 'single') return '单选题';
   if (type === 'multiple') return '多选题';
+  if (type === 'fill') return '填空题';
+  if (type === 'short') return '简答题';
   return '判断题';
 };
 
 const loadFavorites = async () => {
   try {
-    const res: any = await http.get('/api/v1/favorites');
+    const res: any = await http.get('/api/v1/member/favorites');
     favorites.value = res.items || [];
   } catch (e) {}
 };
 
-const removeFavorite = async (questionId: number) => {
-  await http.delete(`/api/v1/favorites/${questionId}`);
+const removeFavorite = async (resourceId: number) => {
+  await http.delete(`/api/v1/member/favorites/${resourceId}`);
   loadFavorites();
 };
 

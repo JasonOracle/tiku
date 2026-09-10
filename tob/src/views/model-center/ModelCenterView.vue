@@ -17,6 +17,7 @@
       <div>
         <div class="mc-title">模型中心</div>
         <div class="mc-sub">多通道模型网关托管：支持自定义协议、BaseURL 与模型热切换（切换时自动进行健康探活）</div>
+        <div class="mc-disclaimer">此处通道选择仅为展示，不影响实际 AI 调用；实际生效以「AI 模型配置」页的租户覆盖为准。</div>
       </div>
       <el-button type="primary" class="add-btn" @click="openDialog()">+ 新增通道</el-button>
     </div>
@@ -646,6 +647,13 @@ const testProbe = async (channelId: string) => {
 .form-hint {
   font-size: 12px;
   color: #94a3b8;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.mc-disclaimer {
+  font-size: 12px;
+  color: #f59e0b;
   margin-top: 6px;
   line-height: 1.4;
 }

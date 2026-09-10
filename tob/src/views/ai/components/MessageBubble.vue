@@ -1,6 +1,12 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-10
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[优化用户头像: 当 username 为空或无首字母时呈现优雅的默认 User 矢量图标兜底]
+ * 修改时间：2026-09-10
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[致命Bug修复: defineProps/defineEmits 声明为 props/emit 变量，彻底修复 props.content 报 ReferenceError 导致的消息渲染瞬间崩溃闪退]
+ * 修改时间：2026-09-10
  * AI模型：Agnes-2.5-Flash
  * 修改内容：[重构消息气泡 - 打字机光标 + Markdown + 悬浮操作栏]
 -->
@@ -8,7 +14,10 @@
   <div class="message-bubble" :class="[role, { 'is-streaming': isStreaming }]">
     <div class="avatar-col">
       <div v-if="role === 'user'" class="user-avatar">
-        {{ username.substring(0, 1).toUpperCase() }}
+        <template v-if="username && username.trim()">
+          {{ username.trim().substring(0, 1).toUpperCase() }}
+        </template>
+        <el-icon v-else><UserFilled /></el-icon>
       </div>
       <div v-else class="ai-avatar">
         <el-icon><MagicStick /></el-icon>
@@ -79,11 +88,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { ElMessage } from 'element-plus';
-import { MagicStick, DocumentCopy } from '@element-plus/icons-vue';
+import { MagicStick, DocumentCopy, UserFilled } from '@element-plus/icons-vue';
 import { marked } from 'marked';
 import type { RagSource } from '../types';
 
-defineProps<{
+const props = defineProps<{
   role: 'user' | 'assistant';
   content: string;
   username: string;
@@ -93,7 +102,7 @@ defineProps<{
   ragSources?: RagSource[];
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'show-source', source: RagSource): void;
   (e: 'feedback', rating: 'up' | 'down'): void;
 }>();

@@ -1,18 +1,12 @@
 /**
  * [变更日志]
- * 修改时间：2026-09-09
- * AI模型：Gemini 系列
- * 修改内容：[路由元信息 meta.title 规范更新: 原「题海管理」更名为「题目管理」，原「试卷与组卷」更名为「试卷管理」]
- * 修改时间：2026-09-03 23:41:00
- * AI模型：Gemini 底层
- * 修改内容：[1. createWebHistory 绑定 import.meta.env.BASE_URL，彻底解决 /admin/ 子路径空白白屏问题]
- * 修改时间：2026-09-07
+ * 修改时间：2026-09-10
+ * AI模型：OpenCode / Gemini 底层
+ * 修改内容：[将超管路由 super-admin/tenants 的标题由「我的团队」修正为「企业管理」，消除概念混淆]
+ * 修改时间：2026-09-10
  * AI模型：Muse Spark
-  * 修改内容：[新增 Dashboard 首页与 AI 模型配置路由，默认重定向改仪表盘；新增 meta.roles 角色守卫，越权跳转弹 Toast 拦截]
-  * 修改时间：2026-09-08
-  * AI模型：Muse Spark
-  * 修改内容：[v1.3 任务1: 新增模型中心路由]
-  */
+ * 修改内容：[侧边栏回摆教育词汇：试卷管理/题目管理/阅卷管理/AI知识库/我的团队（仅展示层，路由与接口不变）]
+ */
 import { createRouter, createWebHistory, RouteRecordRaw, RouteLocationNormalized, NavigationGuardNext } from 'vue-router';
 import { ElMessage } from 'element-plus';
 
@@ -33,24 +27,24 @@ const routes: Array<RouteRecordRaw> = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('../views/dashboard/DashboardView.vue'),
-        meta: { title: '首页' }
+        meta: { title: '数据看板' }
       },
       {
-        path: 'questions',
-        name: 'Questions',
-        component: () => import('../views/questions/QuestionsView.vue'),
+        path: 'resources',
+        name: 'Resources',
+        component: () => import('../views/resources/ResourcesView.vue'),
         meta: { title: '题目管理' }
       },
       {
-        path: 'rag',
-        name: 'Rag',
-        component: () => import('../views/rag/RagView.vue'),
-        meta: { title: '私有文库' }
+        path: 'kb',
+        name: 'Kb',
+        component: () => import('../views/kb/KbView.vue'),
+        meta: { title: 'AI知识库' }
       },
       {
-        path: 'exams',
-        name: 'Exams',
-        component: () => import('../views/exams/ExamsView.vue'),
+        path: 'tasks',
+        name: 'Tasks',
+        component: () => import('../views/tasks/TasksView.vue'),
         meta: { title: '试卷管理' }
       },
       {
@@ -60,16 +54,14 @@ const routes: Array<RouteRecordRaw> = [
         meta: { title: '分类配置' }
       },
       {
-        path: 'grading',
-        name: 'Grading',
-        component: () => import('../views/grading/GradingView.vue'),
-        meta: { title: '阅卷大厅' }
+        path: 'verification',
+        name: 'Verification',
+        component: () => import('../views/verification/VerificationView.vue'),
+        meta: { title: '阅卷管理' }
       },
       {
         path: 'users',
-        name: 'Users',
-        component: () => import('../views/users/UsersView.vue'),
-        meta: { title: '用户管理', roles: ['super_admin', 'admin'] }
+        redirect: '/members'
       },
       {
         path: 'messages',
@@ -108,10 +100,16 @@ const routes: Array<RouteRecordRaw> = [
         meta: { title: '成员管理', roles: ['super_admin', 'admin'] }
       },
       {
+        path: 'super-admin/tenants',
+        name: 'SuperTenants',
+        component: () => import('../views/super/TenantsView.vue'),
+        meta: { title: '企业管理', roles: ['super_admin'] }
+      },
+      {
         path: 'ai-assistant',
         name: 'AiAssistant',
         component: () => import('../views/ai/AiAssistantView.vue'),
-        meta: { title: '✨ AI 助理' }
+        meta: { title: 'AI 助理' }
       }
     ]
   }
@@ -127,12 +125,28 @@ router.beforeEach((to: RouteLocationNormalized, _from: RouteLocationNormalized, 
   const token = localStorage.getItem('tiku_tob_token');
   if (to.meta.requiresAuth !== false && !token) {
     next('/login');
-  } else if (to.path === '/login' && token) {
+    return;
+  }
+  if (to.path === '/login' && token) {
     next('/');
-  } else if (Array.isArray(to.meta.roles)) {
+    return;
+  }
+  const isSuper = localStorage.getItem('tiku_tob_super') === '1';
+  // 上帝未选视察企业时只能停留在租户大盘（业务接口无租户头必 403）
+  if (isSuper && !localStorage.getItem('tiku_tob_tenant') && to.path !== '/super-admin/tenants') {
+    ElMessage.warning('请先选择要视察的企业');
+    next('/super-admin/tenants');
+    return;
+  }
+  if (Array.isArray(to.meta.roles)) {
     // 越权路由直接 Toast 拦截
     const role = localStorage.getItem('tiku_tob_role') || '';
-    if (!(to.meta.roles as string[]).includes(role)) {
+    const allowed = [...(to.meta.roles as string[])];
+    if (isSuper) {
+      next();
+      return;
+    }
+    if (!allowed.includes(role)) {
       ElMessage.error('当前角色无权访问该页面');
       next('/dashboard');
     } else {
