@@ -80,9 +80,16 @@ AI 助管通过统一网关 `backend/app/api/saas/ai.py` 调度，核心贯彻�
 - **`_get_tenant_organization_snapshot(db, tid)`**：
   - 自动联查 `sys_tenant_user`, `sys_user`, `sys_user_profile`，实时格式化输出在职员工花名册、角色、职业、性别、年龄与简介。
 - **`_get_tenant_tasks_snapshot(db, tid)`**：
-  - 自动聚合企业试卷总数、各老师/出题人的出卷统计（`{name}: 出卷 {count} 份`）、以及最近 5 套试卷的创建明细（包含题目数量、阅卷模式与状态）。
+  - 自动聚合企业试卷总数、各老师/出题人的出卷统计（`{name}: 出卷 {count} 份`）、最近 5 套试卷创建明细，以及**实时考情分析数据**（包含累计作答人数、全站平均得分、综合及格通过率）。
 
-### 4.2 写操作工具 (Write Tools)
+### 4.2 阅卷大厅与可视化抽屉批改架构 (Verification Hall & Grading Drawer)
+- **待核验队列 API (`/api/v1/admin/verifications/pending`)**：
+  - 高效联查 `Task`, `SysUser`, `SysUserProfile`，返回包含试卷全名、考生真实姓名、手机号及历史作答明细的组合 Payload。
+- **可视化阅卷抽屉 (`VerificationView.vue`)**：
+  - 提供 700px 高颜值抽屉，**默认精简过滤仅展示待批改的简答题（Short Answer）**，降低主考官认知负担。
+  - **AI 智能 Prompt 优化**：AI 阅卷提示词格式化题目与作答为“第X题”，禁止输出 `resource_id` 抽象编号。提供一键采纳 AI 建议分数与评语按钮。
+
+### 4.3 写操作工具 (Write Tools)
 此类工具用于变更数据库资产，必须经过前端可视化卡片二次确认：
 - **`create_exam_draft`**：智能组卷草稿。模型输出包含全量题目列表（题型/题干/选项/答案/解析/分值）的结构化 JSON。
 - **`create_question_draft`**：批量或单题出题草稿。
