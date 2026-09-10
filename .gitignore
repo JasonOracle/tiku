@@ -32,3 +32,8 @@ backend/app/api/uploads/
 # Python 缓存
 __pycache__/
 *.pyc
+
+# Mem0 运行时数据（环境特定，不应提交）
+backend/app/data/mem0/
+mem0_backup.zip
+*.zip
