@@ -85,13 +85,16 @@
           </div>
         </div>
 
-        <el-divider content-position="left"><strong>考生作答题目清单</strong></el-divider>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+          <el-divider content-position="left" style="margin: 0"><strong>待人工批改的简答题（共 {{ shortQuestions.length }} 题）</strong></el-divider>
+          <el-checkbox v-model="showAllTypes" size="small">显示全卷客观题（客客观题已自动判分）</el-checkbox>
+        </div>
 
-        <!-- 题目与作答逐题高亮展示 -->
+        <!-- 题目与作答逐题高亮展示（仅高亮展示简答题 / 选填全卷） -->
         <div class="question-list">
-          <div v-for="(item, idx) in detailData.items" :key="idx" class="q-item-card">
+          <div v-for="(item, idx) in displayQuestions" :key="idx" class="q-item-card">
             <div class="q-head">
-              <span class="q-num">第 {{ idx + 1 }} 题</span>
+              <span class="q-num">第 {{ item.originalIndex + 1 }} 题</span>
               <el-tag size="small" :type="getQuestionTypeTag(item.type)">{{ getQuestionTypeLabel(item.type) }}</el-tag>
               <span class="q-score">满分 {{ item.score || 10 }} 分</span>
             </div>
@@ -137,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
 import request from '../../utils/request';
@@ -151,7 +154,27 @@ const records = ref<any[]>([]);
 const drawerVisible = ref(false);
 const drawerLoading = ref(false);
 const detailData = ref<any>(null);
+const showAllTypes = ref(false);
 const confirmForm = reactive({ final_score: 0, comments: '' });
+
+const allQuestions = computed(() => {
+  if (!detailData.value?.items) return [];
+  return detailData.value.items.map((it: any, idx: number) => ({
+    ...it,
+    originalIndex: idx
+  }));
+});
+
+const shortQuestions = computed(() => {
+  return allQuestions.value.filter((it: any) => it.type === 'short' || it.type === 'short_answer');
+});
+
+const displayQuestions = computed(() => {
+  if (showAllTypes.value || shortQuestions.value.length === 0) {
+    return allQuestions.value;
+  }
+  return shortQuestions.value;
+});
 
 const loadRecords = async () => {
   loading.value = true;

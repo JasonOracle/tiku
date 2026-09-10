@@ -128,8 +128,8 @@
           <!-- 头像 Dropdown 菜单 -->
           <el-dropdown trigger="hover" @command="handleDropdown">
             <div class="user-info" style="cursor: pointer">
-              <el-avatar :size="32" class="avatar">{{ username.substring(0, 1).toUpperCase() }}</el-avatar>
-              <span class="name">{{ username }}</span>
+              <el-avatar :size="32" class="avatar">{{ displayName.substring(0, 1).toUpperCase() }}</el-avatar>
+              <span class="name">{{ displayName }}</span>
               <el-tag size="small" :type="userStore.isSuper() ? 'danger' : (userStore.role === 'admin' ? 'warning' : 'primary')" effect="plain">
                 {{ userStore.isSuper() ? '超级管理员' : (userStore.role === 'admin' ? '管理员' : '出题人') }}
               </el-tag>
@@ -179,10 +179,15 @@ const promoUrl = `${import.meta.env.BASE_URL}images/ai-edu.png`;
 const activePath = computed(() => route.path);
 const currentTitle = computed(() => (route.meta.title as string) || '仪表盘');
 const username = computed(() => userStore.username || 'Admin');
+const displayName = computed(() => userStore.name || userStore.nickname || userStore.username || 'Admin');
 const unreadCount = ref(0);
 const tenantOptions = ref<any[]>([]);
 const inspectTenant = ref<string>(localStorage.getItem('tiku_tob_tenant') || '');
 let pollTimer: number | undefined;
+
+onMounted(() => {
+  userStore.loadProfile();
+});
 
 const tenantChipText = computed(() => {
   if (!userStore.isSuperAdmin) {

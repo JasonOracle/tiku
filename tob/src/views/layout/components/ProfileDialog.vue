@@ -1,14 +1,14 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-09
- * AI模型：Muse Spark
- * 修改内容：[彻底清洗：资料精简为展示名+手机号，旧性别/邮箱/职位/额度体系已删除]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 3.6 Flash
+ * 修改内容：[1. 将【姓名】设为必填字段并增加保存时的前置校验；2. 修复个人资料弹窗模板结构]
 -->
 <template>
   <el-dialog v-model="visible" title="个人资料与信息" width="520px" destroy-on-close @open="handleOpen">
     <div class="profile-box">
       <el-avatar :size="64" class="profile-avatar">
-        {{ (userStore.username || userStore.phone || 'A').substring(0, 1).toUpperCase() }}
+        {{ (form.name || userStore.username || userStore.phone || 'A').substring(0, 1).toUpperCase() }}
       </el-avatar>
       <div class="profile-name">{{ form.name || userStore.username || userStore.phone }}</div>
       <div class="role-quota-tags">
@@ -28,8 +28,8 @@
             <el-form-item label="登录账号">
               <el-input :value="userStore.username || userStore.phone" disabled />
             </el-form-item>
-            <el-form-item label="姓名">
-              <el-input v-model="form.name" placeholder="请输入姓名" maxlength="30" />
+            <el-form-item label="姓名" required>
+              <el-input v-model="form.name" placeholder="请输入姓名（必填）" maxlength="30" />
             </el-form-item>
             <el-form-item label="手机号">
               <el-input v-model="form.phone" placeholder="请输入手机号" maxlength="11" />
@@ -134,10 +134,15 @@ const handleOpen = async () => {
 };
 
 const handleSaveProfile = async () => {
+  if (!form.name || !form.name.trim()) {
+    ElMessage.warning('用户姓名不能为空，请输入姓名');
+    return;
+  }
+
   saving.value = true;
   try {
     await request.put('/api/v1/auth/profile', {
-      display_name: form.name,
+      display_name: form.name.trim(),
       phone: form.phone,
       nickname: form.nickname,
       email: form.email,
@@ -148,10 +153,10 @@ const handleSaveProfile = async () => {
     });
     // 立即刷新本地全局 Pinia 用户状态，确保 AI 助理和页面立即同步
     await userStore.loadProfile();
-    ElMessage.success('个人资料已成功保存');
+    ElMessage.success('个人资料已更新');
     visible.value = false;
   } catch (e: any) {
-    ElMessage.error(e?.message || '保存失败，请稍后重试');
+    ElMessage.error(e?.response?.data?.detail || '保存失败');
   } finally {
     saving.value = false;
   }
@@ -159,7 +164,6 @@ const handleSaveProfile = async () => {
 
 const handleLogout = () => {
   userStore.logout();
-  visible.value = false;
   router.push('/login');
 };
 </script>
@@ -169,29 +173,26 @@ const handleLogout = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 4px 0;
 }
 
 .profile-avatar {
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  color: #fff;
-  font-size: 28px;
-  font-weight: 700;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+  background: #0284c7;
+  color: white;
+  font-weight: bold;
+  font-size: 24px;
 }
 
 .profile-name {
+  margin-top: 8px;
   font-size: 18px;
   font-weight: 700;
   color: #0f172a;
-  margin: 10px 0 4px;
 }
 
 .role-quota-tags {
+  margin-top: 6px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 8px;
+  gap: 8px;
 }
 
 .dialog-footer {
