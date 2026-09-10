@@ -30,75 +30,48 @@
       <div class="messages-wrap" ref="messagesWrapRef" @scroll="handleScroll">
         <div v-if="loadingMessages" class="history-loader">历史消息加载中...</div>
         <div v-if="currentMessages.length === 0 && !loadingMessages" class="welcome-screen">
-          <div class="welcome-badge">
-            <el-icon style="vertical-align: middle; margin-right: 4px;"><MagicStick /></el-icon>
-            智能出题与教务数字助手
-          </div>
-          <h2>你好，{{ userStore.username }}！有什么我可以帮你的？</h2>
-          <div class="presets-grid">
-            <div class="preset-card" @click="usePreset('帮我生成一份包含5道单选题3道判断的消防安全测试卷，难度中等')">
-              <div class="card-icon">📝</div>
-              <div class="card-title">一键智能组卷</div>
-              <div class="card-sub">生成包含指定题型构成的消防测试卷</div>
-            </div>
-            <div class="preset-card" @click="usePreset('帮我出5道关于金融风险控制的单选题，难度偏难，带解析')">
-              <div class="card-icon">🎯</div>
-              <div class="card-title">快速生成题目</div>
-              <div class="card-sub">出5道金融风控单选题并附带参考解析</div>
-            </div>
-            <div class="preset-card" @click="usePreset('我今天有哪些待办工作？有哪些需要批改的试卷？')">
-              <div class="card-icon">📊</div>
-              <div class="card-title">查询工作状态</div>
-              <div class="card-sub">分析当前试卷待批改与管理状态</div>
-            </div>
-            <div class="preset-card" @click="usePreset('帮我查看当前企业的知识库里有哪些文档')">
-              <div class="card-icon">📚</div>
-              <div class="card-title">知识库检索</div>
-              <div class="card-sub">查询企业知识库中的文档资料</div>
-            </div>
-            <div class="preset-card" @click="usePreset('帮我创建一个关于安全生产的考试，包含单选和多选题')">
-              <div class="card-icon">✅</div>
-              <div class="card-title">创建新考试</div>
-              <div class="card-sub">基于材料智能生成安全生产考试试卷</div>
-            </div>
-            <div class="preset-card" @click="usePreset('查询工作上帝视角')">
-              <div class="card-icon">🔍</div>
-              <div class="card-title">查询工作上帝视角</div>
-              <div class="card-sub">分析当前试卷待批改与管理状态</div>
-            </div>
-          </div>
+          <WelcomePrompts @select-prompt="usePreset" />
         </div>
 
-        <template v-for="(m, idx) in currentMessages" :key="idx">
-          <!-- 普通消息气泡 -->
-          <MessageBubble
-            v-if="!m.actionRequired && !m.actionCard && !m.actionList && !m.examCard"
-            :role="m.role"
-            :content="m.content"
-            :username="userStore.username"
-            :quote="m.quote"
-            :is-thinking="m.isThinking"
-            :rag-sources="m.ai_rag_sources || []"
-            @show-source="showSource"
-            @feedback="submitFeedback"
-          />
-
-          <!-- 工具调用确认卡 -->
-          <ToolCallCard
-            v-else-if="m.actionRequired || m.actionCard || m.actionList"
-            :message="m"
-            :categories="examCategories"
-            @confirm="confirmToolCall"
-            @cancel="cancelToolCall"
-          />
-
-          <!-- 试卷导出卡 -->
-          <ExamCard
-            v-else-if="m.examCard"
-            :card="m.examCard"
-            :active="false"
-            @download="downloadExamCard"
-          />
+        <template v-for="item in currentMessages" :key="item.id ?? item._tmpId">
+          <!-- 用户消息 -->
+          <div v-if="item.role === 'user'" class="message-row user-row">
+            <MessageBubble
+              :role="item.role"
+              :content="item.content"
+              :username="userStore.username"
+              :is-streaming="item.isStreaming"
+            />
+          </div>
+          <!-- AI 消息 -->
+          <div v-else class="message-row assistant-row">
+            <!-- 1. 常规 Markdown 气泡（无论有无卡片，回复文本都正常展示） -->
+            <MessageBubble
+              v-if="item.content"
+              :role="item.role"
+              :content="item.content"
+              :username="userStore.username"
+              :quote="item.quote"
+              :is-thinking="item.isThinking"
+              :is-streaming="item.isStreaming"
+              :rag-sources="item.ragSources"
+              @show-source="showSource"
+              @feedback="submitFeedback"
+            />
+            <!-- 2. 独立结构化风险操作卡（只有显式下发 actionCard 时展示） -->
+            <ActionCard
+              v-if="item.actionCard && item.actionCard.title"
+              :card-data="item.actionCard"
+              @confirm="handleActionConfirm(item)"
+              @cancel="handleActionCancel(item)"
+            />
+            <!-- 3. 试卷生成导出卡 -->
+            <ExamCard
+              v-if="item.examCard"
+              :card-data="item.examCard"
+              @download="downloadExamCard"
+            />
+          </div>
         </template>
 
         <div v-if="sending" class="thinking-indicator">
@@ -146,35 +119,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, watch } from 'vue';
+import { ref, computed, nextTick, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { MagicStick } from '@element-plus/icons-vue';
 import { useUserStore } from '../../store/user';
 import request from '../../utils/request';
 import SessionSidebar from './components/SessionSidebar.vue';
 import MessageBubble from './components/MessageBubble.vue';
-import ToolCallCard from './components/ToolCallCard.vue';
+import ActionCard from './components/ActionCard.vue';
 import ExamCard from './components/ExamCard.vue';
+import WelcomePrompts from './components/WelcomePrompts.vue';
 import TraceDrawer from '../resources/components/TraceDrawer.vue';
 import GradingDrawer from '../exams/components/GradingDrawer.vue';
-
-interface ChatMessage {
-  id?: number;
-  role: 'user' | 'assistant';
-  content: string;
-  isThinking?: boolean;
-  quote?: string;
-  actionRequired?: boolean;
-  toolName?: string;
-  toolCallId?: string;
-  arguments?: any;
-  riskLevel?: string;
-  actionResolved?: boolean;
-  actionCard?: any;
-  actionList?: any[];
-  examCard?: ExamCardData | null;
-  ai_rag_sources?: any[];
-}
+import type { ChatMessage, ActionCardPayload, ExamCardData } from './types';
 
 interface ExamCardData {
   type: string;
@@ -208,8 +165,6 @@ const activeSource = ref<any>({});
 const gradingVisible = ref(false);
 const gradingExamId = ref<number | null>(null);
 const gradingExamTitle = ref('');
-
-const currentMessages = computed(() => messages.value);
 
 const stripActionBlocks = (t: string): string =>
   (t || '')
@@ -488,8 +443,10 @@ const send = async (customText?: string): Promise<void> => {
     role: 'assistant',
     content: '',
     quote: text.length > 30 ? text.substring(0, 30) + '...' : text,
-    isThinking: true
+    isThinking: true,
+    isStreaming: true
   };
+  streamingMsg.id = `tmp_${Date.now()}`;
   messages.value.push(streamingMsg);
   followScroll();
 
@@ -561,25 +518,68 @@ const send = async (customText?: string): Promise<void> => {
           streamingMsg.content += ev.text;
           followScroll();
         } else if (ev.type === 'action_required') {
-          // 移除 thinking 消息，插入工具确认卡
+          // 移除 thinking 消息，插入 actionCard 消息
           const idx = messages.value.indexOf(streamingMsg);
           if (idx !== -1) messages.value.splice(idx, 1);
+
+          // 构建结构化 ActionCardPayload
+          const actionTypeMap: Record<string, string> = {
+            create_exam_draft: 'create_exam',
+            create_question_draft: 'batch_questions',
+            delete_exam: 'delete_exam'
+          };
+          const riskLevelMap: Record<string, 'low' | 'medium' | 'high'> = {
+            high: 'high', medium: 'medium', low: 'low'
+          };
+          const toolName = ev.tool_name || 'unknown';
+          const actionType = actionTypeMap[toolName] || 'sensitive_operation';
+          const riskLevel = riskLevelMap[ev.risk_level] || 'medium';
+
+          // 根据工具名构建 displayFields
+          let displayFields: Array<{ label: string; value: string | number }> = [];
+          const args = ev.arguments || {};
+          if (toolName === 'create_exam_draft') {
+            displayFields = [
+              { label: '试卷标题', value: args.title || '—' },
+              { label: '题型数量', value: `${(args.specs || []).reduce((s: number, sp: any) => s + (sp.count || 0), 0)} 题` },
+              { label: '风险等级', value: riskLevel }
+            ];
+          } else if (toolName === 'create_question_draft') {
+            displayFields = [
+              { label: '出题材料', value: String(args.material || '').substring(0, 50) + (String(args.material || '').length > 50 ? '...' : '') },
+              { label: '题目数量', value: args.count || 5 },
+              { label: '风险等级', value: riskLevel }
+            ];
+          } else if (toolName === 'delete_exam') {
+            displayFields = [
+              { label: '操作类型', value: '删除试卷' },
+              { label: '试卷ID', value: args.exam_id || '—' },
+              { label: '风险等级', value: 'high' }
+            ];
+          }
+
+          const actionCard: ActionCardPayload = {
+            actionId: ev.tool_call_id || `action_${Date.now()}`,
+            actionType,
+            title: `确认：${riskLevel === 'high' ? '高' : riskLevel === 'medium' ? '中' : '低'}风险业务操作`,
+            summary: ev.message || `请确认是否执行 ${toolName}`,
+            riskLevel,
+            displayFields,
+            rawParams: args,
+            status: 'pending'
+          };
 
           messages.value.push({
             role: 'assistant',
             content: ev.message || '',
             quote,
-            actionRequired: true,
-            toolName: ev.tool_name,
-            toolCallId: ev.tool_call_id,
-            arguments: ev.arguments,
-            riskLevel: ev.risk_level || 'medium',
-            actionResolved: false,
-            ai_rag_sources: []
-          });
+            actionCard,
+            ragSources: []
+          } as ChatMessage);
           followScroll();
         } else if (ev.type === 'done') {
           streamingMsg.isThinking = false;
+          streamingMsg.isStreaming = false;
           if (ev.assistant_message_id) streamingMsg.id = ev.assistant_message_id;
           if (ev.user_message_id) {
             const um = [...messages.value].reverse().find(m => m.role === 'user' && !m.id);
@@ -595,6 +595,7 @@ const send = async (customText?: string): Promise<void> => {
         } else if (ev.type === 'error') {
           streamFailed = true;
           streamingMsg.isThinking = false;
+          streamingMsg.isStreaming = false;
           streamingMsg.content = `AI 服务响应超时或未开启，请稍后再试${ev.message ? '：' + ev.message : ''}`;
         }
       }
@@ -631,30 +632,30 @@ const send = async (customText?: string): Promise<void> => {
 };
 
 const confirmToolCall = async (msg: ChatMessage): Promise<void> => {
-  if (msg.actionResolved || sending.value) return;
+  if (msg.actionCard?.status !== 'pending' || sending.value) return;
   sending.value = true;
   try {
+    const toolName = msg.actionCard?.actionType || '';
     const res: any = await request.post('/api/v1/admin/ai/chat/execute_tool', {
-      tool_name: msg.toolName,
-      arguments: msg.arguments,
-      tool_call_id: msg.toolCallId,
+      tool_name: toolName,
+      arguments: msg.actionCard?.rawParams || {},
+      tool_call_id: msg.id?.toString() || '',
       message_id: msg.id ?? null
     });
 
-    msg.actionResolved = true;
+    if (msg.actionCard) msg.actionCard.status = 'confirmed';
 
-    if (msg.toolName === 'create_exam_draft' && res.data?.exam_id) {
+    if (toolName === 'create_exam_draft' && res.data?.exam_id) {
       ElMessage.success(`试卷草稿创建成功，ID: ${res.data.exam_id}`);
-    } else if (msg.toolName === 'create_question_draft' && res.data?.question_ids) {
+    } else if (toolName === 'create_question_draft' && res.data?.question_ids) {
       ElMessage.success(`已成功生成 ${res.data.count} 道题目草稿`);
-    } else if (msg.toolName === 'delete_exam' && res.data?.deleted_id) {
+    } else if (toolName === 'delete_exam' && res.data?.deleted_id) {
       ElMessage.success(`试卷已删除: ${res.data.title}`);
     } else {
       ElMessage.success('操作已执行');
     }
 
-    // 发送系统回执给 AI
-    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${msg.toolName}，后端返回的结果是：${JSON.stringify(res.data || res)}`;
+    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${toolName}，后端返回的结果是：${JSON.stringify(res.data || res)}`;
     await send(systemMsg);
 
   } catch (e: any) {
@@ -665,15 +666,29 @@ const confirmToolCall = async (msg: ChatMessage): Promise<void> => {
 };
 
 const cancelToolCall = async (msg: ChatMessage): Promise<void> => {
-  msg.actionResolved = true;
-  const systemMsg = `[系统消息]: 我拒绝了操作 ${msg.toolName} 的执行。`;
+  if (msg.actionCard) msg.actionCard.status = 'cancelled';
+  const toolName = msg.actionCard?.actionType || '未知操作';
+  const systemMsg = `[系统消息]: 我拒绝了操作 ${toolName} 的执行。`;
   await send(systemMsg);
+};
+
+// 新的统一处理器（替代旧的 confirmToolCall / cancelToolCall）
+const handleActionConfirm = async (card: ActionCardPayload): Promise<void> => {
+  // 找到对应的消息
+  const msg = messages.value.find(m => m.actionCard === card);
+  if (!msg) return;
+  await confirmToolCall(msg);
+};
+
+const handleActionCancel = (card: ActionCardPayload): void => {
+  const msg = messages.value.find(m => m.actionCard === card);
+  if (msg) cancelToolCall(msg);
 };
 
 const downloadExamCard = async (card: ExamCardData): Promise<void> => {
   try {
     const token = localStorage.getItem('tiku_tob_token') || '';
-    const res = await fetch(card.download_url, {
+    const res = await fetch(card.downloadUrl, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) throw new Error('下载失败');

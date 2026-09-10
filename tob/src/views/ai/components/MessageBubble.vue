@@ -2,46 +2,63 @@
  * [变更日志]
  * 修改时间：2026-09-10
  * AI模型：Agnes-2.5-Flash
- * 修改内容：[新建消息气泡组件 - Markdown 渲染 + 复制/反馈按钮]
+ * 修改内容：[重构消息气泡 - 打字机光标 + Markdown + 悬浮操作栏]
 -->
 <template>
-  <div class="message-bubble" :class="role">
-    <div v-if="role === 'user'" class="user-avatar">
-      {{ username.substring(0, 1).toUpperCase() }}
+  <div class="message-bubble" :class="[role, { 'is-streaming': isStreaming }]">
+    <div class="avatar-col">
+      <div v-if="role === 'user'" class="user-avatar">
+        {{ username.substring(0, 1).toUpperCase() }}
+      </div>
+      <div v-else class="ai-avatar">
+        <el-icon><MagicStick /></el-icon>
+      </div>
     </div>
-    <div v-else class="ai-avatar">
-      <el-icon><MagicStick /></el-icon>
-    </div>
-    <div class="content-cell">
+
+    <div class="content-col">
       <div class="sender-name">{{ role === 'user' ? username : 'AI 智能助管' }}</div>
+
       <div v-if="quote" class="quote-bar">| 回复 全Ai系统: {{ quote }}</div>
+
+      <!-- 常规 Markdown 气泡 -->
       <div
         v-if="content && content.trim()"
         class="bubble-content markdown-body"
+        :class="{ 'is-streaming': isStreaming }"
         v-html="renderedContent"
-      />
-      <div v-if="role === 'assistant' && !isThinking" class="message-actions">
+      >
+      </div>
+
+      <!-- 打字机光标 -->
+      <span v-if="isStreaming" class="typing-cursor"></span>
+
+      <!-- 悬浮操作栏 -->
+      <div v-if="role === 'assistant' && !isThinking && content" class="message-actions">
         <el-tooltip content="复制内容" placement="top">
-          <span class="action-icon" @click="copyContent">
+          <span class="action-btn" @click="copyContent">
             <el-icon><DocumentCopy /></el-icon>
           </span>
         </el-tooltip>
         <el-divider direction="vertical" />
         <el-tooltip content="有用" placement="top">
-          <span class="action-icon" @click="submitFeedback('up')" style="font-size: 14px;">
+          <span class="action-btn" @click="submitFeedback('up')">
             <svg viewBox="0 0 24 24" width="1em" height="1em" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
           </span>
         </el-tooltip>
         <el-tooltip content="无用" placement="top">
-          <span class="action-icon" @click="submitFeedback('down')" style="font-size: 14px;">
+          <span class="action-btn" @click="submitFeedback('down')">
             <svg viewBox="0 0 24 24" width="1em" height="1em" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></svg>
           </span>
         </el-tooltip>
       </div>
-      <div v-if="isThinking" class="thinking-spinner">
+
+      <!-- 思考中状态 -->
+      <div v-if="isThinking" class="thinking-indicator">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
         <span style="margin-left: 8px; color: #64748b; font-size: 13px;">正在思考中...</span>
       </div>
+
+      <!-- 知识溯源 -->
       <div v-if="ragSources && ragSources.length" class="sources">
         <el-tag
           v-for="(s, i) in ragSources"
@@ -64,26 +81,19 @@ import { computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { MagicStick, DocumentCopy } from '@element-plus/icons-vue';
 import { marked } from 'marked';
+import type { RagSource } from '../types';
 
-interface RagSource {
-  document_id?: number;
-  file_name?: string;
-  document_name?: string;
-  chunk_content?: string;
-  similarity?: number;
-  similarity_score?: number;
-}
-
-const props = defineProps<{
+defineProps<{
   role: 'user' | 'assistant';
   content: string;
   username: string;
   quote?: string;
   isThinking?: boolean;
+  isStreaming?: boolean;
   ragSources?: RagSource[];
 }>();
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'show-source', source: RagSource): void;
   (e: 'feedback', rating: 'up' | 'down'): void;
 }>();
@@ -118,6 +128,10 @@ const submitFeedback = (rating: 'up' | 'down') => {
   flex-direction: row-reverse;
 }
 
+.avatar-col {
+  flex-shrink: 0;
+}
+
 .user-avatar {
   width: 36px;
   height: 36px;
@@ -128,7 +142,6 @@ const submitFeedback = (rating: 'up' | 'down') => {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  flex-shrink: 0;
 }
 
 .ai-avatar {
@@ -141,10 +154,9 @@ const submitFeedback = (rating: 'up' | 'down') => {
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  flex-shrink: 0;
 }
 
-.content-cell {
+.content-col {
   flex: 1;
   min-width: 0;
 }
@@ -165,12 +177,31 @@ const submitFeedback = (rating: 'up' | 'down') => {
   font-size: 14px;
   max-width: 85%;
   border: 1px solid #e2e8f0;
+  position: relative;
 }
 
 .message-bubble.user .bubble-content {
   background: #e0f2fe;
   border-color: #bae6fd;
   color: #0369a1;
+  margin-left: auto;
+}
+
+/* 流式输入时的光标闪烁 */
+.bubble-content.is-streaming::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: #0284c7;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .quote-bar {
@@ -189,21 +220,30 @@ const submitFeedback = (rating: 'up' | 'down') => {
   align-items: center;
   gap: 8px;
   margin-top: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.action-icon {
+.message-bubble:hover .message-actions {
+  opacity: 1;
+}
+
+.action-btn {
   cursor: pointer;
   color: #94a3b8;
   transition: color 0.15s;
   display: flex;
   align-items: center;
+  padding: 4px;
+  border-radius: 4px;
 }
 
-.action-icon:hover {
+.action-btn:hover {
   color: #0284c7;
+  background: #f1f5f9;
 }
 
-.thinking-spinner {
+.thinking-indicator {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -214,7 +254,7 @@ const submitFeedback = (rating: 'up' | 'down') => {
   max-width: 85%;
 }
 
-.thinking-spinner .dot {
+.thinking-indicator .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -222,8 +262,8 @@ const submitFeedback = (rating: 'up' | 'down') => {
   animation: bounce 1.4s infinite ease-in-out both;
 }
 
-.thinking-spinner .dot:nth-child(1) { animation-delay: -0.32s; }
-.thinking-spinner .dot:nth-child(2) { animation-delay: -0.16s; }
+.thinking-indicator .dot:nth-child(1) { animation-delay: -0.32s; }
+.thinking-indicator .dot:nth-child(2) { animation-delay: -0.16s; }
 
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0); }
@@ -266,6 +306,7 @@ const submitFeedback = (rating: 'up' | 'down') => {
   border-radius: 8px;
   overflow-x: auto;
   font-size: 13px;
+  margin: 8px 0;
 }
 
 .markdown-body :deep(pre code) {

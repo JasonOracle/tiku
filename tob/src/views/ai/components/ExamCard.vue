@@ -2,7 +2,7 @@
  * [变更日志]
  * 修改时间：2026-09-10
  * AI模型：Agnes-2.5-Flash
- * 修改内容：[新建试卷导出卡片组件 - exam_card 协议渲染]
+ * 修改内容：[试卷导出卡片组件 - exam_card 协议渲染]
 -->
 <template>
   <div class="exam-card" :class="{ 'exam-card--active': active }">
@@ -13,19 +13,19 @@
         </svg>
       </div>
       <div class="exam-card__info">
-        <div class="exam-card__title">{{ card.title }}</div>
+        <div class="exam-card__title">{{ cardData.title }}</div>
         <div class="exam-card__meta">
-          <span>{{ card.question_count || 0 }} 题</span>
+          <span>{{ cardData.questionCount || 0 }} 题</span>
           <span class="exam-card__dot">·</span>
-          <span>{{ card.total_score || 0 }} 分</span>
-          <span v-if="card.created_at" class="exam-card__dot">·</span>
-          <span v-if="card.created_at">{{ card.created_at }}</span>
+          <span>{{ cardData.totalScore || 0 }} 分</span>
+          <span v-if="cardData.createdAt" class="exam-card__dot">·</span>
+          <span v-if="cardData.createdAt">{{ cardData.createdAt }}</span>
           <span class="exam-card__format">Word</span>
         </div>
       </div>
     </div>
     <div class="exam-card__actions">
-      <button class="exam-card__btn" @click="$emit('download', card)" title="下载试卷 (Word 文档)">
+      <button class="exam-card__btn" @click="$emit('download', cardData)" title="下载试卷 (Word 文档)">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
           <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
         </svg>
@@ -36,18 +36,10 @@
 </template>
 
 <script setup lang="ts">
-export interface ExamCardData {
-  type: string;
-  exam_id: number;
-  title: string;
-  total_score: number;
-  question_count: number;
-  download_url: string;
-  created_at?: string;
-}
+import type { ExamCardData } from '../types';
 
 defineProps<{
-  card: ExamCardData;
+  cardData: ExamCardData;
   active?: boolean;
 }>();
 
