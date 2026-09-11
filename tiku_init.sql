@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS `resources` (
   `content` TEXT NOT NULL,
   `options` JSON NULL,
   `correct_answer` JSON NULL,
+  `explanation` TEXT NULL COMMENT '答案解析/采分要点',
   `score` INT DEFAULT 10,
   `creator_id` INT NULL,
   `is_deleted` TINYINT(1) DEFAULT 0,

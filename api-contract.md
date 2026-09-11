@@ -1,4 +1,4 @@
-# 智题库 (TiKu) v1.4+ 接口契约规范 (API Contract Specification)
+﻿# 智题库 (TiKu) v1.4+ 接口契约规范 (API Contract Specification)
 
 > **版本规范**：本文档基于当前生产环境的纯 SaaS 架构与直观业务语义编写。统一规范多租户隔离 Header、AI 工具链与知识库独立调试端点。
 
@@ -193,4 +193,32 @@
     }
   }
   ```
+- **核心契约**：接口会直接在 `data` 中返回 `record_id` 与核算后的 `score`，前端可利用此 `record_id` 实现无缝零延迟跳转成绩报告页。
+
+---
+
+## 7. 答案解析全链路 (Explaination Field Contract)
+
+> **字段规范**：`resources.explanation`（TEXT，选填）持久化题目答案解析/采分要点。由 B 端题目管理人工录入、AI 出题/AI 组卷自动产出；C 端成绩报告与 B 端阅卷大厅均回显。存量库经 `backend/app/services/db_migrate.ensure_schema()` 幂等补列（应用启动时自动执行）。
+
+### 7.1 资源条目新增/更新（含解析）
+- **POST** `/api/v1/admin/resources` / **PUT** `/api/v1/admin/resources/{rid}` / **POST** `/api/v1/admin/resources/batch`
+- **Request Body** 支持可选字段 `explanation`（string，选填；留空后端落库为 `null`）。
+- **Response** `_res_out` 行结构新增 `explanation`（string，无解析时为空串 `""`）。
+
+### 7.2 AI 出题 / AI 组卷（自动产出解析）
+- **POST** `/api/v1/admin/ai/questions/generate`、**POST** `/api/v1/admin/ai/exams/generate`
+- **说明**：模型 Prompt 现强制要求每题输出 `explanation`（50-150 字解析/采分要点），响应 `data.questions[]` 透传 `explanation`；组卷落库时写入 `ResourceItem.explanation`。
+
+### 7.3 聊天工具链出题（含解析）
+- **POST** `/api/v1/admin/ai/chat/execute_tool`（`create_exam_draft` / `create_question_draft`）
+- 工具 schema `questions[].explanation` 为必输出属性；执行落库写入解析字段。
+
+### 7.4 C 端成绩报告回显解析
+- **GET** `/api/v1/member/task-records/{record_id}`
+- 响应 `data.items[]` 每项新增 `correct_answer`（标准答案）与 `explanation`（解析）；C 端报告页逐题对照展示，核验中/已提交/已核验三态均可见。
+
+### 7.5 阅卷大厅明细回显解析
+- **GET** `/api/v1/admin/verifications/{record_id}`
+- 响应 `data.items[]` 每项新增 `explanation`，供批阅人定分参考。
 - **核心契约**：接口会直接在 `data` 中返回 `record_id` 与核算后的 `score`，前端可利用此 `record_id` 实现无缝零延迟跳转成绩报告页。

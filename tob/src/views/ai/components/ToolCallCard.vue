@@ -74,6 +74,9 @@
             <div class="draft-row" style="margin-top: 6px">
               <span class="draft-label">答案:</span> {{ formatQuestion(q).answerText }}
             </div>
+            <div v-if="q.explanation" class="draft-row draft-explanation">
+              <span class="draft-label">解析:</span> {{ q.explanation }}
+            </div>
 
           </el-collapse-item>
         </el-collapse>
@@ -568,6 +571,16 @@ const handleConfirm = () => {
 .draft-label {
   font-weight: 700;
   color: #475569;
+}
+.draft-explanation {
+  background: #fffbeb;
+  border-left: 3px solid #fde68a;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: #78350f;
+}
+.draft-explanation .draft-label {
+  color: #b45309;
 }
 
 .action-code pre {

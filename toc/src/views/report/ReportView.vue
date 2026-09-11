@@ -1,6 +1,9 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-11
+ * AI模型：Codex 3
+ * 修改内容：[每题作答明细恢复「标准答案 + 答案解析」对照展示：新增 correct-answer 与 explanation 区块，绿/琥珀双色卡片；无解析数据时显示"暂无解析"占位；核验中/已提交/已核验三态均可查看]
+ * 修改时间：2026-09-11
  * AI模型：Gemini 系列
  * 修改内容：[1. 增加 passLabel 计算属性区分 submitted（自动出分）与 verified（人工核验）的成绩徽章文案；2. 修复成绩为 null 时 pass-badge 显示"已核验"的误导问题]
  * 修改时间：2026-09-09
@@ -93,6 +96,17 @@
             <span class="lbl">我的答案</span>
             <span class="val">{{ fmtAnswer(item.user_answer) }}</span>
           </div>
+          <div v-if="item.correct_answer != null || item.explanation" class="ans-stack">
+            <div v-if="item.correct_answer != null" class="ans-box correct">
+              <span class="lbl">标准答案</span>
+              <span class="val">{{ fmtAnswer(item.correct_answer) }}</span>
+            </div>
+            <div v-if="item.explanation" class="ans-box explanation">
+              <span class="lbl">答案解析</span>
+              <span class="val">{{ item.explanation }}</span>
+            </div>
+          </div>
+          <div v-else class="no-explanation">暂无解析</div>
         </div>
       </div>
     </main>
@@ -378,6 +392,30 @@ onMounted(async () => {
 .ans-box.user {
   background: #f0f9ff;
   border: 1px solid #bae6fd;
+}
+
+.ans-box.correct {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.ans-box.explanation {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.ans-box.correct .lbl {
+  color: #15803d;
+}
+
+.ans-box.explanation .lbl {
+  color: #b45309;
+}
+
+.no-explanation {
+  font-size: 12px;
+  color: #94a3b8;
+  padding: 2px 2px 0;
 }
 
 .ans-box .lbl {

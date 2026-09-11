@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-11
+AI模型：Codex 3
+修改内容：[lifespan 启动流程接入 db_migrate.ensure_schema()，幂等补齐存量库缺失列（当前为 resources.explanation），create_all 之后执行]
 修改时间：2026-09-09
 AI模型：Muse Spark
 修改内容：[彻底清洗：移除旧路由挂载与旧表补列，仅保留多租户 SaaS 路由]
@@ -10,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from contextlib import asynccontextmanager
+from app.services.db_migrate import ensure_schema
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.models import *  # noqa: F401,F403 触发建表
@@ -25,6 +29,11 @@ def init_db_safely():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db_safely()
+    # 幂等增量迁移：存量库补列（新库 create_all 已建好时自动跳过）
+    try:
+        ensure_schema()
+    except Exception as e:
+        print(f"[Warning] schema migration failed: {e}")
     yield
 
 # 统一登录

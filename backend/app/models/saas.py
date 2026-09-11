@@ -1,6 +1,9 @@
 """
 [变更日志]
 修改时间：2026-09-11
+AI模型：Codex 3
+修改内容：[ResourceItem 新增 explanation 列：持久化题目答案解析/采分要点，支撑 B 端出题表单、AI 出题/组卷与 C 端成绩报告解析闭环]
+修改时间：2026-09-11
 AI模型：Gemini 系列
 修改内容：[在 ResourceItem 模型中新增 source 字段 (ai/manual/import)，准确持久化与区分 AI 出题、人工录入与 Excel 导入数据来源]
 [变更日志]
@@ -96,6 +99,7 @@ class ResourceItem(Base):
     content = Column(Text, nullable=False, comment="条目题干/事务描述")
     options = Column(JSON, nullable=True)
     correct_answer = Column(JSON, nullable=True)
+    explanation = Column(Text, nullable=True, comment="答案解析/采分要点（AI生成或人工录入，C端报告与阅卷参考）")
     score = Column(Integer, default=10)
     creator_id = Column(Integer, ForeignKey("sys_user.id", ondelete="SET NULL"), nullable=True)
     is_deleted = Column(Boolean, default=False)

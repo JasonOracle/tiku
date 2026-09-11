@@ -1,4 +1,4 @@
-# 智题库 (TiKu) v1.4+ 技术规格说明书 (Technical Specification)
+﻿# 智题库 (TiKu) v1.4+ 技术规格说明书 (Technical Specification)
 
 ## 1. 架构总览与标准项目结构
 系统基于前后端分离的多租户 SaaS 架构，技术栈与核心代码组织如下：
@@ -43,6 +43,8 @@ tiku/
 - **`sys_user_profile`**：用户通用画像（`user_id`, `nickname`, `gender`, `age`, `occupation`, `bio`），用于全平台画像复用与 AI 助手感知。
 - **`sys_tenant_user`**：租户与成员绑定关系表（`tenant_id`, `user_id`, `role: 'owner'|'admin'|'member'`, `status`）。
 - **业务资产表**（`tasks`, `resources`, `kb_documents`, `kb_chunks`, `task_records`）：全部强制包含 `tenant_id`。
+- **答案解析字段**：
+- **`resources` 表含 explanation（TEXT，选填），持久化题目答案解析/采分要点。B 端题目管理人工录入、AI 出题/AI 组卷自动产出；C 端 GET /member/task-records/{id} 成绩报告与 B 端阅卷大厅抽屉均回显，作为批阅参考与复盘依据。存量库经 ackend/app/services/db_migrate.ensure_schema() 幂等补列（应用启动时自动执行）。
 
 ### 2.2 上下文穿透与安全网关
 - **Header 守卫**：除登录接口外，所有业务请求必须在 Header 中携带 `X-Tenant-ID: <tenant_id>`。
@@ -92,7 +94,7 @@ AI 助管通过统一网关 `backend/app/api/saas/ai.py` 调度，核心贯彻�
 ### 4.3 写操作工具 (Write Tools)
 此类工具用于变更数据库资产，必须经过前端可视化卡片二次确认：
 - **`create_exam_draft`**：智能组卷草稿。模型输出包含全量题目列表（题型/题干/选项/答案/分值）的结构化 JSON。
-- **`create_question_draft`**：批量或单题出题草稿。模型输出同样严格剔除“文字解析”与“踩分点”等冗余字段，仅保留极简标准答案。
+- **create_question_draft**：批量或单题出题草稿。模型输出含题型/题干/选项/标准答案/**答案解析 (explanation)**/分值的结构化 JSON，与 create_exam_draft 同构。
 - **`delete_exam`** 与 **`delete_question`**：安全软删除工具。
 - **执行闭环**：前端卡片确认后，请求 `POST /api/v1/saas/ai/chat/execute_tool`，系统完成事务落库并更新消息状态为 `executed`。
 

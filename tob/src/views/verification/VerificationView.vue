@@ -149,6 +149,12 @@
               <span class="val">{{ formatAnswer(item.correct_answer) }}</span>
             </div>
 
+            <!-- 答案解析：题目标配的解析/采分要点，辅助批阅人定分参考 -->
+            <div v-if="item.explanation" class="explanation-box">
+              <span class="label">答案解析: </span>
+              <span class="val">{{ item.explanation }}</span>
+            </div>
+
             <!-- 考生真实作答内容 -->
             <div class="user-answer-box">
               <span class="label">考生答卷内容: </span>
@@ -474,6 +480,27 @@ onMounted(loadRecords);
 .correct-box .val {
   color: #16a34a;
   font-weight: 700;
+}
+
+.explanation-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.explanation-box .label {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.explanation-box .val {
+  color: #78350f;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .user-answer-box {

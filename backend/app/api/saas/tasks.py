@@ -1,6 +1,9 @@
 """
 [变更日志]
 修改时间：2026-09-11
+AI模型：Codex 3
+修改内容：[1. _res_out 改读持久化 r.explanation（替代硬编码空串），create/batch/update/copy 资源接口全链路读写 explanation；2. verify_detail 明细 items 补 explanation，供阅卷大厅批阅参考]
+修改时间：2026-09-11
 AI模型：Gemini 系列
 修改内容：[1. submit_task 接口增加客观题自动评分引擎：单选/多选/判断精确比对 correct_answer 立即出分，填空题宽松文本比对，简答题跳过交核验；2. 总分写入 rec.score 并在返回数据中携带 score 字段]
 [变更日志]
@@ -56,10 +59,12 @@ def _res_out(r: ResourceItem) -> Dict[str, Any]:
     ans = r.correct_answer or []
     # 优先使用持久化 source 字段，若空则检测是否有切片溯源智能兜底判断
     src = getattr(r, "source", None) or ("ai" if (r.ai_rag_sources and len(r.ai_rag_sources) > 0) else "manual")
+    # explanation 持久化列直读，存量无解析数据输出空串兼容前端占位
+    explanation = getattr(r, "explanation", None) or ""
     return {"id": r.id, "type": r.type, "title": r.content, "content": r.content,
             "options": r.options or [], "answer": ans, "correct_answer": ans,
             "score": r.score or 10, "category_id": r.category_id, "difficulty": "medium",
-            "locked": False, "explanation": "", "grading_points": [], "source": src,
+            "locked": False, "explanation": explanation, "grading_points": [], "source": src,
             "source_ref": [], "ai_rag_sources": r.ai_rag_sources or [],
             "creator_id": r.creator_id,
             "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else ""}
@@ -118,6 +123,7 @@ def create_resource(payload: Dict[str, Any], ctx: dict = Depends(require_admin),
     r = ResourceItem(tenant_id=ctx["tenant_id"], type=str(payload.get("type") or "single_choice"),
                      content=content, options=payload.get("options") or [],
                      correct_answer=payload.get("correct_answer") or payload.get("answer") or [],
+                     explanation=(payload.get("explanation") or "").strip() or None,
                      score=int(payload.get("score") or 10),
                      category_id=payload.get("category_id"),
                      source=src,
@@ -141,6 +147,7 @@ def batch_create(payload: List[Dict[str, Any]], ctx: dict = Depends(require_admi
         r = ResourceItem(tenant_id=ctx["tenant_id"], type=str(it.get("type") or "single_choice"),
                          content=content, options=it.get("options") or [],
                          correct_answer=it.get("correct_answer") or it.get("answer") or [],
+                         explanation=(it.get("explanation") or "").strip() or None,
                          score=int(it.get("score") or 10), category_id=it.get("category_id"),
                          source=src,
                          creator_id=ctx["user"].id, ai_rag_sources=it.get("ai_rag_sources") or [])
@@ -192,6 +199,7 @@ def copy_resource(rid: int, ctx: dict = Depends(require_admin), db: Session = De
         raise HTTPException(status_code=404, detail="资源不存在")
     r = ResourceItem(tenant_id=src.tenant_id, type=src.type, content=src.content,
                      options=src.options, correct_answer=src.correct_answer, score=src.score,
+                     explanation=src.explanation,
                      category_id=src.category_id, creator_id=ctx["user"].id,
                      ai_rag_sources=src.ai_rag_sources or [])
     db.add(r)
@@ -209,7 +217,7 @@ def update_resource(rid: int, payload: Dict[str, Any], ctx: dict = Depends(requi
         raise HTTPException(status_code=404, detail="资源不存在")
     if payload.get("content") or payload.get("title"):
         r.content = str(payload.get("content") or payload.get("title"))
-    for k in ("type", "options", "score", "category_id", "ai_rag_sources"):
+    for k in ("type", "options", "score", "category_id", "ai_rag_sources", "explanation"):
         if k in payload and payload[k] is not None:
             setattr(r, k, payload[k])
     if "correct_answer" in payload or "answer" in payload:
@@ -738,6 +746,7 @@ def verify_detail(record_id: int, ctx: dict = Depends(require_admin),
         q_type = "short"
         correct_ans = None
         q_score = 10
+        explanation = ""
         if rid:
             r = db.query(ResourceItem).filter(ResourceItem.id == rid).first()
             if r:
@@ -745,11 +754,13 @@ def verify_detail(record_id: int, ctx: dict = Depends(require_admin),
                 q_type = r.type
                 correct_ans = r.correct_answer
                 q_score = r.score or 10
+                explanation = getattr(r, "explanation", None) or ""
         items.append({
             "resource_id": rid,
             "content": content,
             "type": q_type,
             "correct_answer": correct_ans,
+            "explanation": explanation,
             "score": q_score,
             "answer": ans
         })

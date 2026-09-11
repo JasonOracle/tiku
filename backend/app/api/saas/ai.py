@@ -1,6 +1,9 @@
 """
 [变更日志]
 修改时间：2026-09-11
+AI模型：Codex 3
+修改内容：[恢复答案解析全链路：1. ai_questions_generate_compat 与 ai_exams_generate_compat 的 Prompt schema 重新要求输出 explanation 字段并随响应透传；2. AI 组卷与工具执行 (create_exam_draft/create_question_draft) 落库 ResourceItem.explanation；3. TOOL_DEFINITIONS 两工具 questions[] 加 explanation 属性]
+修改时间：2026-09-11
 AI模型：Gemini 系列
 修改内容：[彻底移除 AI 出题与 AI 智能组卷中的「踩分点」与「文字解析」模块：1. 修正 ai_questions_generate_compat 与 ai_exams_generate_compat 提示词结构，聚焦高质量题干、选项与严格标准答案；2. 清理响应与落库模型中冗余的 explanation 与 grading_points，简答题以标准答案全文作为直接核验基准]
 [变更日志]
@@ -237,7 +240,8 @@ def ai_questions_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(re
         "2. title: 题干描述；\n"
         "3. options: 选项数组，格式为 [{\"key\": \"A\", \"text\": \"选项内容\"}, ...]，单选与多选必填4个选项；判断/填空/简答请留空 []；\n"
         "4. answer: 正确标准答案数组，单选如 [\"A\"]，多选如 [\"A\", \"B\"]，判断如 [\"正确\"] 或 [\"错误\"]，填空题为各空标准答案数组，简答题为参考标准答案全文；\n"
-        "5. score: 本题分值(数字，默认10)。"
+        "5. explanation: 答案解析(字符串)：简要说明正确答案依据、易错点或采分要点，50-150字，不得编造与材料矛盾的内容；\n"
+        "6. score: 本题分值(数字，默认10)。"
     )
 
     if ai_available():
@@ -250,7 +254,7 @@ def ai_questions_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(re
                     f"{prompt_schema}\n"
                     f"只输出 JSON 数组，严禁包含任何其他修饰语。"
                 ),
-                system="你是顶级企业培训出题专家，负责生成高水准原创试题。必须严格输出包含 title、options、answer 的标准 JSON 数组。",
+                system="你是顶级企业培训出题专家，负责生成高水准原创试题。必须严格输出包含 title、options、answer、explanation 的标准 JSON 数组，每题必须附带专业准确的答案解析。",
                 json_mode=True, db=db, tenant_id=tid,
             )
             raw_items = extract_json(raw) or []
@@ -300,6 +304,7 @@ def ai_questions_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(re
                     "options": norm_opts,
                     "answer": ans_list,
                     "correct_answer": ans_list,
+                    "explanation": str(it.get("explanation") or "").strip(),
                     "score": int(it.get("score") or 10),
                     "ai_rag_sources": sources
                 })
@@ -353,7 +358,8 @@ def ai_exams_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(requir
         "2. title: 题目题干描述；\n"
         "3. options: 选项对象列表，格式为 [{\"key\": \"A\", \"text\": \"选项内容\"}, ...]，单选与多选必填4个选项；判断/填空/简答题请留空列表 []；\n"
         "4. answer: 正确标准答案数组，单选题如 [\"A\"]，多选题如 [\"A\", \"B\"]，判断题如 [\"正确\"] 或 [\"错误\"]，填空题为各空标准答案数组，简答题为参考标准答案全文；\n"
-        "5. score: 本题分值(数字，默认10)。"
+        "5. explanation: 答案解析(字符串)：简要说明正确答案依据、易错点或采分要点，50-150字；\n"
+        "6. score: 本题分值(数字，默认10)。"
     )
 
     if ai_available():
@@ -416,6 +422,7 @@ def ai_exams_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(requir
                     "options": norm_opts,
                     "answer": ans_list,
                     "correct_answer": ans_list,
+                    "explanation": str(it.get("explanation") or "").strip(),
                     "score": int(it.get("score") or 10)
                 })
         except (AiServiceError, Exception):
@@ -466,6 +473,7 @@ def ai_exams_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(requir
             tenant_id=tid, type=r_type, content=q["title"],
             options=q.get("options") or [],
             correct_answer=q.get("answer") or [],
+            explanation=(q.get("explanation") or "").strip() or None,
             score=q.get("score") or 10,
             category_id=payload.get("category_id"),
             creator_id=ctx["user"].id,
@@ -486,6 +494,7 @@ def ai_exams_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(requir
             "options": q["options"],
             "answer": q["answer"],
             "correct_answer": q["answer"],
+            "explanation": q.get("explanation") or "",
             "score": q["score"]
         })
 
@@ -785,9 +794,10 @@ TOOL_DEFINITIONS = [
                                     "items": {"type": "string"},
                                     "description": "正确答案数组（单选如['A']，多选如['A','B']，判断如['正确']或['错误']，简答/填空传参考关键词或答案）"
                                 },
+                                "explanation": {"type": "string", "description": "答案解析：正确答案依据/易错点/采分要点，50-150字"},
                                 "score": {"type": "integer", "description": "本题分值，默认10分"}
                             },
-                            "required": ["type", "title", "answer"]
+                            "required": ["type", "title", "answer", "explanation"]
                         }
                     }
                 },
@@ -1288,6 +1298,7 @@ def execute_tool_endpoint(
                     content=q_content,
                     options=q_opts,
                     correct_answer=q_ans,
+                    explanation=(str(q.get("explanation") or "")).strip() or None,
                     score=q_score,
                     category_id=category_id,
                     creator_id=uid,

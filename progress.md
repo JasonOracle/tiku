@@ -1,6 +1,22 @@
 ﻿# 智题库 (TiKu) 核心研发进展与版本里程碑 (Progress Log)
 
 ---
+## 📌 答案解析全链路（resources.explanation 字段 + 前端五处回显 + 文档同源）2026-09-11 23:43:31
+
+- [x] **数据库层**：esources 表新增 explanation（TEXT，选填）列；现网库已 ALTER，	iku_init.sql 全量 Schema 同步；新增 ackend/app/services/db_migrate.py 幂等补列助手，挂进 main.py lifespan 启动钩子，存量库零停机自动对齐。
+- [x] **后端全链路读写**：
+  - 	asks.py：_res_out 改读持久化 .explanation（替代硬编码空串）；create / batch / update / copy / verify_detail 全链路读写该字段。
+  - member.py：C 端成绩明细 GET /member/task-records/{id} 的 items 补 correct_answer + explanation（提交后复盘场景，核验中/已提交/已核验三态均可见）。
+  - i.py：两条 AI 出题/组卷接口 + 聊天工具链（create_exam_draft / create_question_draft）的 Prompt schema、TOOL_DEFINITIONS、落库、响应透传全部加回 explanation（50-150 字解析/采分要点）。
+- [x] **前端五处回显**：
+  - B 端 ResourcesView.vue：普通新建/编辑表单新增「答案解析」多行输入框（全题型通用，选填），编辑回填 + 保存带 payload。
+  - B 端 ResourcePreview.vue：题目预览组件恢复琥珀色「答案解析」卡片（AI 出题/AI 组卷审阅清单共用），explanation 为空不渲染。
+  - B 端 AI 聊天 ToolCallCard.vue：组卷/出题确认卡每题折叠项加「解析」行。
+  - B 端阅卷大厅 VerificationView.vue：批阅抽屉每题在「标准参考答案」下方加「答案解析」块，辅助定分。
+  - C 端 ReportView.vue：成绩报告每题加「标准答案（绿）+ 答案解析（琥珀）」对照区块 + 「暂无解析」占位。
+- [x] **文档同源**：	ech-spec.md 数据模型补字段说明并修正 4.3 工具描述自相矛盾（"剔除解析"→"含解析"）；pi-contract.md 新增第 7 章「答案解析全链路」契约；product.md 补 C 端能力描述。
+- [x] **验证**：	oc + 	ob 双端 pnpm run build（含 ue-tsc --noEmit 类型检查）全绿；现有测试不断言该字段，无回归风险。
+
 ## 📌 C 端答题卡抽屉（移动端题目回溯半屏弹窗）2026-09-11 落地
 
 - [x] **TaskView.vue 答题卡抽屉全链路（纯前端，零后端改动）**：

@@ -1,6 +1,9 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-11
+ * AI模型：Codex 3
+ * 修改内容：[恢复答案解析展示区块：题目预览底部新增琥珀色「答案解析」卡片，explanation 为空时不渲染，兼容 B 端题目管理/AI 出题/AI 组卷审阅清单与试卷审阅]
+ * 修改时间：2026-09-11
  * AI模型：Gemini 系列
  * 修改内容：[根据用户最新明确规范：彻底移除所有试题预览中的「踩分点」与「文字解析」模块，无论简答还是客观题均仅保留标准答案与选项高亮]
  * [变更日志]
@@ -53,6 +56,12 @@
       <span class="compact-label">标准答案：</span>
       <span>{{ shortAnswerText }}</span>
     </div>
+
+    <!-- 答案解析：全题型通用，选填字段，有内容才渲染 -->
+    <div v-if="explanationText" class="explanation-block">
+      <span class="explanation-label">答案解析</span>
+      <p class="explanation-text">{{ explanationText }}</p>
+    </div>
   </div>
 </template>
 
@@ -64,6 +73,15 @@ const props = defineProps<{
 }>();
 
 const q = computed(() => props.resource || {});
+
+// 答案解析：直读 explanation 字段（后端 _res_out 与 AI 生成接口均已透传）
+const explanationText = computed(() => {
+  const raw = q.value.explanation;
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw.trim();
+  if (Array.isArray(raw)) return raw.filter(Boolean).join(' ');
+  return String(raw);
+});
 
 // 统一规范化题型
 const normalizedType = computed(() => {
@@ -201,6 +219,27 @@ const shortAnswerText = computed(() => {
 .compact-label {
   font-weight: 700;
   color: #0369a1;
+}
+.explanation-block {
+  margin-top: 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.explanation-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #b45309;
+  margin-bottom: 4px;
+}
+.explanation-text {
+  font-size: 13px;
+  color: #78350f;
+  line-height: 1.7;
+  margin: 0;
+  white-space: pre-wrap;
 }
 .muted {
   color: #94a3b8;

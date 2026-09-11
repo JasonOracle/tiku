@@ -1,6 +1,9 @@
 """
 [变更日志]
 修改时间：2026-09-11
+AI模型：Codex 3
+修改内容：[my_result 成绩明细 items 补 correct_answer 与 explanation（提交后复盘场景：标准答案+解析对照，核验中/已提交/已核验均可见）]
+修改时间：2026-09-11
 AI模型：Gemini 系列
 修改内容：[1. task_entry 接口：pending 状态用户重新进入考试时重置 created_at 为当前时间，修复因前端异常崩溃退出后重新进入导致服务端用时从旧开考时间累积计算的问题]
 [变更日志]
@@ -94,15 +97,19 @@ def my_result(record_id: int, ctx: dict = Depends(require_member), db: Session =
         rid = a.get("resource_id") if isinstance(a, dict) else None
         ans = a.get("answer") if isinstance(a, dict) else a
         content, score = "", 0
+        correct_ans, explanation = None, ""
         if rid:
             r = db.query(ResourceItem).filter(ResourceItem.id == rid).first()
             if r:
                 content, score = r.content, r.score or 0
+                correct_ans = r.correct_answer
+                explanation = getattr(r, "explanation", None) or ""
             link = db.query(TaskResource).filter(TaskResource.task_id == rec.task_id,
                                                   TaskResource.resource_id == rid).first()
             if link:
                 score = link.score
         items.append({"resource_id": rid, "content": content, "user_answer": ans,
+                      "correct_answer": correct_ans, "explanation": explanation,
                       "gained": None, "eq_score": score})
     pending = rec.status == "pending_verification"
     # 及格判断：总分基于 TaskResource 分值聚合，及格线基于 task.pass_percent（默认60%）

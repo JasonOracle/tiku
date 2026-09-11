@@ -280,6 +280,16 @@
             <el-input v-model="shortAnswer" type="textarea" :rows="3" placeholder="参考答案全文（供判卷与核验对照）" />
           </el-form-item>
         </template>
+
+        <!-- 答案解析: 全题型通用（选填），C端成绩报告与阅卷大厅均会展示 -->
+        <el-form-item label="答案解析">
+          <el-input
+            v-model="form.explanation"
+            type="textarea"
+            :rows="3"
+            placeholder="选填。简要说明正确答案依据、易错点或采分要点（50-150 字）。保存后 C 端成绩报告与阅卷大厅可见"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -794,6 +804,7 @@ const openEditDialog = (row: any) => {
     rawAnswer = rawAnswer ? [rawAnswer] : [];
   }
   form.answer = rawAnswer;
+  form.explanation = row.explanation || '';
 
   // 题型相关编辑态
   if (row.type === 'fill') {
@@ -853,6 +864,8 @@ const saveQuestion = async () => {
   } else {
     payload.grading_points = [];
   }
+  // 答案解析：全题型通用，留空则后端落库为 null
+  payload.explanation = (form.explanation || '').trim() || undefined;
 
   if (editingId.value) {
     await request.put(`/api/v1/admin/resources/${editingId.value}`, payload);
