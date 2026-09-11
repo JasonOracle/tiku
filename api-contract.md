@@ -1,4 +1,4 @@
-﻿# 智题库 (TiKu) v1.4+ 接口契约规范 (API Contract Specification)
+# 智题库 (TiKu) v1.4+ 接口契约规范 (API Contract Specification)
 
 > **版本规范**：本文档基于当前生产环境的纯 SaaS 架构与直观业务语义编写。统一规范多租户隔离 Header、AI 工具链与知识库独立调试端点。
 
@@ -194,6 +194,7 @@
   }
   ```
 - **核心契约**：接口会直接在 `data` 中返回 `record_id` 与核算后的 `score`，前端可利用此 `record_id` 实现无缝零延迟跳转成绩报告页。
+- **状态流转契约（含主观题即进核验池）**：`verification_mode = ai_auto`（AI 全托管）**或试卷含简答/主观题**时，交卷后 `status = pending_verification`（进入人工/AI 核验池，C 端卡片显示「审核中」）；仅当 `manual` 且全为客观题时才直接 `submitted`（已交卷，客观题分数已定稿）。简答题不计入自动判分。
 
 ---
 
@@ -216,9 +217,55 @@
 
 ### 7.4 C 端成绩报告回显解析
 - **GET** `/api/v1/member/task-records/{record_id}`
-- 响应 `data.items[]` 每项新增 `correct_answer`（标准答案）与 `explanation`（解析）；C 端报告页逐题对照展示，核验中/已提交/已核验三态均可见。
+- 响应 `data.items[]` 每项包含：
+  - `type`（题目类型，如 single/multiple/fill/short/judge 等）；
+  - `options`（选项列表，对象数组或字符串数组，供客观题选项高亮比对）；
+  - `correct_answer`（标准答案）与 `explanation`（解析）。
+- C 端报告页逐题对照展示，核验中/已提交/已核验三态均可见。
 
 ### 7.5 阅卷大厅明细回显解析
 - **GET** `/api/v1/admin/verifications/{record_id}`
 - 响应 `data.items[]` 每项新增 `explanation`，供批阅人定分参考。
 - **核心契约**：接口会直接在 `data` 中返回 `record_id` 与核算后的 `score`，前端可利用此 `record_id` 实现无缝零延迟跳转成绩报告页。
+
+---
+
+## 8. C 端试卷可见性、重考与个人统计契约
+
+### 8.1 成员试卷列表（新增 can_continue / verification_mode）
+
+- **GET** `/api/v1/member/member-tasks`
+- **说明**：返回本企业全部 `published` 试卷（含本人作答状态），由前端决定可见性。首页仅展示 `status = pending`（未作答/进行中）的试卷；`submitted` / `pending_verification` / `verified` 一律从首页隐藏，统一在「我的测试」查看。
+- **Response `data.items[]` 新增字段**：
+  | 字段 | 类型 | 说明 |
+  | :--- | :--- | :--- |
+  | `can_continue` | boolean | 「继续测试」资格，**四条件缺一不可**：`verification_mode === 'manual'` 且 记录状态为 `pending_verification`（未出成绩）且 **卷内含简答题**（`short` / `short_answer`）且 未过 `deadline`（`deadline` 为空视为长期开放）。纯客观卷、`submitted` 已定稿、`verified` 已核验、`ai_auto` 卷一律 `false` |
+  | `verification_mode` | string | `manual` / `ai_auto` |
+
+### 8.2 继续测试（保留作答续答）
+
+- **POST** `/api/v1/member/tasks/{task_id}/continue`
+- **说明**：把本人该卷的 `TaskRecord` 从 `pending_verification` **原地退回** `pending`，**保留 `answers`（上次作答）**供学员回考场续答修改；同时清空未终审的 `score` / `ai_result` / `ai_rag_sources` / `comments` / `submit_time` / `time_spent`，并将 `created_at` 重置为服务端当前时间（**重新给满考试时限**）。**不新增记录行**（全库按「每用户每卷唯一」建模）。
+- **Response 200**：
+  ```json
+  { "code": 200, "message": "已恢复上次作答，继续本次测试",
+    "data": { "record_id": 122, "status": "pending" } }
+  ```
+- **400 守卫**：任务未发布（404）；考试已截止；AI 核验模式不支持；试卷不含简答题；暂无作答记录；记录非 `pending_verification`（已核验 / 已定稿 / 无需继续）。
+- **审计**：写 `continue` 动作留痕。
+- **配套读取**：`GET /api/v1/member/tasks/{task_id}/entry` 响应新增 `my_answers`（上次作答原文数组，结构与提交时的 `answers` 一致），供考场回填续答；首次作答时为 `[]`。
+
+### 8.3 个人中心统计（常规口径）
+
+- **GET** `/api/v1/member/me/stats`
+- **Response 200**：
+  ```json
+  { "code": 200, "data": {
+      "total_exams_taken": 3,   // 累计作答场次 = 已交卷 + 审核中 + 已核验
+      "history_count": 3,       // 历史答题记录 = 提交记录数
+      "passed_count": 2,        // 已出分记录中达到动态及格线的数量
+      "pass_rate": 66.7,        // 百分比，保留 1 位小数，无已出分记录为 0
+      "favorite_count": 5 } }   // 本人收藏题数
+  ```
+- **口径契约**：动态及格线 = `sum(TaskResource.score) × (task.pass_percent or 60)%`，与 `member_tasks` 列表的 `pass_score`、C 端报告页 `passed` 判定完全同源。全程强制 `tenant_id` + `user_id` 双过滤。
+- **历史坑位**：前端早期误调 `/api/v1/users/me/stats`（后端不存在该路由），404 被静默吞掉导致四项统计恒为 0，现已收敛到本接口。

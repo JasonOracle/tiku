@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Agnes-3.0-flash (ZCode)
+ * 修改内容：[1. 首页只呈现未作答/进行中的试卷，已交卷/审核中/已核验的试卷一律从首页隐藏（去「我的测试」查看成绩）; 2. 分类胶囊基于过滤后的可见试卷重算，杜绝点分类后列表空白; 3. 新增全部完成后的空状态引导卡片，同时隐藏无可作答试卷时的 Hero 卡片（避免残留无效的立即开始入口）; 4. 清理已参加徽章与查看按钮分支的无用逻辑与样式]
  * 修改时间：2026-09-11
  * AI模型：Gemini 系列
  * 修改内容：[1. 彻底移除练习模式标签，改为动态渲染试卷真实分类与限时状态; 2. 真实回显接口计算的题目数、总分、及格分; 3. 操作按钮由做题改为开始，已参加试卷显示查看成绩与已参加徽章; 4. 动态基于当前企业真实试卷提取有效分类，杜绝空虚假分类]
@@ -17,8 +20,8 @@
     <!-- Banner 轮播（有配置时替代 Hero） -->
     <BannerCarousel v-if="banners.length" :items="banners" :interval="bannerInterval" />
 
-    <!-- Hero 精选推荐卡片（无 Banner 时回退） -->
-    <section v-else class="hero-section">
+    <!-- Hero 精选推荐卡片（无 Banner 时回退；无可作答试卷时整体隐藏，避免残留无效的「立即开始」入口） -->
+    <section v-else-if="heroExam" class="hero-section">
       <div class="hero-card">
         <div class="hero-main">
           <div class="hero-tag"><span class="diamond">◆</span> FEATURED</div>
@@ -63,9 +66,6 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               {{ exam.time_limit }}分钟限时
             </span>
-            <span v-if="exam.is_done" class="done-tag">
-              已参加
-            </span>
           </div>
           <h3 class="exam-title">{{ exam.title }}</h3>
           <div class="meta-chips">
@@ -86,11 +86,24 @@
           </div>
         </div>
         <div class="card-action">
-          <button class="action-btn" :class="{ 'done-btn': exam.is_done }" @click.stop="startExam(exam.id)">
-            <span>{{ exam.is_done ? '查看' : '开始' }}</span>
+          <button class="action-btn" @click.stop="startExam(exam.id)">
+            <span>开始</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
         </div>
+      </div>
+
+      <!-- 空状态：全部试卷均已完成后，引导成员前往「我的测试」查看成绩 -->
+      <div v-if="exams.length === 0" class="empty-state">
+        <div class="empty-icon-wrap">
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="17" rx="3"/>
+            <path d="M8 10h8M8 14h5"/>
+          </svg>
+        </div>
+        <p class="empty-title">当前没有待作答的试卷</p>
+        <p class="empty-desc">已完成的测试可前往「我的测试」查看成绩与逐题解析</p>
+        <button class="empty-btn" @click="router.push('/my-tasks')">去我的测试查看</button>
       </div>
     </main>
 
@@ -149,34 +162,30 @@ const loadBanners = async () => {
   }
 };
 
+// 已交卷 / 审核中 / 已核验的试卷不再出现在首页，统一去「我的测试」查看成绩
+const DONE_STATUSES = ['submitted', 'verified', 'pending_verification'];
+
 const loadData = async () => {
   try {
     const res: any = await http.get('/api/v1/member/member-tasks');
-    const items = res.items || [];
-    
-    // 映射真实字段与完成状态
-    allTasks.value = items.map((t: any) => {
-      const isDone = ['submitted', 'verified', 'pending_verification'].includes(t.status);
-      return {
-        id: t.task_id,
-        record_id: t.record_id || null,
-        title: t.title,
-        category_id: t.category_id,
-        category_name: t.category_name || '',
-        question_count: t.question_count ?? 0,
-        total_score: t.total_score ?? 100,
-        pass_score: t.pass_score ?? 60,
-        is_timed: Boolean(t.is_timed),
-        time_limit: t.time_limit || 0,
-        start_time: t.start_time,
-        deadline: t.deadline,
-        status: t.status,
-        score: t.score,
-        is_done: isDone
-      };
-    });
+    const items = (res.items || []).filter((t: any) => !DONE_STATUSES.includes(t.status));
 
-    // 动态提取当前所有真实存在的分类，绝不展示虚假死数据
+    // 映射真实字段（仅保留仍可作答的试卷）
+    allTasks.value = items.map((t: any) => ({
+      id: t.task_id,
+      title: t.title,
+      category_id: t.category_id,
+      category_name: t.category_name || '',
+      question_count: t.question_count ?? 0,
+      total_score: t.total_score ?? 100,
+      pass_score: t.pass_score ?? 60,
+      is_timed: Boolean(t.is_timed),
+      time_limit: t.time_limit || 0,
+      start_time: t.start_time,
+      deadline: t.deadline
+    }));
+
+    // 动态提取当前所有真实存在的分类，绝不展示虚假死数据（基于过滤后的可见试卷，避免点分类空白）
     const catMap = new Map<number, string>();
     for (const t of allTasks.value) {
       if (t.category_id && t.category_name) {
@@ -198,11 +207,6 @@ const startExam = (examId?: number) => {
   if (!examId) return;
   if (!userStore.token) {
     router.push('/login');
-    return;
-  }
-  const hit = allTasks.value.find((t) => t.id === examId);
-  if (hit && hit.is_done && hit.record_id) {
-    router.push({ path: '/report', query: { record_id: hit.record_id } });
     return;
   }
   router.push({ path: '/task', query: { task_id: examId } });
@@ -409,17 +413,6 @@ onMounted(() => {
   color: #e11d48;
 }
 
-.done-tag {
-  display: inline-flex;
-  align-items: center;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: #ecfdf5;
-  color: #059669;
-}
-
 .exam-title {
   margin: 3px 0 2px;
   font-size: 15px;
@@ -486,8 +479,58 @@ onMounted(() => {
   transform: scale(0.95);
 }
 
-.action-btn.done-btn {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28);
+.empty-state {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 34px 20px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.04);
+}
+
+.empty-icon-wrap {
+  width: 76px;
+  height: 76px;
+  border-radius: 24px;
+  background: linear-gradient(160deg, #f0f9ff, #eef2ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.empty-desc {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.empty-btn {
+  margin-top: 10px;
+  background: linear-gradient(135deg, #0284c7 0%, #6366f1 100%);
+  color: #ffffff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.28);
+}
+
+.empty-btn:active {
+  transform: scale(0.97);
 }
 </style>

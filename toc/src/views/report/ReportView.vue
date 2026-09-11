@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Agnes-3.0-flash (ZCode)
+ * 修改内容：[「我的作答明细」每题补题型标签徽章 + 选项/填空对照渲染：客观题选项列出并按用户所选高亮蓝、与标准答案一致绿、不一致红；判断题无选项时自动补「正确/错误」；填空题保留题干下划线占位并逐空对照我的填写与标准答案；简答题不显示选项区；新增 time_spent 格式化兜底，修复用时恒为 0秒 问题（接口未返回时隐藏该统计块而非显示 0秒）]
  * 修改时间：2026-09-11
  * AI模型：Codex 3
  * 修改内容：[每题作答明细恢复「标准答案 + 答案解析」对照展示：新增 correct-answer 与 explanation 区块，绿/琥珀双色卡片；无解析数据时显示"暂无解析"占位；核验中/已提交/已核验三态均可查看]
@@ -70,7 +73,7 @@
     </section>
 
     <section class="stats-grid">
-      <div class="stat-box">
+      <div v-if="hasTime" class="stat-box">
         <span class="stat-val time">{{ formattedTime }}</span>
         <span class="stat-lbl">作答用时</span>
       </div>
@@ -89,8 +92,39 @@
       <div v-for="(item, idx) in report.items" :key="idx" class="analysis-card">
         <div class="card-head">
           <span class="q-num">Q{{ Number(idx) + 1 }}</span>
+          <span v-if="item.type" class="type-badge">{{ getTypeLabel(item.type) }}</span>
         </div>
-        <h4 class="q-text">{{ item.content }}</h4>
+        <h4 class="q-text" v-if="!isFill(item.type)">{{ item.content }}</h4>
+        <h4 v-else-if="isFill(item.type)" class="q-text" v-html="renderContent(item.content)"></h4>
+        <div v-if="isObjective(item.type)" class="opt-compare">
+          <div
+            v-for="opt in normOptions(item)"
+            :key="opt.key"
+            class="opt-item"
+            :class="{
+              'opt-mine': isUserPicked(item, opt.key),
+              'opt-correct': isCorrectPick(item, opt.key),
+              'opt-wrong': isWrongPick(item, opt.key)
+            }"
+          >
+            <span class="opt-prefix">{{ opt.key }}</span>
+            <span class="opt-content">{{ opt.text }}</span>
+            <span v-if="isUserPicked(item, opt.key)" class="opt-tag mine">我选了</span>
+            <span v-if="isCorrectPick(item, opt.key)" class="opt-tag correct">正确答案</span>
+            <span v-if="isWrongPick(item, opt.key)" class="opt-tag wrong">错误</span>
+          </div>
+        </div>
+        <div v-else-if="isFill(item.type)" class="fill-compare">
+          <div
+            v-for="(pair, k) in fillPairs(item)"
+            :key="k"
+            class="fill-pair"
+          >
+            <span class="fill-blank">第 {{ Number(k) + 1 }} 空</span>
+            <span class="fill-mine">我填：{{ pair.mine || '未作答' }}</span>
+            <span class="fill-answer">标准：{{ pair.answer || '暂无标准答案' }}</span>
+          </div>
+        </div>
         <div class="ans-comparison">
           <div class="ans-box user">
             <span class="lbl">我的答案</span>
@@ -124,9 +158,116 @@ const router = useRouter();
 
 const report = ref<any>(null);
 
+// 题型徽章文案（兼容 single_choice/multiple/fill/short/judge/true_false 等枚举）
+const getTypeLabel = (type?: string): string => {
+  if (!type) return '';
+  if (['single', 'single_choice'].includes(type)) return '单选题';
+  if (['multiple', 'multiple_choice'].includes(type)) return '多选题';
+  if (['fill', 'fill_in'].includes(type)) return '填空题';
+  if (['short', 'short_answer'].includes(type)) return '简答题';
+  if (['judge', 'true_false'].includes(type)) return '判断题';
+  return '选择题';
+};
+
+const isObjective = (type?: string): boolean =>
+  ['single', 'single_choice', 'multiple', 'multiple_choice', 'judge', 'true_false'].includes(type || '');
+const isFill = (type?: string): boolean => ['fill', 'fill_in'].includes(type || '');
+const isShort = (type?: string): boolean => ['short', 'short_answer'].includes(type || '');
+
+// 规范化选项列表：兼容对象数组 [{key,text}]、字符串数组 ['A. 莫奈']、JSON 字符串；判断题无选项时自动补「正确/错误」
+const normOptions = (item: any): Array<{ key: string; text: string }> => {
+  const qType: string = item?.type || '';
+  let raw = item?.options;
+  if ((!raw || (Array.isArray(raw) && raw.length === 0)) && ['judge', 'true_false'].includes(qType)) {
+    return [
+      { key: 'A', text: '正确' },
+      { key: 'B', text: '错误' },
+    ];
+  }
+  if (!raw) return [];
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(raw)) return [];
+  const keys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  return raw.map((o: any, idx: number) => {
+    if (o && typeof o === 'object') {
+      return {
+        key: String(o.key || o.label || o.value || keys[idx] || '').trim().toUpperCase(),
+        text: String(o.text ?? o.content ?? o.title ?? '').trim(),
+      };
+    }
+    const s = String(o).trim();
+    const m = s.match(/^([A-Za-z])[\.、\s\-:]+\s*(.*)$/);
+    if (m) return { key: m[1].toUpperCase(), text: m[2].trim() };
+    return { key: keys[idx] || `Opt${idx + 1}`, text: s };
+  });
+};
+
+// 题干中的连续下划线渲染为 <u>，让填空题的「占位」一目了然
+const renderContent = (content: any): string =>
+  String(content ?? '').replace(/(_{2,})/g, '<u>$1</u>');
+
+// 用户是否选中该选项
+const isUserPicked = (item: any, key: string): boolean => {
+  const ua = item?.user_answer;
+  if (Array.isArray(ua)) return ua.some((v: any) => String(v).toUpperCase() === key);
+  return String(ua ?? '').toUpperCase().includes(key);
+};
+
+// 该选项是否为标准答案（判断题标准答案可能是 A/正确/B/错误/T/F 等，统一归一化再比对）
+const isCorrectPick = (item: any, key: string): boolean => {
+  const ca = item?.correct_answer;
+  if (ca == null) return false;
+  const norm = (v: string): string => {
+    const up = String(v).trim().toUpperCase();
+    if (['T', 'TRUE', 'YES', '正确', '对', '√'].includes(up)) return 'A';
+    if (['F', 'FALSE', 'NO', '错误', '错', '×'].includes(up)) return 'B';
+    return up;
+  };
+  if (Array.isArray(ca)) return ca.some((v: any) => norm(String(v)) === key);
+  return norm(String(ca)) === key;
+};
+
+// 该选项为「我选了且与标准答案不符」
+const isWrongPick = (item: any, key: string): boolean =>
+  isUserPicked(item, key) && !isCorrectPick(item, key);
+
+// 填空题逐空对照：把「我填的」按序展开，对照「标准答案」的对应空
+const fillPairs = (item: any): Array<{ mine: string; answer: string }> => {
+  const rawMine = item?.user_answer;
+  let mineArr: string[] = [];
+  if (Array.isArray(rawMine)) mineArr = rawMine.map(String);
+  else if (typeof rawMine === 'string' && rawMine.trim()) mineArr = rawMine.split(/[,，;；]\s*/).filter(Boolean);
+  const rawAns = item?.correct_answer;
+  let ansArr: string[] = [];
+  if (Array.isArray(rawAns)) ansArr = rawAns.map(String);
+  else if (typeof rawAns === 'string' && rawAns.trim()) ansArr = [rawAns];
+  const len = Math.max(mineArr.length, ansArr.length, 1);
+  return Array.from({ length: len }, (_, i) => ({
+    mine: mineArr[i] || '',
+    answer: ansArr[i] || '',
+  }));
+};
+
+const fmtAnswer = (a: any): string => {
+  if (Array.isArray(a)) return a.length ? a.join(', ') : '未作答';
+  if (a && typeof a === 'object') return JSON.stringify(a);
+  return String(a ?? '') || '未作答';
+};
+
+const hasTime = computed(() => {
+  const t = report.value?.time_spent;
+  return t != null && t !== '' && Number(t) > 0;
+});
+
 const formattedTime = computed(() => {
   if (!report.value) return '0秒';
-  const sec = report.value.time_spent || 0;
+  const sec = Number(report.value.time_spent) || 0;
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return m > 0 ? `${m}分${s}秒` : `${s}秒`;
@@ -160,12 +301,6 @@ const passLabel = computed(() => {
   if (s === 'submitted') return passed ? '恭喜通过' : '未达及格线';
   return '待评定';
 });
-
-const fmtAnswer = (a: any): string => {
-  if (Array.isArray(a)) return a.length ? a.join(', ') : '未作答';
-  if (a && typeof a === 'object') return JSON.stringify(a);
-  return String(a ?? '') || '未作答';
-};
 
 onMounted(async () => {
   const recordId = route.query.record_id;
@@ -364,6 +499,115 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 800;
   color: #6366f1;
+}
+
+.type-badge {
+  display: inline-block;
+  background: #e0f2fe;
+  color: #0284c7;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.opt-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.opt-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 7px 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.opt-item .opt-prefix {
+  font-weight: 800;
+  color: #0f172a;
+  min-width: 14px;
+}
+
+.opt-item .opt-content {
+  flex: 1;
+  line-height: 1.5;
+}
+
+.opt-item .opt-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.opt-item.opt-mine .opt-tag.mine {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.opt-item.opt-correct .opt-tag.correct {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.opt-item.opt-wrong .opt-tag.wrong {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.opt-item.opt-correct {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.opt-item.opt-wrong {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.fill-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.fill-pair {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 7px 10px;
+  display: grid;
+  grid-template-columns: 64px 1fr 1fr;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.fill-blank {
+  font-weight: 700;
+  color: #6366f1;
+}
+
+.fill-mine {
+  color: #1d4ed8;
+}
+
+.fill-answer {
+  color: #15803d;
+}
+
+.fill-mine,
+.fill-answer {
+  line-height: 1.5;
 }
 
 .q-text {

@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Agnes-3.0-flash (ZCode)
+ * 修改内容：[1. 修复个人中心四项统计恒为 0：统计接口地址由不存在的 /api/v1/users/me/stats 更正为后端实际提供的 /api/v1/member/me/stats; 2. 请求失败不再完全静默，改为 console.warn 暴露问题]
  * 修改时间：2026-09-06 19:50:00
  * AI模型：ZCode (GLM)
  * 修改内容：[v1.3: 个人中心展示注册资料——昵称为主(@用户名小字)+性别/职务标签, 数据源 GET /users/me;
@@ -142,7 +145,7 @@ const loadProfile = async () => {
 const loadStats = async () => {
   if (!userStore.token) return;
   try {
-    const res: any = await http.get('/api/v1/users/me/stats');
+    const res: any = await http.get('/api/v1/member/me/stats');
     const data = res?.data || res;
     if (data) {
       stats.value = {
@@ -154,7 +157,8 @@ const loadStats = async () => {
       };
     }
   } catch (e) {
-    // 忽略未登录错误
+    // 未登录/网络异常时保留 0 值兜底，但不再完全静默，便于排查统计接口问题
+    console.warn('[ProfileView] 统计数据加载失败:', e);
   }
 };
 

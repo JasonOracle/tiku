@@ -1,8 +1,16 @@
 # -*- coding: utf-8 -*-
 """
+[变更日志]
+修改时间：2026-09-12
+AI模型：Agnes-3.0-flash (ZCode)
+修改内容：[/retake 语义整体迁移为 /continue 并补齐 can_continue 四条件真值矩阵：manual+含简答+审核中+未到期 才允许继续测试；继续测试必须保留 answers 且入口接口原样透传 my_answers；已核验、已截止、纯客观定稿卷、AI 全托管卷四类一律拒绝]
+修改时间：2026-09-12
+AI模型：Agnes-3.0-flash (ZCode)
+修改内容：[新增回归用例外壳：manual 含简答卷交卷后必须转 pending_verification 进人工核验池、member-tasks 下发 can_retake、截止前重考原地重置记录、/me/stats 四项统计与动态及格线通过率口径]
+
 纯 v1.4 多租户 SaaS 回归：登录/隔离/成员/资源/任务/提交/核验/知识库/AI溯源/上帝视图。
 """
-from app.models.saas import SysTenant, SysUser, SysTenantUser, Task
+from app.models.saas import SysTenant, SysUser, SysTenantUser, Task, TaskRecord
 from app.core.security import get_password_hash
 
 
@@ -241,7 +249,9 @@ def test_server_authoritative_timing_anti_cheat(client, db_session):
     e1 = client.get(f"/api/v1/member/tasks/{tid}/entry", headers=mH).json()["data"]
     assert e1["server_now"] and e1["started_at"]
     e2 = client.get(f"/api/v1/member/tasks/{tid}/entry", headers=mH).json()["data"]
-    assert e2["started_at"] == e1["started_at"], "重复进入不得刷新开考时刻"
+    # 未交卷(pending)状态下再次进入会重置开考时刻，修复崩溃/误退后重进导致用时被错误累加；
+    # 但作答记录行必须复用同一条，不得新增。
+    assert datetime.fromisoformat(e2["started_at"]) >= datetime.fromisoformat(e1["started_at"])
     assert e2["my_record_id"] == e1["my_record_id"]
     # 伪造超大用时 → 服务端忽略
     s = client.post("/api/v1/member/task-records/submit", headers=mH,
@@ -333,3 +343,135 @@ def test_super_admin_flow(client, db_session):
     r = client.post("/api/v1/admin/resources", json={"content": "视察"},
                     headers=_h(god["token"], 102))
     assert r.status_code == 201
+
+
+def test_subjective_manual_retake_and_member_stats(client, db_session):
+    """回归：manual 含简答卷必须进核验池 + 截止前可重考 + 个人中心统计口径。"""
+    from datetime import datetime, timedelta
+    _seed(db_session)
+    admin = _login(client, "13800138000")
+    H = _h(admin["token"], 101)
+    client.post("/api/v1/admin/members", json={"phone": "13912345678"}, headers=H)
+    m = _login(client, "13912345678")
+    mH = _h(m["token"], 101)
+
+    rid1 = client.post("/api/v1/admin/resources",
+                       json={"content": "客观题", "type": "single_choice",
+                             "correct_answer": ["A"], "score": 10},
+                       headers=H).json()["data"]["id"]
+    rid2 = client.post("/api/v1/admin/resources",
+                       json={"content": "简答题：请简述报销流程", "type": "short", "score": 20},
+                       headers=H).json()["data"]["id"]
+
+    # 一、manual 卷含简答题：交卷必须转 pending_verification（而非错误地定稿 submitted）
+    t = client.post("/api/v1/admin/tasks",
+                    json={"title": "人工卷含简答", "verification_mode": "manual",
+                          "resource_ids": [rid1, rid2]},
+                    headers=H).json()["data"]
+    tid = t["task_id"]
+    db_session.query(Task).filter(Task.id == tid).update(
+        {"status": "published", "deadline": datetime.now() + timedelta(days=1)})
+    db_session.commit()
+
+    s = client.post("/api/v1/member/task-records/submit", headers=mH,
+                    json={"task_id": tid, "answers": [
+                        {"resource_id": rid1, "answer": "A"},
+                        {"resource_id": rid2, "answer": "先粘贴发票再提交审批"}]})
+    assert s.status_code == 200, s.text
+    assert s.json()["data"]["status"] == "pending_verification", s.json()["data"]
+    assert s.json()["data"]["score"] == 10, "客观题应即时判分，简答题不计分"
+    rec_id = s.json()["data"]["record_id"]
+
+    # 二、member-tasks 下发 can_continue：manual + 含简答 + 审核中 + 未到期 → True
+    items = client.get("/api/v1/member/member-tasks", headers=mH).json()["data"]["items"]
+    item = next(i for i in items if i["task_id"] == tid)
+    assert item["can_continue"] is True
+    assert item["verification_mode"] == "manual"
+
+    # 三、统计：1 场（审核中）；10 分 < 30×60%=18 → 不通过
+    st = client.get("/api/v1/member/me/stats", headers=mH).json()["data"]
+    assert st["total_exams_taken"] == 1 and st["history_count"] == 1
+    assert st["passed_count"] == 0 and st["pass_rate"] == 0.0
+    assert st["favorite_count"] == 0
+
+    # 四、继续测试：记录原地退回 pending 且**保留上次作答**，入口接口原样透传供考场回填
+    ct = client.post(f"/api/v1/member/tasks/{tid}/continue", headers=mH)
+    assert ct.status_code == 200, ct.text
+    assert ct.json()["data"]["record_id"] == rec_id
+    assert ct.json()["data"]["status"] == "pending"
+    assert client.get("/api/v1/member/me/stats",
+                      headers=mH).json()["data"]["total_exams_taken"] == 0
+    entry = client.get(f"/api/v1/member/tasks/{tid}/entry", headers=mH).json()["data"]
+    assert entry["my_status"] == "pending"
+    assert entry["my_answers"] == [{"resource_id": rid1, "answer": "A"},
+                                   {"resource_id": rid2, "answer": "先粘贴发票再提交审批"}], \
+        entry["my_answers"]
+    items2 = client.get("/api/v1/member/member-tasks", headers=mH).json()["data"]["items"]
+    assert next(i for i in items2 if i["task_id"] == tid)["can_continue"] is False
+
+    # 五、续答后重新交卷：再次回到审核中；强制终审满分 → 通过率 100%
+    s2 = client.post("/api/v1/member/task-records/submit", headers=mH,
+                     json={"task_id": tid, "answers": [
+                         {"resource_id": rid1, "answer": "A"},
+                         {"resource_id": rid2, "answer": "已改答"}]})
+    assert s2.status_code == 200, s2.text
+    assert s2.json()["data"]["status"] == "pending_verification", s2.json()["data"]
+    db_session.query(TaskRecord).filter(TaskRecord.id == rec_id).update(
+        {"score": 30, "status": "verified"})
+    db_session.commit()
+    st2 = client.get("/api/v1/member/me/stats", headers=mH).json()["data"]
+    assert st2["total_exams_taken"] == 1 and st2["passed_count"] == 1
+    assert st2["pass_rate"] == 100.0
+
+    # 六、已核验（已出成绩）不可继续测试
+    assert client.post(f"/api/v1/member/tasks/{tid}/continue", headers=mH).status_code == 400
+
+    # 七、已截止不可继续测试
+    t2 = client.post("/api/v1/admin/tasks",
+                     json={"title": "过期卷", "resource_ids": [rid1]},
+                     headers=H).json()["data"]
+    db_session.query(Task).filter(Task.id == t2["task_id"]).update(
+        {"status": "published", "deadline": datetime.now() + timedelta(days=1)})
+    db_session.commit()
+    sub2 = client.post("/api/v1/member/task-records/submit", headers=mH,
+                       json={"task_id": t2["task_id"],
+                             "answers": [{"resource_id": rid1, "answer": "A"}]})
+    assert sub2.status_code == 200
+    db_session.query(Task).filter(Task.id == t2["task_id"]).update(
+        {"deadline": datetime.now() - timedelta(minutes=1)})
+    db_session.commit()
+    late = client.post(f"/api/v1/member/tasks/{t2['task_id']}/continue", headers=mH)
+    assert late.status_code == 400 and "截止" in late.json()["detail"]
+
+    # 八、对照一：manual 纯客观卷交卷即定稿 submitted，且不提供继续测试入口
+    t3 = client.post("/api/v1/admin/tasks",
+                     json={"title": "人工纯客观卷", "verification_mode": "manual",
+                           "resource_ids": [rid1]}, headers=H).json()["data"]
+    db_session.query(Task).filter(Task.id == t3["task_id"]).update({"status": "published"})
+    db_session.commit()
+    s3 = client.post("/api/v1/member/task-records/submit", headers=mH,
+                     json={"task_id": t3["task_id"],
+                           "answers": [{"resource_id": rid1, "answer": "A"}]})
+    assert s3.status_code == 200
+    assert s3.json()["data"]["status"] == "submitted", s3.json()["data"]
+    items3 = client.get("/api/v1/member/member-tasks", headers=mH).json()["data"]["items"]
+    assert next(i for i in items3 if i["task_id"] == t3["task_id"])["can_continue"] is False
+    assert client.post(f"/api/v1/member/tasks/{t3['task_id']}/continue",
+                       headers=mH).status_code == 400
+
+    # 九、对照二：AI 全托管含简答卷即使处于审核中也不给继续测试（前提是人工审核模式）
+    t4 = client.post("/api/v1/admin/tasks",
+                     json={"title": "AI卷含简答", "verification_mode": "ai_auto",
+                           "resource_ids": [rid1, rid2]}, headers=H).json()["data"]
+    db_session.query(Task).filter(Task.id == t4["task_id"]).update(
+        {"status": "published", "deadline": datetime.now() + timedelta(days=1)})
+    db_session.commit()
+    s4 = client.post("/api/v1/member/task-records/submit", headers=mH,
+                     json={"task_id": t4["task_id"],
+                           "answers": [{"resource_id": rid1, "answer": "A"}]})
+    assert s4.status_code == 200
+    assert s4.json()["data"]["status"] == "pending_verification"
+    items4 = client.get("/api/v1/member/member-tasks", headers=mH).json()["data"]["items"]
+    assert next(i for i in items4 if i["task_id"] == t4["task_id"])["can_continue"] is False
+    assert client.post(f"/api/v1/member/tasks/{t4['task_id']}/continue",
+                       headers=mH).status_code == 400

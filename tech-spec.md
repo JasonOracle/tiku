@@ -1,4 +1,4 @@
-﻿# 智题库 (TiKu) v1.4+ 技术规格说明书 (Technical Specification)
+# 智题库 (TiKu) v1.4+ 技术规格说明书 (Technical Specification)
 
 ## 1. 架构总览与标准项目结构
 系统基于前后端分离的多租户 SaaS 架构，技术栈与核心代码组织如下：
@@ -75,7 +75,7 @@ tiku/
 
 ## 4. AI 助管与双类工具调度链 (AI Assistant & Dual-Toolchain)
 
-AI 助管通过统一网关 `backend/app/api/saas/ai.py` 调度，核心贯彻“只读全景感知 + 写操作安全确认”：
+AI 助管通过统一网关 `backend/app/api/saas/ai.py` 调度，核心贯彻"只读全景感知 + 写操作安全确认"：
 
 ### 4.1 只读聚合工具 / 感知器 (Read-only Aggregation Tools)
 此类工具由后端执行器在构建推理上下文时**自动触发并返回结构化数据**，零副作用，不向用户弹确认窗：
@@ -89,7 +89,7 @@ AI 助管通过统一网关 `backend/app/api/saas/ai.py` 调度，核心贯彻�
   - 高效联查 `Task`, `SysUser`, `SysUserProfile`，返回包含试卷全名、考生真实姓名、手机号及历史作答明细的组合 Payload。
 - **可视化阅卷抽屉 (`VerificationView.vue`)**：
   - 提供 700px 高颜值抽屉，**默认精简过滤仅展示待批改的简答题（Short Answer）**，降低主考官认知负担。
-  - **AI 智能 Prompt 优化**：AI 阅卷提示词格式化题目与作答为“第X题”，禁止输出 `resource_id` 抽象编号。提供一键采纳 AI 建议分数与评语按钮。
+  - **AI 智能 Prompt 优化**：AI 阅卷提示词格式化题目与作答为"第X题"，禁止输出 `resource_id` 抽象编号。提供一键采纳 AI 建议分数与评语按钮。
 
 ### 4.3 写操作工具 (Write Tools)
 此类工具用于变更数据库资产，必须经过前端可视化卡片二次确认：
@@ -115,11 +115,23 @@ AI 助管通过统一网关 `backend/app/api/saas/ai.py` 调度，核心贯彻�
 ---
 
 ## 6. C 端考试闭环与防作弊机制
-- **状态流转**：试卷由管理员在 B 端「试卷管理」发布后，状态变为 `published`（已上架），C 端成员通过 `GET /api/v1/member/tasks` 自动拉取可见。
+- **状态流转**：试卷由管理员在 B 端「试卷管理」发布后，状态变为 `published`（已上架），C 端成员通过 `GET /api/v1/member/member-tasks` 自动拉取可见。
 - **开考防作弊与防崩溃锁定**：
   - 成员点击进入考试，服务端在 `TaskRecord` 插入或锁定 `pending` 记录，以服务端时间为基准锚定 `started_at`。
   - **异常恢复容错**：若成员在未交卷（`pending`）状态下因浏览器崩溃或误触退出而重新进入考场，服务端会自动重置 `started_at` 为最新进入时间，防止用时被错误累加。
   - 禁止客户端篡改作答计时；提交时在服务端计算真实作答耗时，超出时限自动截断。
 - **客观题秒级判分与高并发保护**：
   - 提交接口使用悲观锁（`with_for_update`），保证一次作答绝不重复覆写。
-  - 提交瞬间，触发服务端**客观题自动评分引擎**：单选、多选、判断精确比对 `correct_answer`（支持 TRUE/FALSE 到 A/B 映射），填空题执行无视大小写与空格的宽松匹配，即刻核算总分并落地。仅含主观题（简答）的卷子进入 `pending_verification`。
+  - 提交瞬间，触发服务端**客观题自动评分引擎**：单选、多选、判断精确比对 `correct_answer`（支持 TRUE/FALSE 到 A/B 映射），填空题执行无视大小写与空格的宽松匹配，即刻核算总分并落地。
+- **交卷状态决策规则（含主观题即进核验池）**：
+  - `answer_map`（本卷 `{resource_id: {correct_answer, type, score}}`）在状态决策**之前**构建，据此率先判定本卷是否含简答/主观题；
+  - `need_verify = (verification_mode == "ai_auto") or has_subjective`：**只要卷内含简答题，无论 manual 还是 ai_auto，交卷后一律转 `pending_verification` 进入人工/AI 核验池**，C 端卡片显示「审核中」；
+  - 仅 `manual` 且全客观题的卷子直接定稿 `submitted`（已交卷，客观题分数即为最终分）。
+  - 历史坑位：早期 `need_verify` 只看 `verification_mode`，导致人工审核卷的简答题交卷即被错误定稿为「已交卷」，永远进不了核验队列。
+- **首页可见性收敛与「继续测试」**：
+  - 首页只呈现 `status = pending`（未作答/进行中）的已上架试卷；`submitted` / `pending_verification` / `verified` 一律隐藏，成绩统一去「我的测试」查看；分类胶囊基于过滤后的可见试卷重算，避免出现点分类后空白。
+  - `GET /api/v1/member/member-tasks` 由后端统一下发 `can_continue`，**四条件缺一不可**：`verification_mode === 'manual'` 且 记录状态为 `pending_verification`（未出成绩）且 卷内含简答题（`short` / `short_answer`）且 未过 `deadline`（为空视为长期开放）。纯客观卷、已定稿 `submitted`、已核验 `verified`、AI 全托管 `ai_auto` 卷一律 `false`。前端只做渲染，不自行推断时间或模式。
+  - 卡片渲染互斥二分：`can_continue` 为真时**只显示「继续测试」**（不显示分数、不显示查看成绩，因为成绩未终审）；为假时显示分数 + 「查看」。
+  - 继续测试走 `POST /api/v1/member/tasks/{task_id}/continue`：**原地把记录退回 `pending` 并保留 `answers`**（供考场按入口返回的 `my_answers` 回填续答），清空未终审的成绩与提交痕迹，`created_at` 重置为重开计时锚点（重新给满时限）；不新增记录行 —— 全库按「每用户每卷唯一」建模（`{task_id: record}` 映射与 `.first()` 查询），新增行会导致列表与统计错乱。
+  - 历史坑位：`can_continue` 最初只判「状态 ∈ (submitted, pending_verification) 且未过截止」，导致已出成绩的纯客观卷也出现「继续测试」，与分数、查看成绩三者并存自相矛盾；现由四条件收窄根治。
+- **个人中心统计口径**：`GET /api/v1/member/me/stats` 返回累计作答场次 / 历史答卷数 / 通过数 / 综合通过率 / 收藏数。场次与历史答卷 = 已交卷 + 审核中 + 已核验记录数；通过率分母为**已出分记录**，及格线 = `sum(TaskResource.score) × (task.pass_percent or 60)%`，与列表 `pass_score`、报告页 `passed` 判定同源。

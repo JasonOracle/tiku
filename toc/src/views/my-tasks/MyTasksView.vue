@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Agnes-3.0-flash (ZCode)
+ * 修改内容：[1. 状态文案「待核验」统一改为「审核中」; 2. 「继续测试」入口收窄并净化卡片：仅当后端 can_continue（人工审核 + 含简答题 + 审核中未出成绩 + 未过截止）为真时显示，且此时只显示「继续测试」按钮，不再并列展示分数与查看成绩；3. 继续测试语义改为保留作答续答（提示文案同步改为可修改后重新交卷、成绩仍待人工核验），接口改为 POST /tasks/{id}/continue；4. 清理已废弃的 retake/link-btn 样式]
  * 修改时间：2026-09-11
  * AI模型：Gemini 系列
  * 修改内容：[1. 修复点击已参加试卷跳转白屏Bug：已提交任务通过 record_id 直接定向至成绩报告页 /report?record_id=...，不再错误调用开考作答接口; 2. 补齐已参加列表中的 record_id 映射透传]
@@ -116,20 +119,46 @@
             </template>
             <template v-else>
               <div class="result-action">
-                <span v-if="exam.score !== null && exam.score !== undefined" class="score-display">
-                  <span class="score-num">{{ exam.score }}</span>
-                  <span class="score-unit">分</span>
-                </span>
-                <button class="action-btn completed-btn" @click.stop="handleCardClick(exam)">
-                  <span>查看</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
+                <!-- 审核中（含简答的人工审核卷、成绩未出）：仅提供「继续测试」回考场续答，
+                     此时不显示分数、也不提供查看成绩入口，避免「已出分」与「待续答」自相矛盾 -->
+                <template v-if="exam.can_continue">
+                  <button class="action-btn" :disabled="continuing" @click.stop="askContinue(exam)">
+                    {{ continuing ? '进入中...' : '继续测试' }}
+                  </button>
+                </template>
+                <template v-else>
+                  <span v-if="exam.score !== null && exam.score !== undefined" class="score-display">
+                    <span class="score-num">{{ exam.score }}</span>
+                    <span class="score-unit">分</span>
+                  </span>
+                  <button class="action-btn completed-btn" @click.stop="handleCardClick(exam)">
+                    <span>查看</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </template>
               </div>
             </template>
           </div>
         </div>
       </div>
     </div>
+
+    <AppModal
+      v-model="continueModalVisible"
+      title="继续测试"
+      :message="`将带着《${pendingContinue?.title || ''}》上次的作答回到考场，可修改后重新交卷，成绩仍待人工核验。确定继续吗？`"
+      type="warning"
+      confirm-text="继续作答"
+      @confirm="onConfirmContinue"
+    />
+    <AppModal
+      v-model="continueErrorVisible"
+      title="无法继续测试"
+      :message="continueErrorMsg"
+      type="danger"
+      :show-cancel="false"
+      confirm-text="知道了"
+    />
 
     <TabBar active="mytasks" />
   </div>
@@ -140,10 +169,18 @@ import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import NavBar from '../../components/NavBar.vue';
 import TabBar from '../../components/TabBar.vue';
+import AppModal from '../../components/AppModal.vue';
 import http from '../../utils/http';
 
 const router = useRouter();
 const loading = ref(true);
+
+// 继续测试交互状态
+const continuing = ref(false);
+const continueModalVisible = ref(false);
+const continueErrorVisible = ref(false);
+const continueErrorMsg = ref('');
+const pendingContinue = ref<any>(null);
 
 // 三态定义：进行中、未开始、已参加
 const tabs = [
@@ -171,7 +208,7 @@ const fmt = (s?: string | null) => (s ? String(s).replace('T', ' ').slice(0, 16)
 
 const statusLabel = (s: string) => {
   if (s === 'verified') return '已核验';
-  if (s === 'pending_verification') return '待核验';
+  if (s === 'pending_verification') return '审核中';
   if (s === 'submitted') return '已交卷';
   return '未完成';
 };
@@ -237,6 +274,28 @@ const handleCardClick = async (exam: any) => {
   }
   // 进行中状态：进入考场作答
   router.push({ path: '/task', query: { task_id: exam.task_id } });
+};
+
+const askContinue = (exam: any) => {
+  pendingContinue.value = exam;
+  continueModalVisible.value = true;
+};
+
+// 继续测试：后端把本人该卷从「审核中」退回「进行中」并保留上次作答，成功后进考场续答
+const onConfirmContinue = async () => {
+  const exam = pendingContinue.value;
+  if (!exam || continuing.value) return;
+  continuing.value = true;
+  try {
+    await http.post(`/api/v1/member/tasks/${exam.task_id}/continue`, {});
+    router.push({ path: '/task', query: { task_id: exam.task_id } });
+  } catch (err: any) {
+    const detail = err?.response?.data?.detail;
+    continueErrorMsg.value = typeof detail === 'string' ? detail : '继续测试失败，请稍后重试';
+    continueErrorVisible.value = true;
+  } finally {
+    continuing.value = false;
+  }
 };
 
 onMounted(load);
@@ -490,6 +549,11 @@ onMounted(load);
 .action-btn.completed-btn {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28);
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .result-action {

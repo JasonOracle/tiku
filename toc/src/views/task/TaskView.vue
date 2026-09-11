@@ -1,5 +1,8 @@
 ﻿/**
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Agnes-3.0-flash (ZCode)
+ * 修改内容：[支持「继续测试」续答回填：读取入口接口新增的 my_answers，把上次作答恢复到客观题选项/填空逐空/简答文本三类作答态（填空长度取题干空数与上次作答的较大者防截断），回填在空态初始化之后执行]
  * 修改时间：2026-09-11
  * AI模型：Gemini 系列
  * 修改内容：[1. 彻底根除填空题 TypeError: Cannot read properties of undefined (reading '0') 崩溃：规范化兼容 fill/fill_in 与 short/short_answer 枚举，支持正则兼容多下划线切分题干；2. 增加 getFillAnswers 防御性保护兜底，杜绝数组未就绪异常；3. 升级提交答卷逻辑：精准接收接口回传的 record_id 直达报告页，解决提交后页面空白且无法进入已参加的Bug]
@@ -643,6 +646,31 @@ onMounted(async () => {
         shortAnswers[qid] = '';
       }
     });
+
+    // 续答回填：从「我的测试 → 继续测试」回到考场时，恢复上次已作答内容（可修改后重新交卷）
+    // 必须在上方空态初始化之后覆盖，否则会被清空
+    const prevAnswers: any[] = Array.isArray(entry.my_answers) ? entry.my_answers : [];
+    if (prevAnswers.length) {
+      const qMap = new Map<string, any>(loadedQuestions.map((q: any) => [String(q.id), q]));
+      for (const a of prevAnswers) {
+        const qid = String(a?.resource_id ?? '');
+        const q = qMap.get(qid);
+        if (!q) continue;
+        const val = a?.answer;
+        if (['fill', 'fill_in'].includes(q.type)) {
+          const prev = Array.isArray(val) ? val.map((v: any) => String(v ?? '')) : [String(val ?? '')];
+          // 兼容题干空数与上次作答长度不一致：取较大者，避免作答被截断
+          const len = Math.max((fillAnswers[qid] || []).length || 1, prev.length);
+          fillAnswers[qid] = Array.from({ length: len }, (_, i) => prev[i] ?? '');
+        } else if (['short', 'short_answer'].includes(q.type)) {
+          shortAnswers[qid] = Array.isArray(val) ? String(val[0] ?? '') : String(val ?? '');
+        } else {
+          userAnswers[qid] = Array.isArray(val)
+            ? val.map((v: any) => String(v))
+            : (val ? [String(val)] : []);
+        }
+      }
+    }
 
     loadUserFavorites();
     startTimer();

@@ -1,5 +1,11 @@
 """
 [变更日志]
+修改时间：2026-09-12
+AI模型：Agnes-3.0-flash (ZCode)
+修改内容：[收窄「继续测试」判定并修正语义过宽缺陷：can_retake 改为 can_continue，四条件缺一不可（manual 人工审核 + 记录为 pending_verification 未出成绩 + 卷内含简答题 + 考试时间未到期，deadline 为空视为长期开放），彻底消除「已出成绩/纯客观已定稿的卷子仍给继续测试入口」的错误；member_tasks 的题目分值映射升级为 TaskResource JOIN ResourceItem 一次批量查询，同时取题型用于含简答判定，不引入 N+1]
+修改时间：2026-09-12
+AI模型：Agnes-3.0-flash (ZCode)
+修改内容：[1. 修复提交状态决策规则裂缝：answer_map 构建前移至状态判定之前，含简答/主观题的 manual 卷交卷后一并转 pending_verification 进入人工核验池（此前仅 ai_auto 卷会转，导致人工卷简答题永远进不了核验队列）；2. member_tasks 新增输出 can_retake（后端统一判定：已交卷/审核中且未过截止时间方可重考）与 verification_mode，供 C 端渲染重考入口]
 修改时间：2026-09-11
 AI模型：Codex 3
 修改内容：[1. _res_out 改读持久化 r.explanation（替代硬编码空串），create/batch/update/copy 资源接口全链路读写 explanation；2. verify_detail 明细 items 补 explanation，供阅卷大厅批阅参考]
@@ -512,6 +518,7 @@ def my_info(ctx: dict = Depends(require_member), db: Session = Depends(get_db)):
 @router.get("/member-tasks")
 def member_tasks(ctx: dict = Depends(require_member), db: Session = Depends(get_db)):
     tid = ctx["tenant_id"]
+    now = datetime.now()
     tasks = db.query(Task).filter(Task.tenant_id == tid, Task.status == "published").order_by(Task.id.desc()).all()
     recs = {r.task_id: r for r in db.query(TaskRecord).filter(
         TaskRecord.tenant_id == tid, TaskRecord.user_id == ctx["user"].id).all()}
@@ -525,9 +532,16 @@ def member_tasks(ctx: dict = Depends(require_member), db: Session = Depends(get_
 
     task_ids = [t.id for t in tasks]
     tr_map: Dict[int, List[int]] = {}
+    subj_map: Dict[int, bool] = {}
     if task_ids:
-        for tr in db.query(TaskResource).filter(TaskResource.task_id.in_(task_ids)).all():
+        # 一次 JOIN 批量取「分值 + 题型」：既算题目数与总分，又判定卷内是否含简答题
+        # （含简答是「继续测试」的必要条件），杜绝 N+1 逐卷查询
+        for tr, res in db.query(TaskResource, ResourceItem).join(
+                ResourceItem, ResourceItem.id == TaskResource.resource_id
+        ).filter(TaskResource.task_id.in_(task_ids)).all():
             tr_map.setdefault(tr.task_id, []).append(tr.score if tr.score is not None else 10)
+            if (res.type or "") in ("short", "short_answer"):
+                subj_map[tr.task_id] = True
 
     items = []
     for t in tasks:
@@ -537,6 +551,15 @@ def member_tasks(ctx: dict = Depends(require_member), db: Session = Depends(get_
         p_percent = getattr(t, "pass_percent", None) or 60
         p_score = int(round(t_total * p_percent / 100.0))
         r = recs.get(t.id)
+        # 「继续测试」资格由后端统一判定，前端只做渲染，四个条件缺一不可：
+        #   1) 人工审核模式 manual（AI 全托管卷走 AI 核验，无需回考场）
+        #   2) 记录处于 pending_verification（成绩未终审 = 没出成绩）
+        #   3) 卷内含简答题（纯客观卷交卷即定稿）
+        #   4) 考试时间未到期（deadline 为空视为长期开放）
+        can_continue = bool(r and r.status == "pending_verification"
+                            and (t.verification_mode or "manual") == "manual"
+                            and subj_map.get(t.id)
+                            and (t.deadline is None or now < t.deadline))
 
         items.append({
             "task_id": t.id,
@@ -553,7 +576,9 @@ def member_tasks(ctx: dict = Depends(require_member), db: Session = Depends(get_
             "start_time": t.start_time.isoformat() if t.start_time else None,
             "deadline": t.deadline.isoformat() if t.deadline else None,
             "score": r.score if r else None,
-            "submit_time": r.submit_time.strftime("%Y-%m-%d %H:%M:%S") if (r and r.submit_time) else None
+            "submit_time": r.submit_time.strftime("%Y-%m-%d %H:%M:%S") if (r and r.submit_time) else None,
+            "can_continue": can_continue,
+            "verification_mode": t.verification_mode or "manual"
         })
 
     return {"code": 200, "data": {"items": items}}
@@ -583,7 +608,24 @@ def submit_task(payload: SubmitAnswers, ctx: dict = Depends(require_member),
     server_spent = max(0, int((now - started).total_seconds()))
     if task.is_timed and task.time_limit:
         server_spent = min(server_spent, int(task.time_limit) * 60)
-    need_verify = (task.verification_mode == "ai_auto")
+    # ---- 先构建试卷题目映射：状态决策需要提前知道本卷是否含主观题 ----
+    # 预加载本试卷所有题目的正确答案与分值（零额外查询，仅顺序前移）
+    links = db.query(TaskResource, ResourceItem).join(
+        ResourceItem, ResourceItem.id == TaskResource.resource_id
+    ).filter(TaskResource.task_id == task.id).all()
+    # 构建 {resource_id: {correct_answer, type, score}} 映射
+    answer_map: Dict[int, Dict[str, Any]] = {}
+    for link, res in links:
+        answer_map[res.id] = {
+            "correct_answer": res.correct_answer or [],
+            "type": res.type or "",
+            "score": link.score if link.score is not None else (res.score or 10)
+        }
+
+    # 本卷是否含简答等主观题：含则无论 manual 还是 ai_auto 都必须进核验池，
+    # 否则 manual 卷的简答题会错误地直接定稿为「已交卷」，永远进不了人工核验队列。
+    has_subjective = any(m["type"] in ("short", "short_answer") for m in answer_map.values())
+    need_verify = (task.verification_mode == "ai_auto") or has_subjective
     status = "pending_verification" if need_verify else "submitted"
     if not rec:
         rec = TaskRecord(tenant_id=tid, task_id=task.id, user_id=uid, status=status,
@@ -597,21 +639,7 @@ def submit_task(payload: SubmitAnswers, ctx: dict = Depends(require_member),
         rec.submit_time = now
 
     # ---- 自动评分：客观题（单选/多选/判断/填空）即时比对正确答案，简答题跳过交由核验 ----
-    # 预加载本试卷所有题目的正确答案与分值
-    links = db.query(TaskResource, ResourceItem).join(
-        ResourceItem, ResourceItem.id == TaskResource.resource_id
-    ).filter(TaskResource.task_id == task.id).all()
-    # 构建 {resource_id: {correct_answer, type, score}} 映射
-    answer_map: Dict[int, Dict[str, Any]] = {}
-    for link, res in links:
-        answer_map[res.id] = {
-            "correct_answer": res.correct_answer or [],
-            "type": res.type or "",
-            "score": link.score if link.score is not None else (res.score or 10)
-        }
-
     total_score = 0
-    has_subjective = False  # 是否包含简答等主观题（需人工/AI核验）
 
     for ans_item in (payload.answers or []):
         if not isinstance(ans_item, dict):
@@ -625,9 +653,8 @@ def submit_task(payload: SubmitAnswers, ctx: dict = Depends(require_member),
         correct = meta["correct_answer"]
         q_score = meta["score"]
 
-        # 简答题无法自动评分
+        # 简答题无法自动评分（has_subjective 已在状态决策前统一判定）
         if q_type in ("short", "short_answer"):
-            has_subjective = True
             continue
 
         # 客观题评分：用户作答与正确答案精确比对
@@ -805,4 +832,3 @@ def verify_confirm(record_id: int, payload: Dict[str, Any], ctx: dict = Depends(
     notify(db, ctx["tenant_id"], rec.user_id, "任务已核验",
            f"你的任务提交已核验，得分 {rec.score} 分", "verification", "/my-tasks")
     db.commit()
-    return {"code": 200, "message": "核验完成", "data": {"record_id": rec.id, "score": rec.score}}
