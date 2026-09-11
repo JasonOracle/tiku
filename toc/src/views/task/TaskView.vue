@@ -1,4 +1,4 @@
-/**
+﻿/**
  * [变更日志]
  * 修改时间：2026-09-11
  * AI模型：Gemini 系列
@@ -6,6 +6,9 @@
  * 修改时间：2026-09-11
  * AI模型：Gemini 系列
  * 修改内容：[1. 彻底解决做题页面不渲染题目选项Bug：规范化兼容后端 single_choice、multiple_choice、judge 等完整枚举，并加入 getNormalizedOptions 智能解析字符串/对象多格式选项; 2. 移除顶栏练习模式硬编码标签，改为展示不限时; 3. 优化已提交拦截与AppModal挂载层级，防止已提交用户进入白屏]
+ * 修改时间：2026-09-11
+ * AI模型：Codex 3
+ * 修改内容：[1. 新增移动端半屏答题卡抽屉：进度条与底部"答题卡"双入口，方块网格展示全部题目作答状态（白色底+阴影，已答浅蓝，当前题蓝色描边+数字）；点击任意方块跳转对应题目并自动收起弹窗；顶部图例+底部已答/未答统计；纯 CSS 动画无第三方库]
  * 修改时间：2026-09-09
  * AI模型：Muse Spark
  * 修改内容：[防作弊：计时锚定服务端 started_at/server_now，删除超限清零后门；用时由服务端结算]
@@ -42,7 +45,7 @@
           <div class="bar"></div>
 
           <!-- 进度与统计 -->
-          <div class="statis-con">
+          <div class="statis-con" @click="toggleQuestionNavigator">
             <div class="statis">
               <span class="curr">{{ currentIndex + 1 }}</span>
               <span class="total">/{{ questions.length }}</span>
@@ -120,7 +123,16 @@
             </svg>
             <span>上一题</span>
           </div>
-          <div v-else></div>
+
+          <button class="action-item action-nav-trigger" @click="toggleQuestionNavigator">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+            </svg>
+            <span>答题卡</span>
+          </button>
 
           <div v-if="currentIndex < questions.length - 1" class="action-item action-right" @click="nextQuestion">
             <span>下一题</span>
@@ -136,6 +148,40 @@
       </div>
     </main>
   </div>
+
+    <!-- 移动端答题卡抽屉：半屏从底部滑入，点击方块跳转对应题目后自动收起 -->
+    <Transition name="drawer-mask">
+      <div v-if="navigatorVisible" class="nav-mask" @click="closeNavigator"></div>
+    </Transition>
+    <Transition name="drawer-panel">
+      <div v-if="navigatorVisible" class="nav-drawer">
+        <div class="nav-handle"></div>
+        <div class="nav-title">答题卡</div>
+        <div class="nav-legend">
+          <span class="legend-item"><i class="swatch swatch-answered"></i>已答</span>
+          <span class="legend-item"><i class="swatch swatch-unanswered"></i>未答</span>
+          <span class="legend-item"><i class="swatch swatch-current"></i>当前</span>
+        </div>
+        <div class="nav-grid">
+          <button
+            v-for="(q, idx) in questions"
+            :key="q.id"
+            class="nav-cell"
+            :class="{
+              'nav-cell-answered': isQuestionAnswered(q),
+              'nav-cell-current': idx === currentIndex
+            }"
+            @click="jumpToQuestion(idx)"
+          >
+            <span class="nav-cell-num">{{ idx + 1 }}</span>
+          </button>
+        </div>
+        <div class="nav-footer">
+          <span>已答 {{ answeredCount }} / 未答 {{ questions.length - answeredCount }}</span>
+          <span class="nav-footer-total">共 {{ questions.length }} 题</span>
+        </div>
+      </div>
+    </Transition>
 
     <!-- 通用视觉高级弹窗（置于外层根节点，无论是否开考或拦截均能正常渲染） -->
     <AppModal
@@ -186,6 +232,9 @@ const modalConfirmText = ref('确定');
 const pendingAction = ref<(() => void) | null>(null);
 const pendingCancelAction = ref<(() => void) | null>(null);
 
+// 答题卡抽屉状态
+const navigatorVisible = ref(false);
+
 const showAppModal = (
   msg: string,
   type: 'info' | 'warning' | 'success' | 'danger' = 'info',
@@ -225,6 +274,35 @@ const progressPercent = computed(() => {
   if (!questions.value.length) return 0;
   return Math.round(((currentIndex.value + 1) / questions.value.length) * 100);
 });
+
+// 判断某题是否已作答（与交卷判定逻辑保持一致）：客观看选项、填空看逐空、简答看文本
+const isQuestionAnswered = (q: any) => {
+  const qid = String(q.id);
+  if (['fill', 'fill_in'].includes(q.type)) {
+    return (fillAnswers[qid] || []).some((v) => (v || '').trim().length > 0);
+  }
+  if (['short', 'short_answer'].includes(q.type)) {
+    return (shortAnswers[qid] || '').trim().length > 0;
+  }
+  return (userAnswers[qid] || []).length > 0;
+};
+
+const answeredCount = computed(() => questions.value.filter((q) => isQuestionAnswered(q)).length);
+
+const toggleQuestionNavigator = () => {
+  navigatorVisible.value = true;
+};
+
+const closeNavigator = () => {
+  navigatorVisible.value = false;
+};
+
+// 点击答题卡方块：跳转目标题并自动收起抽屉
+const jumpToQuestion = (idx: number) => {
+  if (idx < 0 || idx >= questions.value.length) return;
+  currentIndex.value = idx;
+  closeNavigator();
+};
 
 const formattedTime = computed(() => {
   const m = Math.floor(remainingSeconds.value / 60);
@@ -413,20 +491,10 @@ const toggleFavorite = async () => {
 };
 
 const handleManualSubmit = () => {
-  // 未作答统计: 客观选项 + 填空逐空 + 简答文本 三类作答一并计入 (兼容 fill/fill_in 与 short/short_answer 完整枚举)
-  const answeredCount = questions.value.filter((q) => {
-    const qid = String(q.id);
-    if (['fill', 'fill_in'].includes(q.type)) {
-      return (fillAnswers[qid] || []).some((v) => (v || '').trim());
-    }
-    if (['short', 'short_answer'].includes(q.type)) {
-      return (shortAnswers[qid] || '').trim().length > 0;
-    }
-    return (userAnswers[q.id] || []).length > 0;
-  }).length;
+  // 未作答统计: 复用答题卡抽屉的同源判定 isQuestionAnswered（客观选项 + 填空逐空 + 简答文本）
+  if (answeredCount.value < questions.value.length) {
+    const unAnswered = questions.value.length - answeredCount.value;
 
-  if (answeredCount < questions.value.length) {
-    const unAnswered = questions.value.length - answeredCount;
     showAppModal(
       `您还有 ${unAnswered} 道题未作答，确定要直接交卷结算吗？`,
       'warning',
@@ -743,14 +811,6 @@ onBeforeRouteLeave((to, from, next) => {
   margin-left: 2px;
 }
 
-.statis-progress {
-  flex: 1;
-  height: 12px;
-  background: #f4f4f4;
-  border-radius: 10px;
-  overflow: hidden;
-}
-
 .progress-inner {
   height: 100%;
   background: linear-gradient(90deg, #ffe958, #ffce09);
@@ -954,4 +1014,185 @@ onBeforeRouteLeave((to, from, next) => {
   border-radius: 20px;
   box-shadow: 0 4px 14px rgba(127, 132, 254, 0.35);
 }
+
+/* 底部"答题卡"入口按钮：白底轻描边，与交卷结算胶囊形成层级对比 */
+.action-nav-trigger {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  color: #293c5f;
+  padding: 9px 18px;
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(41, 60, 95, 0.08);
+  font-size: 14px;
+}
+
+/* 答题卡抽屉（移动端半屏，从底部滑入） */
+.nav-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 90;
+}
+
+.nav-drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  max-width: 480px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 20px 20px 0 0;
+  padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
+  box-shadow: 0 -12px 32px rgba(41, 60, 95, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 60vh;
+}
+
+.nav-handle {
+  width: 44px;
+  height: 5px;
+  border-radius: 3px;
+  background: #e2e8f0;
+  margin: 0 auto;
+}
+
+.nav-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: center;
+}
+
+.nav-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.swatch-answered {
+  background: #dbeafe;
+  border: 1.5px solid #93c5fd;
+}
+
+.swatch-unanswered {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  box-shadow: 0 1px 2px rgba(41, 60, 95, 0.08);
+}
+
+.swatch-current {
+  background: #ffffff;
+  border: 2px solid #4fa7ff;
+}
+
+.nav-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 260px;
+  padding: 4px;
+}
+
+.nav-cell {
+  position: relative;
+  aspect-ratio: 1;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(41, 60, 95, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+  padding: 0;
+}
+
+.nav-cell:active {
+  transform: scale(0.94);
+}
+
+.nav-cell-answered {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.nav-cell-current {
+  border: 2px solid #4fa7ff;
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(79, 167, 255, 0.18);
+}
+
+.nav-cell-current.nav-cell-answered {
+  background: #dbeafe;
+}
+
+.nav-cell-num {
+  font-size: 15px;
+  font-weight: 800;
+  color: #475569;
+}
+
+.nav-cell-current .nav-cell-num {
+  color: #1d4ed8;
+}
+
+.nav-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 12px;
+}
+
+.nav-footer-total {
+  color: #64748b;
+}
+
+/* 抽屉过渡动画：遮罩淡入淡出 + 面板从底部滑入滑出 */
+.drawer-mask-enter-active,
+.drawer-mask-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.drawer-mask-enter-from,
+.drawer-mask-leave-to {
+  opacity: 0;
+}
+
+.drawer-panel-enter-active,
+.drawer-panel-leave-active {
+  transition: transform 0.28s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.drawer-panel-enter-from,
+.drawer-panel-leave-to {
+  transform: translateY(100%);
+}
+
 </style>
