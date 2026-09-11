@@ -1,68 +1,75 @@
 /**
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 彻底根除填空题 TypeError: Cannot read properties of undefined (reading '0') 崩溃：规范化兼容 fill/fill_in 与 short/short_answer 枚举，支持正则兼容多下划线切分题干；2. 增加 getFillAnswers 防御性保护兜底，杜绝数组未就绪异常；3. 升级提交答卷逻辑：精准接收接口回传的 record_id 直达报告页，解决提交后页面空白且无法进入已参加的Bug]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 彻底解决做题页面不渲染题目选项Bug：规范化兼容后端 single_choice、multiple_choice、judge 等完整枚举，并加入 getNormalizedOptions 智能解析字符串/对象多格式选项; 2. 移除顶栏练习模式硬编码标签，改为展示不限时; 3. 优化已提交拦截与AppModal挂载层级，防止已提交用户进入白屏]
  * 修改时间：2026-09-09
  * AI模型：Muse Spark
  * 修改内容：[防作弊：计时锚定服务端 started_at/server_now，删除超限清零后门；用时由服务端结算]
  */
 <template>
-  <div class="quiz-container" v-if="record">
-    <!-- 顶栏：返回 + 标题 + 倒计时 -->
-    <header class="quiz-header">
-      <button class="back-btn" @click="confirmExit">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 18 9 12 15 6"></polyline>
-        </svg>
-      </button>
-
-      <span class="quiz-title">{{ record.title || '在线任务' }}</span>
-
-      <div class="header-right">
-        <div v-if="record.is_timed || record.end_time" class="timer-pill" :class="{ warning: remainingSeconds < 180 }">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
+  <div class="task-page-root">
+    <div class="quiz-container" v-if="record">
+      <!-- 顶栏：返回 + 标题 + 倒计时 -->
+      <header class="quiz-header">
+        <button class="back-btn" @click="confirmExit">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
-          <span>{{ formattedTime }}</span>
-        </div>
-        <span v-else class="practice-tag">练习模式</span>
-      </div>
-    </header>
+        </button>
 
-    <!-- 主答题卡片区域 (对齐 MBTI 布局) -->
-    <main class="main-ctx">
-      <div class="answer-con" v-if="currentQuestion">
-        <!-- 顶部装饰挂条 (绝对定位上浮，间距与负 margin 匹配) -->
-        <div class="bar"></div>
+        <span class="quiz-title">{{ record.title || '在线任务' }}</span>
 
-        <!-- 进度与统计 -->
-        <div class="statis-con">
-          <div class="statis">
-            <span class="curr">{{ currentIndex + 1 }}</span>
-            <span class="total">/{{ questions.length }}</span>
+        <div class="header-right">
+          <div v-if="record.is_timed || record.end_time" class="timer-pill" :class="{ warning: remainingSeconds < 180 }">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>{{ formattedTime }}</span>
           </div>
-          <div class="statis-progress">
-            <div class="progress-inner" :style="{ width: progressPercent + '%' }"></div>
-          </div>
+          <span v-else class="practice-tag">不限时作答</span>
         </div>
+      </header>
 
-        <!-- 题型与题目正文 (题目未收藏时显示收藏按钮，已收藏时隐藏) -->
-        <div class="question">
-          <div class="question-header">
-            <span class="type-badge">{{ getTypeLabel(currentQuestion.type) }}</span>
-            <button v-if="!isCurrentFav" class="q-fav-btn" @click="toggleFavorite" title="收藏此题">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-              <span>收藏此题</span>
-            </button>
+      <!-- 主答题卡片区域 (对齐 MBTI 布局) -->
+      <main class="main-ctx">
+        <div class="answer-con" v-if="currentQuestion">
+          <!-- 顶部装饰挂条 (绝对定位上浮，间距与负 margin 匹配) -->
+          <div class="bar"></div>
+
+          <!-- 进度与统计 -->
+          <div class="statis-con">
+            <div class="statis">
+              <span class="curr">{{ currentIndex + 1 }}</span>
+              <span class="total">/{{ questions.length }}</span>
+            </div>
+            <div class="statis-progress">
+              <div class="progress-inner" :style="{ width: progressPercent + '%' }"></div>
+            </div>
           </div>
-          <p class="q-text">{{ currentQuestion.title }}</p>
-        </div>
+
+          <!-- 题型与题目正文 (题目未收藏时显示收藏按钮，已收藏时隐藏) -->
+          <div class="question">
+            <div class="question-header">
+              <span class="type-badge">{{ getTypeLabel(currentQuestion.type) }}</span>
+              <button v-if="!isCurrentFav" class="q-fav-btn" @click="toggleFavorite" title="收藏此题">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                <span>收藏此题</span>
+              </button>
+            </div>
+            <p class="q-text">{{ currentQuestion.title }}</p>
+          </div>
 
         <!-- 客观题选项 (无外边框，选中刷色填充) -->
         <div v-if="isObjective" class="options">
           <div
-            v-for="opt in currentQuestion.options"
+            v-for="opt in normalizedCurrentOptions"
             :key="opt.key"
             class="option"
             :class="{ 'option-active': isOptionSelected(opt.key) }"
@@ -78,14 +85,14 @@
           </div>
         </div>
 
-        <!-- 填空题: 题干 ___ 占位与输入框交替渲染 -->
+        <!-- 填空题: 题干下划线占位与输入框交替渲染 (兼容2个及以上下划线，使用 getFillAnswers 防御性保护) -->
         <div v-else-if="isFill" class="fill-block">
           <div class="fill-line">
             <template v-for="(seg, idx) in fillSegments" :key="idx">
               <span v-if="seg" class="fill-seg">{{ seg }}</span>
               <input
                 v-if="idx < fillSegments.length - 1"
-                v-model="fillAnswers[currentQuestion.id][idx]"
+                v-model="getFillAnswers(currentQuestion.id)[idx]"
                 class="fill-input"
                 type="text"
                 placeholder="填空"
@@ -128,8 +135,9 @@
         </div>
       </div>
     </main>
+  </div>
 
-    <!-- 通用视觉高级弹窗 -->
+    <!-- 通用视觉高级弹窗（置于外层根节点，无论是否开考或拦截均能正常渲染） -->
     <AppModal
       v-model="modalVisible"
       :title="modalTitle"
@@ -225,22 +233,86 @@ const formattedTime = computed(() => {
 });
 
 const getTypeLabel = (type: string) => {
-  if (type === 'single') return '单选题';
-  if (type === 'multiple') return '多选题';
-  if (type === 'fill') return '填空题';
-  if (type === 'short') return '简答题';
-  return '判断题';
+  if (['single', 'single_choice'].includes(type)) return '单选题';
+  if (['multiple', 'multiple_choice'].includes(type)) return '多选题';
+  if (['fill', 'fill_in'].includes(type)) return '填空题';
+  if (['short', 'short_answer'].includes(type)) return '简答题';
+  if (['judge', 'true_false'].includes(type)) return '判断题';
+  return '选择题';
 };
 
-const isObjective = computed(() => ['single', 'multiple', 'judge'].includes(currentQuestion.value?.type));
-const isFill = computed(() => currentQuestion.value?.type === 'fill');
-const isShort = computed(() => currentQuestion.value?.type === 'short');
+const isObjective = computed(() => {
+  const t = currentQuestion.value?.type;
+  return ['single', 'single_choice', 'multiple', 'multiple_choice', 'judge', 'true_false'].includes(t);
+});
+const isFill = computed(() => ['fill', 'fill_in'].includes(currentQuestion.value?.type));
+const isShort = computed(() => ['short', 'short_answer'].includes(currentQuestion.value?.type));
 
-// 填空题: 按 ___ 切分题干, 输入框与文字段交替渲染
+// 规范化当前题目的选项列表：无论后端返回的是对象数组 [{key, text}] 还是字符串数组 ['A. 莫奈', 'B. 马奈']，均准确解构为 {key, text}
+const normalizedCurrentOptions = computed((): Array<{ key: string; text: string }> => {
+  if (!currentQuestion.value) return [];
+  const qType = currentQuestion.value.type;
+  const raw = currentQuestion.value.options;
+  
+  // 判断题若无选项字段，自动智能提供【正确 / 错误】标准客观选项
+  if ((!raw || (Array.isArray(raw) && raw.length === 0)) && ['judge', 'true_false'].includes(qType)) {
+    return [
+      { key: 'A', text: '正确' },
+      { key: 'B', text: '错误' }
+    ];
+  }
+
+  if (!raw) return [];
+
+  let opts = raw;
+  if (typeof opts === 'string') {
+    try {
+      opts = JSON.parse(opts);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(opts)) return [];
+
+  const keys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  return opts.map((item: any, idx: number) => {
+    if (typeof item === 'object' && item !== null) {
+      const k = String(item.key || item.label || item.value || keys[idx] || '').trim().toUpperCase();
+      const t = String(item.text ?? item.content ?? item.title ?? '').trim();
+      return { key: k, text: t };
+    }
+    const str = String(item).trim();
+    const match = str.match(/^([A-Za-z])[\.、\s\-:]+\s*(.*)$/);
+    if (match) {
+      return {
+        key: match[1].toUpperCase(),
+        text: match[2].trim()
+      };
+    }
+    return {
+      key: keys[idx] || `Opt${idx + 1}`,
+      text: str
+    };
+  });
+});
+
+// 填空题: 兼容 2 个及以上连续下划线（如 __, ___, ____）切分题干, 输入框与文字段交替渲染
 const fillSegments = computed(() => {
   if (!currentQuestion.value) return [];
-  return String(currentQuestion.value.title || '').split('___');
+  const title = String(currentQuestion.value.title || '');
+  return title.split(/_{2,}/);
 });
+
+// 防御性获取填空作答数组，彻底杜绝 TypeError: Cannot read properties of undefined (reading '0')
+const getFillAnswers = (qId: number | string): string[] => {
+  const key = String(qId);
+  if (!fillAnswers[key]) {
+    const title = String(currentQuestion.value?.title || '');
+    const blanks = (title.match(/_{2,}/g) || []).length;
+    fillAnswers[key] = Array.from({ length: Math.max(1, blanks) }, () => '');
+  }
+  return fillAnswers[key];
+};
 
 const markFillAnswered = () => {
   // v-model 已双向绑定 fillAnswers; 此钩子预留响应式触发
@@ -258,7 +330,7 @@ const selectOption = (key: string) => {
   const qId = currentQuestion.value.id;
   const qType = currentQuestion.value.type;
 
-  if (qType === 'single' || qType === 'true_false') {
+  if (['single', 'single_choice', 'judge', 'true_false'].includes(qType)) {
     userAnswers[qId] = [key];
     if (currentIndex.value < questions.value.length - 1) {
       setTimeout(() => {
@@ -341,13 +413,13 @@ const toggleFavorite = async () => {
 };
 
 const handleManualSubmit = () => {
-  // 未作答统计: 客观选项 + 填空逐空 + 简答文本 三类作答一并计入 (修复主观题不计入的Bug)
+  // 未作答统计: 客观选项 + 填空逐空 + 简答文本 三类作答一并计入 (兼容 fill/fill_in 与 short/short_answer 完整枚举)
   const answeredCount = questions.value.filter((q) => {
     const qid = String(q.id);
-    if (q.type === 'fill') {
+    if (['fill', 'fill_in'].includes(q.type)) {
       return (fillAnswers[qid] || []).some((v) => (v || '').trim());
     }
-    if (q.type === 'short') {
+    if (['short', 'short_answer'].includes(q.type)) {
       return (shortAnswers[qid] || '').trim().length > 0;
     }
     return (userAnswers[q.id] || []).length > 0;
@@ -378,10 +450,10 @@ const executeSubmit = async () => {
     const answers: Array<{ resource_id: number; answer: any }> = [];
     questions.value.forEach((q) => {
       const qid = String(q.id);
-      if (q.type === 'fill') {
-        const blanks = fillAnswers[qid] || [];
+      if (['fill', 'fill_in'].includes(q.type)) {
+        const blanks = getFillAnswers(q.id);
         answers.push({ resource_id: q.id, answer: blanks.map((v) => (v == null ? '' : String(v))) });
-      } else if (q.type === 'short') {
+      } else if (['short', 'short_answer'].includes(q.type)) {
         const text = (shortAnswers[qid] || '').trim();
         answers.push({ resource_id: q.id, answer: text });
       } else {
@@ -401,15 +473,15 @@ const executeSubmit = async () => {
     });
 
     isFinished.value = true;
-    // 提交响应不回传记录 ID，回查我的提交定位该任务记录
-    let rid = recordIdForSubmit.value;
-    try {
-      const list: any = await http.get('/api/v1/member/task-records');
-      const hit = (list.items || []).find((r: any) => r.task_id === taskIdForSubmit.value);
-      if (hit) rid = hit.record_id;
-    } catch (e) {}
-    const needVerify = res?.status === 'pending_verification';
-    void needVerify;
+    // 优先读取提交接口直接回传的 record_id，若无则兜底回查列表或使用本地初始 recordId
+    let rid = res?.record_id || res?.data?.record_id || recordIdForSubmit.value;
+    if (!rid) {
+      try {
+        const list: any = await http.get('/api/v1/member/task-records');
+        const hit = (list.items || []).find((r: any) => r.task_id === taskIdForSubmit.value);
+        if (hit) rid = hit.record_id;
+      } catch (e) {}
+    }
     router.replace(`/report?record_id=${rid}`);
   } catch (err: any) {
     submitting.value = false;
@@ -492,14 +564,15 @@ onMounted(async () => {
     const loadedQuestions = entry.questions || [];
     questions.value = loadedQuestions;
 
-    // 初始化填空题逐空作答数组 (按题干 ___ 数量)
+    // 初始化填空题逐空作答数组 (按题干连续下划线数量兼容)
     loadedQuestions.forEach((q: any) => {
-      if (q.type === 'fill') {
-        const blanks = (String(q.title || '').match(/___/g) || []).length;
-        fillAnswers[String(q.id)] = Array.from({ length: Math.max(1, blanks) }, () => '');
+      const qid = String(q.id);
+      if (['fill', 'fill_in'].includes(q.type)) {
+        const blanks = (String(q.title || '').match(/_{2,}/g) || []).length;
+        fillAnswers[qid] = Array.from({ length: Math.max(1, blanks) }, () => '');
       }
-      if (q.type === 'short') {
-        shortAnswers[String(q.id)] = '';
+      if (['short', 'short_answer'].includes(q.type)) {
+        shortAnswers[qid] = '';
       }
     });
 

@@ -1,5 +1,9 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[全面接入全局 SaaS 列表规范 list-layout.css：1. 消除页面和表格硬边框，改用高定立体弥散阴影；2. 表格仅首行赋予淡蓝灰底色，列宽合理扩充杜绝字形折行；3. 按钮统一升级为深蓝主胶囊按键；4. 操作列改为轻量平铺彩色链接按键]
+ * [变更日志]
  * 修改时间：2026-09-10
  * AI模型：Gemini 系列
  * 修改内容：[1. Tabs 更名为「题目分类」与「试卷分类」; 2. 按钮文字统一精简为「新增」; 3. 移除分类用途与排序权重列; 4. 实现原生表格行上下拖拽排序与实时持久化保存; 5. 弹窗移除分类用途与排序权重项，新建默认自动置顶]
@@ -14,24 +18,43 @@
       <el-tab-pane label="试卷分类" name="task" />
     </el-tabs>
 
-    <div class="filter-bar" style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center;">
-      <el-button type="primary" class="primary-btn" @click="openCreateDialog">
-        <el-icon><Plus /></el-icon> 新增
+    <div class="filter-bar" style="margin-top: 18px; display: flex; justify-content: space-between; align-items: center;">
+      <el-button type="primary" class="primary-create-btn" @click="openCreateDialog">
+        <el-icon><Plus /></el-icon> 新增分类
       </el-button>
-      <span class="drag-hint">💡 提示：按住表格行可直接上下拖拽调换排序</span>
+      <span class="drag-hint">💡 提示：按住左侧把手图标可直接上下拖拽调换排序</span>
     </div>
 
+    <!-- 分类数据表格 (无硬边框，仅首行背景与微划线) -->
     <el-table
       ref="tableRef"
       :data="categories"
       v-loading="loading"
-      stripe
+      class="saas-modern-table"
       style="width: 100%; margin-top: 16px"
       row-key="id"
       :row-class-name="getRowClassName"
+      :header-cell-style="{
+        backgroundColor: '#f1f5f9',
+        color: '#475569',
+        fontWeight: '700',
+        fontSize: '13px',
+        padding: '14px 16px',
+        borderBottom: '1px solid #e2e8f0',
+        borderTop: 'none',
+        borderRight: 'none',
+        borderLeft: 'none',
+        whiteSpace: 'nowrap'
+      }"
+      :cell-style="{
+        padding: '16px 16px',
+        borderBottom: '1px solid #f1f5f9',
+        borderRight: 'none',
+        borderLeft: 'none'
+      }"
     >
       <!-- 拖拽把手图标列 -->
-      <el-table-column width="50" align="center">
+      <el-table-column width="60" align="center">
         <template #default>
           <span class="drag-handle" title="按住可上下拖拽调序">
             <el-icon><Rank /></el-icon>
@@ -39,13 +62,23 @@
         </template>
       </el-table-column>
 
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="分类名称" />
-
-      <el-table-column label="操作" width="160" fixed="right">
+      <el-table-column prop="id" label="ID" width="80" align="center">
         <template #default="{ row }">
-          <el-button type="primary" text size="small" @click="openEditDialog(row)">编辑</el-button>
-          <el-button type="danger" text size="small" @click="handleDelete(row.id)">删除</el-button>
+          <span class="col-id-text">{{ row.id }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="name" label="分类名称" min-width="260">
+        <template #default="{ row }">
+          <span class="cat-name-text">{{ row.name }}</span>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="操作" width="160" align="center" fixed="right">
+        <template #default="{ row }">
+          <div class="action-btn-group">
+            <el-button type="primary" link class="action-link-btn" @click="openEditDialog(row)">编辑</el-button>
+            <el-button type="danger" link class="action-link-btn red" @click="handleDelete(row.id)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -226,19 +259,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-card {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-}
-
-.primary-btn {
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  border: none;
-  padding: 8px 20px;
-}
-
 .drag-hint {
   font-size: 13px;
   color: #64748b;

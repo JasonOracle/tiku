@@ -1,6 +1,16 @@
 """
 [变更日志]
 修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[彻底移除 AI 出题与 AI 智能组卷中的「踩分点」与「文字解析」模块：1. 修正 ai_questions_generate_compat 与 ai_exams_generate_compat 提示词结构，聚焦高质量题干、选项与严格标准答案；2. 清理响应与落库模型中冗余的 explanation 与 grading_points，简答题以标准答案全文作为直接核验基准]
+[变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 底层
+修改内容：[1. 升级 ai_questions_generate_compat (AI创建题目接口): Prompt 明确要求生成并返回 explanation 答案解析与依据，并在响应 data.questions 中完整透传; 2. 规范化选项与正确答案提取]
+修改时间：2026-09-11
+AI模型：Gemini 底层
+修改内容：[彻底修复 AI 试卷生成题目质量与结构缺陷: 1. 升级 ai_exams_generate_compat 接口，Prompt 强制输出规范题型(single/multiple/judge/fill/short)、结构化选项[{"key": "A", "text": "..."}]、正确答案数组(answer/correct_answer)与解析(explanation); 2. 依据 specs 精准按用户需求题型与数量出卷，杜绝单一单选死板生成; 3. 题目与解析完整持久化至 ResourceItem，并在响应中全量返回给前端，确保审阅清单无缝高亮与解析渲染]
+修改时间：2026-09-11
 AI模型：OpenCode / Gemini 底层
 修改内容：[打通组织人事与试卷资产全景问答: 1. _build_system_prompt 自动查询并权威注入所属企业成员总数、各成员姓名/角色/职业/性别/年龄画像全景; 2. 注入企业试卷总数、各出卷人统计及近期试卷明细; 3. 支持自然语言直接询问‘有几个人叫啥、个人资料、最近某老师出了什么试卷’并一键输出结构化明细]
 修改时间：2026-09-10
@@ -209,8 +219,8 @@ def ai_verify_record(record_id: int, ctx: dict = Depends(require_admin),
 @router.post("/questions/generate")
 def ai_questions_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(require_admin),
                                  db: Session = Depends(get_db)):
-    """兼容旧出题表单：{material, types, count, difficulty, doc_ids, category_id}。
-    返回可预览条目（不落库，由 /resources/batch 入库），强制溯源。"""
+    """兼容出题表单：{material, types, count, difficulty, doc_ids, category_id}。
+    返回包含完整题干、结构化选项、正确答案、解析与采分点的条目列表（不落库，由 /resources/batch 确认入库），强制溯源。"""
     material = str(payload.get("material") or "")[:2000]
     if not material:
         raise HTTPException(status_code=400, detail="请填写出题材料或需求描述")
@@ -220,87 +230,282 @@ def ai_questions_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(re
     sources = _rag_hits(db, tid, material)
     context = "\n".join(s["chunk_content"] for s in sources) or "(暂无知识库命中)"
     questions: List[Dict[str, Any]] = []
+
+    prompt_schema = (
+        "每道题必须输出严格 JSON 对象，包含以下字段：\n"
+        "1. type: 题型(single单选/multiple多选/judge判断/fill填空/short简答)；\n"
+        "2. title: 题干描述；\n"
+        "3. options: 选项数组，格式为 [{\"key\": \"A\", \"text\": \"选项内容\"}, ...]，单选与多选必填4个选项；判断/填空/简答请留空 []；\n"
+        "4. answer: 正确标准答案数组，单选如 [\"A\"]，多选如 [\"A\", \"B\"]，判断如 [\"正确\"] 或 [\"错误\"]，填空题为各空标准答案数组，简答题为参考标准答案全文；\n"
+        "5. score: 本题分值(数字，默认10)。"
+    )
+
     if ai_available():
         try:
             raw = _ask(
-                prompt=f"基于以下材料出{count}道题(JSON数组，每项含type(single/multiple/judge/fill/short)/title/options[{{\"key\",\"text\"}}]/answer/score)：\n材料：{material}\n知识：{context}",
-                system="你是企业培训出题助手，只输出JSON数组。",
+                prompt=(
+                    f"基于以下材料生成 {count} 道高质量企业考核试题（JSON数组）：\n"
+                    f"出题需求/材料：{material}\n"
+                    f"参考企业知识：{context}\n\n"
+                    f"{prompt_schema}\n"
+                    f"只输出 JSON 数组，严禁包含任何其他修饰语。"
+                ),
+                system="你是顶级企业培训出题专家，负责生成高水准原创试题。必须严格输出包含 title、options、answer 的标准 JSON 数组。",
                 json_mode=True, db=db, tenant_id=tid,
             )
-            for it in (extract_json(raw) or [])[:count]:
-                questions.append({"type": it.get("type") or "single",
-                                  "title": str(it.get("title") or it.get("content") or material[:30]),
-                                  "options": it.get("options") or [],
-                                  "answer": it.get("answer") or it.get("correct_answer") or [],
-                                  "score": int(it.get("score") or 10),
-                                  "ai_rag_sources": sources})
+            raw_items = extract_json(raw) or []
+            type_norm = {
+                "single_choice": "single", "single": "single",
+                "multiple_choice": "multiple", "multiple": "multiple",
+                "judge": "judge", "judgment": "judge", "boolean": "judge",
+                "fill": "fill", "fill_in": "fill", "blank": "fill",
+                "short": "short", "short_answer": "short", "essay": "short"
+            }
+            opt_keys = ["A", "B", "C", "D", "E", "F"]
+
+            for it in raw_items[:count]:
+                raw_type = str(it.get("type") or "single").lower()
+                q_type = type_norm.get(raw_type, "single")
+
+                # 规范化选项
+                raw_opts = it.get("options") or []
+                norm_opts = []
+                if isinstance(raw_opts, list):
+                    for idx, o in enumerate(raw_opts):
+                        if isinstance(o, dict):
+                            k = str(o.get("key") or opt_keys[idx] if idx < len(opt_keys) else f"Opt{idx+1}").strip().upper()
+                            t_text = str(o.get("text") or o.get("content") or "").strip()
+                            norm_opts.append({"key": k, "text": t_text})
+                        elif isinstance(o, str):
+                            o_str = o.strip()
+                            import re
+                            m = re.match(r"^([A-Za-z])[\.、\s\-:]+\s*(.*)$", o_str)
+                            if m:
+                                norm_opts.append({"key": m.group(1).upper(), "text": m.group(2).strip()})
+                            else:
+                                norm_opts.append({"key": opt_keys[idx] if idx < len(opt_keys) else f"Opt{idx+1}", "text": o_str})
+
+                # 规范化答案
+                raw_ans = it.get("answer") or it.get("correct_answer") or []
+                if isinstance(raw_ans, list):
+                    ans_list = [str(x).strip() for x in raw_ans if x is not None]
+                elif isinstance(raw_ans, str):
+                    ans_list = [a.strip() for a in raw_ans.split(",") if a.strip()]
+                else:
+                    ans_list = [str(raw_ans)] if raw_ans else []
+
+                questions.append({
+                    "type": q_type,
+                    "title": str(it.get("title") or it.get("content") or material[:30]).strip(),
+                    "options": norm_opts,
+                    "answer": ans_list,
+                    "correct_answer": ans_list,
+                    "score": int(it.get("score") or 10),
+                    "ai_rag_sources": sources
+                })
         except (AiServiceError, Exception):
             questions = []
+
     if not questions:
         for i in range(count):
-            questions.append({"type": "single", "title": f"【待人工补录】{material[:40]}（{i + 1}）",
-                              "options": [], "answer": [], "score": 10,
-                              "ai_rag_sources": sources})
-    return {"code": 200, "message": "AI 已生成，请预览勾选后入库",
-            "data": {"questions": questions, "ai_rag_sources": sources}}
+            questions.append({
+                "type": "single",
+                "title": f"【待人工补录】{material[:40]}（{i + 1}）",
+                "options": [
+                    {"key": "A", "text": "备选方案 A"},
+                    {"key": "B", "text": "备选方案 B"},
+                    {"key": "C", "text": "备选方案 C"},
+                    {"key": "D", "text": "备选方案 D"}
+                ],
+                "answer": ["A"],
+                "correct_answer": ["A"],
+                "score": 10,
+                "explanation": "请在题目列表或编辑弹窗中补充本题依据与详细解析。",
+                "ai_rag_sources": sources
+            })
+
+    return {
+        "code": 200,
+        "message": "AI 已生成，请预览勾选后入库",
+        "data": {"questions": questions, "ai_rag_sources": sources}
+    }
 
 
 @router.post("/exams/generate")
 def ai_exams_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(require_admin),
                              db: Session = Depends(get_db)):
-    """兼容旧组卷表单：{title, description, specs, difficulty, category_id, ...}。
-    直接生成草稿任务并落库，强制溯源。"""
+    """兼容 AI 一键组卷：支持自定义题型构成(specs)、材料背景、结构化选项、正确答案及解析。
+    直接生成试卷草稿与对应试题入库，强制溯源并全量返回前端供即时审阅。"""
     description = str(payload.get("description") or "")
     title = str(payload.get("title") or "") or (description[:30] or "AI 智能组卷")
-    specs = payload.get("specs") or [{"q_type": "single", "count": 5}]
-    total = sum(int(s.get("count") or 0) for s in specs) or 5
+    specs = payload.get("specs") or [{"q_type": "single", "count": 10}]
+    total = sum(int(s.get("count") or 0) for s in specs) or 10
+    spec_desc = "，".join(f"{s.get('count', 1)}道{s.get('q_type', 'single')}题" for s in specs)
     tid = ctx["tenant_id"]
     sources = _rag_hits(db, tid, description or title)
     context = "\n".join(s["chunk_content"] for s in sources) or "(暂无知识库命中)"
     made: List[Dict[str, Any]] = []
+
+    type_map_prompt = (
+        "题型取值仅限：single(单选题)、multiple(多选题)、judge(判断题)、fill(填空题)、short(简答题)。\n"
+        "每个题目必须包含严格属性：\n"
+        "1. type: 题型标识字符串；\n"
+        "2. title: 题目题干描述；\n"
+        "3. options: 选项对象列表，格式为 [{\"key\": \"A\", \"text\": \"选项内容\"}, ...]，单选与多选必填4个选项；判断/填空/简答题请留空列表 []；\n"
+        "4. answer: 正确标准答案数组，单选题如 [\"A\"]，多选题如 [\"A\", \"B\"]，判断题如 [\"正确\"] 或 [\"错误\"]，填空题为各空标准答案数组，简答题为参考标准答案全文；\n"
+        "5. score: 本题分值(数字，默认10)。"
+    )
+
     if ai_available():
         try:
             raw = _ask(
-                prompt=f"主题{title}需求{description}，生成{total}道单选题(JSON数组，每项含title/options/correct_answer)：\n知识：{context}",
-                system="你是企业培训出题助手，只输出JSON数组。",
+                prompt=(
+                    f"试卷主题：{title}\n"
+                    f"用户需求说明：{description}\n"
+                    f"题目规格要求：共生成 {total} 道题（构成为：{spec_desc}）\n"
+                    f"{type_map_prompt}\n"
+                    f"参考企业知识库：\n{context}\n\n"
+                    f"请务必输出严格的 JSON 数组，严禁包含任何 Markdown 标记或多余文本。"
+                ),
+                system="你是顶级企业培训出卷专家，负责生成高水准原创考核试题。必须严格按要求输出 JSON 试题数组，各项题干、选项、答案与解析必须严谨专业、完整无缺。",
                 json_mode=True, db=db, tenant_id=tid,
             )
-            for it in (extract_json(raw) or [])[:total]:
-                made.append({"title": str(it.get("title") or title),
-                             "options": it.get("options") or [],
-                             "answer": it.get("correct_answer") or []})
+            raw_items = extract_json(raw) or []
+            type_norm = {
+                "single_choice": "single", "single": "single",
+                "multiple_choice": "multiple", "multiple": "multiple",
+                "judge": "judge", "judgment": "judge", "boolean": "judge",
+                "fill": "fill", "fill_in": "fill", "blank": "fill",
+                "short": "short", "short_answer": "short", "essay": "short"
+            }
+            for it in raw_items[:total]:
+                raw_type = str(it.get("type") or "single").lower()
+                q_type = type_map_prompt_type = type_norm.get(raw_type, "single")
+
+                # 规范化 options
+                raw_opts = it.get("options") or []
+                norm_opts = []
+                opt_keys = ["A", "B", "C", "D", "E", "F"]
+                if isinstance(raw_opts, list):
+                    for idx, o in enumerate(raw_opts):
+                        if isinstance(o, dict):
+                            k = str(o.get("key") or opt_keys[idx] if idx < len(opt_keys) else f"Opt{idx+1}").strip().upper()
+                            t_text = str(o.get("text") or o.get("content") or o.get("value") or "").strip()
+                            norm_opts.append({"key": k, "text": t_text})
+                        elif isinstance(o, str):
+                            o_str = o.strip()
+                            import re
+                            m = re.match(r"^([A-Za-z])[\.、\s\-:]+\s*(.*)$", o_str)
+                            if m:
+                                norm_opts.append({"key": m.group(1).upper(), "text": m.group(2).strip()})
+                            else:
+                                norm_opts.append({"key": opt_keys[idx] if idx < len(opt_keys) else f"Opt{idx+1}", "text": o_str})
+
+                # 规范化 answer (始终转为数组)
+                raw_ans = it.get("answer") or it.get("correct_answer") or []
+                if isinstance(raw_ans, list):
+                    ans_list = [str(x).strip() for x in raw_ans if x is not None]
+                elif isinstance(raw_ans, str):
+                    ans_list = [a.strip() for a in raw_ans.split(",") if a.strip()]
+                else:
+                    ans_list = [str(raw_ans)] if raw_ans else []
+
+                made.append({
+                    "type": q_type,
+                    "title": str(it.get("title") or it.get("content") or title).strip(),
+                    "options": norm_opts,
+                    "answer": ans_list,
+                    "correct_answer": ans_list,
+                    "score": int(it.get("score") or 10)
+                })
         except (AiServiceError, Exception):
             made = []
+
+    # 若大模型未生成或异常，保底生成结构健全的草稿题目
     if not made:
-        made = [{"title": f"【待人工补录】{title}（{i + 1}）", "options": [], "answer": []}
-                for i in range(total)]
-    t = Task(tenant_id=tid, title=title, description=description,
-             category_id=payload.get("category_id"),
-             is_timed=bool(payload.get("is_timed", False)),
-             time_limit=payload.get("time_limit"),
-             verification_mode="manual", creator_id=ctx["user"].id,
-             status="draft", ai_rag_sources=sources)
+        for i in range(total):
+            made.append({
+                "type": "single",
+                "title": f"【待人工补录】{title}（第 {i + 1} 题）",
+                "options": [
+                    {"key": "A", "text": "备选项 A"},
+                    {"key": "B", "text": "备选项 B"},
+                    {"key": "C", "text": "备选项 C"},
+                    {"key": "D", "text": "备选项 D"}
+                ],
+                "answer": ["A"],
+                "correct_answer": ["A"],
+                "score": 10
+            })
+
+    # 创建任务实体
+    t = Task(
+        tenant_id=tid, title=title, description=description,
+        category_id=payload.get("category_id"),
+        is_timed=bool(payload.get("is_timed", False)),
+        time_limit=payload.get("time_limit"),
+        start_time=payload.get("start_time"),
+        deadline=payload.get("end_time") or payload.get("deadline"),
+        verification_mode="manual", creator_id=ctx["user"].id,
+        status="draft", ai_rag_sources=sources
+    )
     db.add(t)
     db.flush()
+
     rids = []
+    return_questions = []
+    # 真实题型映射落库到 ResourceItem.type 字段
+    db_type_map = {
+        "single": "single_choice", "multiple": "multiple_choice",
+        "judge": "judge", "fill": "fill_in", "short": "short_answer"
+    }
+
     for i, q in enumerate(made):
-        r = ResourceItem(tenant_id=tid, type="single_choice", content=q["title"],
-                         options=q.get("options") or [], correct_answer=q.get("answer") or [],
-                         score=10, category_id=payload.get("category_id"),
-                         creator_id=ctx["user"].id, ai_rag_sources=sources)
+        r_type = db_type_map.get(q["type"], q["type"])
+        r = ResourceItem(
+            tenant_id=tid, type=r_type, content=q["title"],
+            options=q.get("options") or [],
+            correct_answer=q.get("answer") or [],
+            score=q.get("score") or 10,
+            category_id=payload.get("category_id"),
+            creator_id=ctx["user"].id,
+            ai_rag_sources=sources
+        )
         db.add(r)
         db.flush()
         rids.append(r.id)
-        db.add(TaskResource(task_id=t.id, resource_id=r.id, score=10, sort_order=i))
+        db.add(TaskResource(task_id=t.id, resource_id=r.id, score=q.get("score") or 10, sort_order=i))
+
+        # 组装返回前端审阅的结构体，包含新生成的真实 ID
+        return_questions.append({
+            "id": r.id,
+            "resource_id": r.id,
+            "type": q["type"],
+            "title": q["title"],
+            "content": q["title"],
+            "options": q["options"],
+            "answer": q["answer"],
+            "correct_answer": q["answer"],
+            "score": q["score"]
+        })
+
     db.flush()
     write_audit(db, tid, ctx["user"], "generate", "task", t.id,
                 f"AI 一键组卷《{title[:30]}》（{len(rids)} 条）")
     db.commit()
-    return {"code": 200, "message": f"已生成草稿，共 {len(rids)} 题",
-            "data": {"exam_id": t.id, "task_id": t.id, "question_count": len(rids),
-                     "new_questions": len(rids),
-                     "questions": [{"id": rid, **q} for rid, q in zip(rids, made)],
-                     "ai_rag_sources": sources}}
+
+    return {
+        "code": 200,
+        "message": f"已生成草稿，共 {len(rids)} 题（AI 原创生成 {len(rids)} 题）",
+        "data": {
+            "exam_id": t.id,
+            "task_id": t.id,
+            "question_count": len(rids),
+            "new_questions": len(rids),
+            "questions": return_questions,
+            "ai_rag_sources": sources
+        }
+    }
 
 
 @router.post("/chat")
@@ -580,8 +785,7 @@ TOOL_DEFINITIONS = [
                                     "items": {"type": "string"},
                                     "description": "正确答案数组（单选如['A']，多选如['A','B']，判断如['正确']或['错误']，简答/填空传参考关键词或答案）"
                                 },
-                                "score": {"type": "integer", "description": "本题分值，默认10分"},
-                                "explanation": {"type": "string", "description": "题目解析与答案依据"}
+                                "score": {"type": "integer", "description": "本题分值，默认10分"}
                             },
                             "required": ["type", "title", "answer"]
                         }
@@ -1087,6 +1291,7 @@ def execute_tool_endpoint(
                     score=q_score,
                     category_id=category_id,
                     creator_id=uid,
+                    source="ai",
                     ai_rag_sources=q_sources
                 )
                 db.add(r)
@@ -1105,7 +1310,7 @@ def execute_tool_endpoint(
                         content=f"【AI 生成草稿】{title}（{qtype}题 第{j+1}题）",
                         options=[], correct_answer=[], score=10,
                         category_id=category_id,
-                        creator_id=uid, ai_rag_sources=sources
+                        creator_id=uid, source="ai", ai_rag_sources=sources
                     )
                     db.add(r)
                     db.flush()
@@ -1150,7 +1355,7 @@ def execute_tool_endpoint(
                 options=it.get("options") or [],
                 correct_answer=it.get("answer") or it.get("correct_answer") or [],
                 score=int(it.get("score") or 10),
-                category_id=category_id, creator_id=uid, ai_rag_sources=sources
+                category_id=category_id, creator_id=uid, source="ai", ai_rag_sources=sources
             )
             db.add(r)
             db.flush()

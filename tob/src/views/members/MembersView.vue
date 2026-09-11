@@ -1,6 +1,14 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[彻底根除图2文字省略号截断Bug：优化单元格padding为紧凑型12px 10px，将性别、角色、状态等定宽列转为 min-width 弹性自适应，确保胶囊与文本完整舒展不压缩]
+ * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[全面接入全局 SaaS 列表规范 list-layout.css：1. 消除页面和表格硬边框，改用高定立体弥散阴影；2. 表格仅首行赋予淡蓝灰底色，列宽合理扩充杜绝字形折行；3. 升级角色标签与状态物理圆点胶囊；4. 操作列采用无边框轻质链接按键]
+ * [变更日志]
+ * 修改时间：2026-09-11
  * AI模型：OpenCode / Gemini 底层
  * 修改内容：[员工编辑画像打通: 1. 列表表格新增性别、职业、年龄展示列，直观呈现补充信息；2. openDialog 稳健兼容回显画像字段]
  * 修改时间：2026-09-09
@@ -10,61 +18,106 @@
 <template>
   <div class="page-card">
     <div class="filter-bar">
-      <el-input v-model="keyword" placeholder="搜索手机号 / 姓名 / 昵称" clearable
-                style="width: 280px" @change="doSearch" @keyup.enter="doSearch" />
-      <el-button type="primary" class="add-btn" @click="openDialog">
-        <el-icon><Plus /></el-icon> 录入成员
-      </el-button>
+      <div class="filters">
+        <el-input
+          v-model="keyword"
+          placeholder="搜索手机号 / 姓名 / 昵称..."
+          clearable
+          class="custom-search-input"
+          style="width: 280px"
+          @change="doSearch"
+          @keyup.enter="doSearch"
+        >
+          <template #prefix>
+            <el-icon class="search-prefix-icon"><Search /></el-icon>
+          </template>
+        </el-input>
+      </div>
+      <div class="actions">
+        <el-button type="primary" class="primary-create-btn" @click="openDialog">
+          <el-icon><Plus /></el-icon> 录入成员
+        </el-button>
+      </div>
     </div>
 
-    <el-table :data="members" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
-      <el-table-column prop="user_id" label="ID" width="70" />
-      <el-table-column prop="phone" label="手机号" min-width="130" />
+    <!-- 成员列表表格 (无硬边框，仅首行背景与微划线) -->
+    <el-table
+      :data="members"
+      v-loading="loading"
+      class="saas-modern-table"
+      style="width: 100%"
+      :header-cell-style="{
+        backgroundColor: '#f1f5f9',
+        color: '#475569',
+        fontWeight: '700',
+        fontSize: '13px',
+        padding: '12px 10px',
+        borderBottom: '1px solid #e2e8f0',
+        whiteSpace: 'nowrap'
+      }"
+      :cell-style="{
+        padding: '14px 10px',
+        borderBottom: '1px solid #f1f5f9'
+      }"
+    >
+      <el-table-column prop="user_id" label="ID" width="80" align="center">
+        <template #default="{ row }">
+          <span class="col-id-text">{{ row.user_id }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="phone" label="手机号" min-width="140">
+        <template #default="{ row }">
+          <span style="font-weight: 600; color: #1e293b">{{ row.phone }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="姓名" min-width="110">
         <template #default="{ row }">
-          <span style="font-weight: 700">{{ row.display_name || '—' }}</span>
+          <span class="cell-main-title">{{ row.display_name || '—' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="昵称" min-width="110">
         <template #default="{ row }">
-          <span>{{ row.nickname || '—' }}</span>
+          <span class="muted-gray-text">{{ row.nickname || '—' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="性别" width="70">
+      <el-table-column label="性别" min-width="85" align="center">
         <template #default="{ row }">
-          <span v-if="row.gender === 'male'" style="color: #2563eb;">男</span>
-          <span v-else-if="row.gender === 'female'" style="color: #db2777;">女</span>
-          <span v-else-if="row.gender === 'secret'" style="color: #64748b;">保密</span>
-          <span v-else style="color: #cbd5e1;">—</span>
+          <span v-if="row.gender === 'male'" style="color: #2563eb; font-weight: 600">男</span>
+          <span v-else-if="row.gender === 'female'" style="color: #db2777; font-weight: 600">女</span>
+          <span v-else-if="row.gender === 'secret'" class="muted-gray-text">保密</span>
+          <span v-else class="muted-gray-text">—</span>
         </template>
       </el-table-column>
-      <el-table-column prop="age" label="年龄" width="70">
+      <el-table-column prop="age" label="年龄" min-width="85" align="center">
         <template #default="{ row }">
           <span>{{ row.age ? `${row.age} 岁` : '—' }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="occupation" label="职业" min-width="110">
+      <el-table-column prop="occupation" label="职业" min-width="120" align="center">
         <template #default="{ row }">
-          <span>{{ row.occupation || '—' }}</span>
+          <span class="prop-pill">{{ row.occupation || '—' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="角色" width="100">
+      <el-table-column label="角色" min-width="105" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.role === 'owner'" type="danger" size="small">所有者</el-tag>
-          <el-tag v-else-if="row.role === 'admin'" type="warning" size="small">管理员</el-tag>
-          <el-tag v-else type="primary" size="small">成员</el-tag>
+          <span v-if="row.role === 'owner'" class="prop-pill" style="background: #fef2f2; color: #dc2626">所有者</span>
+          <span v-else-if="row.role === 'admin'" class="prop-pill" style="background: #fffbeb; color: #d97706">管理员</span>
+          <span v-else class="prop-pill" style="background: #eff6ff; color: #2563eb">成员</span>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="80">
+      <el-table-column label="状态" min-width="120" align="center">
         <template #default="{ row }">
-          <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
-            {{ row.status === 'active' ? '启用' : '禁用' }}
-          </el-tag>
+          <div class="status-dot-pill" :class="row.status === 'active' ? 'published' : 'draft'">
+            <span class="dot"></span>
+            <span class="text">{{ row.status === 'active' ? '正常' : '禁用' }}</span>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="100" fixed="right">
-        <template #default="scope">
-          <el-button size="small" @click="openDialog(scope.row)">编辑</el-button>
+      <el-table-column label="操作" width="90" align="center" fixed="right">
+        <template #default="{ row }">
+          <div class="action-btn-group">
+            <el-button type="primary" link class="action-link-btn" @click="openDialog(row)">编辑</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>

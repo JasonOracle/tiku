@@ -2,37 +2,40 @@
 
 ## 💡 核心思想
 
-C 端移动端首页入口视图，负责以下核心业务流：
+C 端移动端首页核心入口视图，贯彻扁平化与真实业务数据驱动：
 
-1. **Header**：居中显示程序名「题库」，无多余导航图标。
-2. **Banner / Hero 二选一渲染**：
-   - 后端 `/api/v1/banners` 返回 ≥1 条数据时 → 渲染 `<BannerCarousel>` 轮播组件（支持手滑、圆点、自动轮播）。
-   - 返回 0 条时 → 降级为 Hero 推荐卷卡片（蓝紫渐变背景 + CoverArt + 立即挑战按钮）。
-3. **分类横向滚动 Pill**：渲染试卷分类 Tab，选中态蓝紫渐变高亮，未选中白底灰字。点击切换触发试卷列表重新加载。
-4. **试卷列表卡片**：左侧展示模式标签（限时/练习）、标题、三连指标（题目|总分|及格，`|` 分隔）；右侧展示透明背景 `CoverArt` SVG 插画 + 「开始做题 ›」渐变按钮。
-5. **底部安全区**：`padding-bottom: 140px` 保证 `<TabBar>` 浮动导航不遮挡列表末尾。
+1. **Header**：居中显示程序名「题库」，统一视觉基准。
+2. **Banner / Hero 智能切换**：
+   - 后端配置轮播图时优先渲染 `<BannerCarousel>`；
+   - 无轮播图时自动回退为第一套试卷的立体质感 Feature 卡片。
+3. **真实分类动态提取与切换**：
+   - 彻底废弃脱离实际的虚拟死分类；
+   - 动态解析当前企业已发布试卷所归属的真实分类集合（如「专业问答」、「入职培训」、「模拟考试」），并提供「全部精选」一键聚合。
+4. **试卷卡片真实业务呈现**：
+   - **去除无中生有的“练习模式”**：标签区域精准展示该试卷所属的真实分类胶囊，以及限时考试（如“30分钟限时”）；
+   - **真实统计指标**：从接口直读真实题目数（`N题`）、试卷总分（`M分`）及动态折算的及格线（`K分`）；
+   - **主行动按钮明确为「开始」**：右侧操作按钮由模糊的“做题”升级为“开始”；若用户已参加则呈现“查看”与绿色“已参加”状态胶囊。
+5. **底部安全区防遮挡**：配置 `padding-bottom: 140px`，配合毛玻璃浮动 `<TabBar>`，滑动体验丝滑无死角。
 
 ### 数据流
 
 ```
-onMounted → 并行请求 loadBanners / loadCategories / loadExams
+onMounted → 并行请求 loadBanners / loadData (获取 member-tasks)
            ↓
-banners.length > 0 ? BannerCarousel : Hero(heroExam)
+提取当前任务真实分类 (catMap) 并响应式更新 categories
            ↓
-selectCategory(catId) → loadExams(catId) → exams 列表重渲染
+selectCategory(catId) → 响应式 exams 过滤
            ↓
-startExam(examId) → 判断登录态 → router.push('/quiz?exam_id=...')
+startExam(examId) → 登录校验 → router.push('/task?task_id=...')
 ```
 
 ## 💻 使用示例
 
 ```vue
-<!-- 在 router/index.ts 中挂载为首页 -->
+<!-- 在 router/index.ts 中作为 C 端默认首页路由 -->
 import IndexView from '../views/index/IndexView.vue';
 
 const routes = [
-  { path: '/', component: IndexView },
+  { path: '/', component: IndexView, meta: { title: '题库首页' } },
 ];
 ```
-
-该组件为页面级视图，不接收外部 Props，所有数据由内部 `onMounted` 自行拉取。

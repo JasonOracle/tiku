@@ -1,5 +1,36 @@
 """
 [变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[1. submit_task 接口增加客观题自动评分引擎：单选/多选/判断精确比对 correct_answer 立即出分，填空题宽松文本比对，简答题跳过交核验；2. 总分写入 rec.score 并在返回数据中携带 score 字段]
+[变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[1. submit_task 提交试卷接口返回数据中直接补齐 record_id，让前端提交后无需轮询二次查询即可精确跳转成绩报告页]
+[变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[1. member_tasks 接口补充返回 record_id（若学员已有提交记录），便于 C 端列表与我的测试卡片精准携带答卷ID直达报告页]
+[变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[1. 升级 member_tasks 接口：联合聚合计算输出真实题目数 question_count、总分 total_score、及格分 pass_score，并返回 category_name、is_timed、time_limit、start_time、score、submit_time 等元数据，彻底修复 C 端首页与我的测试列表题目/总分/及格分全为 0 的问题]
+[变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[彻底修复 AI 批量入库后列表来源显示为人工录入的Bug：1. _res_out 动态读取持久化 r.source，并对历史数据通过 ai_rag_sources 智能推断来源；2. create_resource 与 batch_create 完整持久化 payload['source'] 到 resources 表]
+[变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[1. 升级 create_task 与 update_task 接口：支持接收 questions=[{id, score}] 个性化题目分值设置，实现试卷内原地灵活改分与落库]
+[变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[1. 强化 task_stats 统计接口：user_records 补充输出 status 字段，支持待批阅状态透传; 2. 统计 pass_rate 与 is_passed 时动态计算试卷及格线，支持区分已终审(verified)与待核验(pending_verification)成员成绩]
+[变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[1. _task_out 及 admin_list_tasks 支持解析并输出 creator_name(创建人姓名/昵称)，解决试卷管理列表创建人显示为空白短横线问题]
 修改时间：2026-09-10
 AI模型：OpenCode / Gemini 底层
 修改内容：[admin_list_tasks 补充支持 keyword/category_id/status 检索过滤]
@@ -14,7 +45,7 @@ from typing import Any, Dict, List, Optional
 from app.core.database import get_db
 from app.api.deps import require_admin, require_member
 from app.api.saas.ops import write_audit, notify, notify_admins
-from app.models.saas import ResourceItem, Task, TaskResource, TaskRecord, SysTenant, SysTenantUser, SysUser, SysUserProfile
+from app.models.saas import ResourceItem, Task, TaskResource, TaskRecord, SysTenant, SysTenantUser, SysUser, SysUserProfile, ResourceCategory
 from app.schemas.saas import SubmitAnswers, VerifyConfirm
 
 router = APIRouter()
@@ -23,16 +54,18 @@ router = APIRouter()
 def _res_out(r: ResourceItem) -> Dict[str, Any]:
     """新旧双写行结构：content/title、correct_answer/answer 并存。"""
     ans = r.correct_answer or []
+    # 优先使用持久化 source 字段，若空则检测是否有切片溯源智能兜底判断
+    src = getattr(r, "source", None) or ("ai" if (r.ai_rag_sources and len(r.ai_rag_sources) > 0) else "manual")
     return {"id": r.id, "type": r.type, "title": r.content, "content": r.content,
             "options": r.options or [], "answer": ans, "correct_answer": ans,
             "score": r.score or 10, "category_id": r.category_id, "difficulty": "medium",
-            "locked": False, "explanation": "", "grading_points": [], "source": "manual",
+            "locked": False, "explanation": "", "grading_points": [], "source": src,
             "source_ref": [], "ai_rag_sources": r.ai_rag_sources or [],
             "creator_id": r.creator_id,
             "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else ""}
 
 
-def _task_out(t: Task, with_count: bool = False, db: Session = None) -> Dict[str, Any]:
+def _task_out(t: Task, with_count: bool = False, db: Session = None, creator_name: str = None) -> Dict[str, Any]:
     d = {"id": t.id, "task_id": t.id, "title": t.title, "description": t.description or "",
          "cover_image": t.cover_image or "", "cover_url": t.cover_image or "",
          "category_id": t.category_id, "status": t.status, "is_timed": bool(t.is_timed),
@@ -42,9 +75,16 @@ def _task_out(t: Task, with_count: bool = False, db: Session = None) -> Dict[str
          "verification_mode": t.verification_mode,
          "grading_mode": "ai_auto" if t.verification_mode == "ai_auto" else "manual",
          "ai_rag_sources": t.ai_rag_sources or [],
+         "creator_id": t.creator_id,
+         "creator_name": creator_name or "",
          "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S") if t.created_at else ""}
     if with_count and db is not None:
         d["question_count"] = db.query(TaskResource).filter(TaskResource.task_id == t.id).count()
+    if not d["creator_name"] and t.creator_id and db is not None:
+        u = db.query(SysUser).filter(SysUser.id == t.creator_id).first()
+        if u:
+            p = db.query(SysUserProfile).filter(SysUserProfile.user_id == u.id).first()
+            d["creator_name"] = (p.nickname if p and p.nickname else (u.display_name or u.username)) or ""
     return d
 
 
@@ -74,11 +114,13 @@ def create_resource(payload: Dict[str, Any], ctx: dict = Depends(require_admin),
     content = str(payload.get("content") or payload.get("title") or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="条目内容不能为空")
+    src = str(payload.get("source") or "manual")
     r = ResourceItem(tenant_id=ctx["tenant_id"], type=str(payload.get("type") or "single_choice"),
                      content=content, options=payload.get("options") or [],
                      correct_answer=payload.get("correct_answer") or payload.get("answer") or [],
                      score=int(payload.get("score") or 10),
                      category_id=payload.get("category_id"),
+                     source=src,
                      creator_id=ctx["user"].id,
                      ai_rag_sources=payload.get("ai_rag_sources") or [])
     db.add(r)
@@ -95,10 +137,12 @@ def batch_create(payload: List[Dict[str, Any]], ctx: dict = Depends(require_admi
         content = str(it.get("content") or it.get("title") or "").strip()
         if not content:
             continue
+        src = str(it.get("source") or "manual")
         r = ResourceItem(tenant_id=ctx["tenant_id"], type=str(it.get("type") or "single_choice"),
                          content=content, options=it.get("options") or [],
                          correct_answer=it.get("correct_answer") or it.get("answer") or [],
                          score=int(it.get("score") or 10), category_id=it.get("category_id"),
+                         source=src,
                          creator_id=ctx["user"].id, ai_rag_sources=it.get("ai_rag_sources") or [])
         db.add(r)
         db.flush()
@@ -199,9 +243,14 @@ def _verification_mode(payload: Dict[str, Any]) -> str:
 def create_task(payload: Dict[str, Any], ctx: dict = Depends(require_admin),
                 db: Session = Depends(get_db)):
     title = str(payload.get("title") or "").strip()
-    if not title:
-        raise HTTPException(status_code=400, detail="任务标题不能为空")
-    rids = list(payload.get("resource_ids") or payload.get("question_ids") or [])
+    # 支持接收 [{id: 1, score: 20}] 对象列表，或纯 ID 列表 [1, 2]
+    q_items = payload.get("questions")
+    if q_items and isinstance(q_items, list) and len(q_items) > 0 and isinstance(q_items[0], dict):
+        q_list = [{"id": item.get("id"), "score": item.get("score")} for item in q_items if item.get("id")]
+    else:
+        rids = list(payload.get("resource_ids") or payload.get("question_ids") or [])
+        q_list = [{"id": rid, "score": None} for rid in rids]
+
     t = Task(tenant_id=ctx["tenant_id"], title=title,
              description=str(payload.get("description") or ""),
              cover_image=str(payload.get("cover_image") or payload.get("cover_url") or ""),
@@ -215,13 +264,15 @@ def create_task(payload: Dict[str, Any], ctx: dict = Depends(require_admin),
              status=str(payload.get("status") or "draft"))
     db.add(t)
     db.flush()
-    for i, rid in enumerate(rids):
+    for i, q_info in enumerate(q_list):
+        rid = q_info["id"]
         res = db.query(ResourceItem).filter(ResourceItem.id == rid,
                                              ResourceItem.tenant_id == ctx["tenant_id"]).first()
         if not res:
             db.rollback()
             raise HTTPException(status_code=400, detail=f"资源 {rid} 不存在或不属于当前企业")
-        db.add(TaskResource(task_id=t.id, resource_id=rid, score=res.score or 10, sort_order=i))
+        final_score = q_info["score"] if q_info["score"] is not None else (res.score or 10)
+        db.add(TaskResource(task_id=t.id, resource_id=rid, score=final_score, sort_order=i))
     db.flush()
     write_audit(db, ctx["tenant_id"], ctx["user"], "create", "task", t.id,
                 f"创建任务《{title}》")
@@ -255,9 +306,21 @@ def admin_list_tasks(ctx: dict = Depends(require_member), db: Session = Depends(
             subs[r.task_id] = subs.get(r.task_id, 0) + 1
             if r.status == "pending_verification":
                 pend[r.task_id] = pend.get(r.task_id, 0) + 1
+    # 批量查询试卷创建人，杜绝 N+1 慢查询
+    creator_ids = list({t.creator_id for t in items if t.creator_id})
+    creator_map: Dict[int, str] = {}
+    if creator_ids:
+        users = db.query(SysUser).filter(SysUser.id.in_(creator_ids)).all()
+        profiles = db.query(SysUserProfile).filter(SysUserProfile.user_id.in_(creator_ids)).all()
+        prof_map = {p.user_id: p for p in profiles}
+        for u in users:
+            p = prof_map.get(u.id)
+            creator_map[u.id] = (p.nickname if p and p.nickname else (u.display_name or u.username)) or ""
+
     out = []
     for t in items:
-        d = _task_out(t, True, db)
+        c_name = creator_map.get(t.creator_id) if t.creator_id else ""
+        d = _task_out(t, True, db, creator_name=c_name)
         d["pending_count"] = pend.get(t.id, 0)
         d["submit_count"] = subs.get(t.id, 0)
         out.append(d)
@@ -299,11 +362,19 @@ def task_stats(task_id: int, ctx: dict = Depends(require_admin), db: Session = D
     recs = db.query(TaskRecord).filter(TaskRecord.task_id == task_id,
                                         TaskRecord.tenant_id == ctx["tenant_id"]).all()
     
-    # 统计指标计算
+    # 计算当前试卷总分与及格线（避免写死 60 分导致判定偏差）
+    t_resources = db.query(TaskResource).filter(TaskResource.task_id == task_id).all()
+    task_total_score = sum(tr.score or 10 for tr in t_resources) if t_resources else 100
+    pass_percent = t.pass_percent if hasattr(t, "pass_percent") and t.pass_percent else 60
+    pass_score = (task_total_score * pass_percent) / 100.0
+
     total_participants = len(recs)
+    verify_pending_recs = [r for r in recs if r.status == "pending_verification"]
+    verified_recs = [r for r in recs if r.status == "verified"]
+
     scores = [r.score for r in recs if r.score is not None]
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0
-    passed_count = len([s for s in scores if s >= 60])
+    passed_count = len([s for s in scores if s >= pass_score])
     pass_rate = round((passed_count / len(scores)) * 100, 1) if scores else 0
 
     # 查关联用户信息
@@ -318,13 +389,15 @@ def task_stats(task_id: int, ctx: dict = Depends(require_admin), db: Session = D
     for r in recs:
         u = user_map.get(r.user_id)
         p = profile_map.get(r.user_id)
+        cur_score = r.score or 0
         user_records.append({
             "record_id": r.id,
             "user_id": r.user_id,
             "username": u.username if u else f"用户#{r.user_id}",
             "nickname": p.nickname if p and p.nickname else (u.display_name if u else None),
-            "score": r.score or 0,
-            "is_passed": (r.score or 0) >= 60,
+            "score": cur_score,
+            "status": r.status or "submitted",
+            "is_passed": cur_score >= pass_score,
             "time_spent": r.time_spent or 0,
             "submit_time": r.submit_time.strftime("%Y-%m-%d %H:%M:%S") if r.submit_time else (r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "")
         })
@@ -333,10 +406,12 @@ def task_stats(task_id: int, ctx: dict = Depends(require_admin), db: Session = D
         "total_participants": total_participants,
         "avg_score": avg_score,
         "pass_rate": pass_rate,
+        "pass_score": pass_score,
+        "task_total_score": task_total_score,
         "user_records": user_records,
         "submit_count": len([r for r in recs if r.status in ("submitted", "verified", "pending_verification")]),
-        "verify_pending": len([r for r in recs if r.status == "pending_verification"]),
-        "verified": len([r for r in recs if r.status == "verified"]),
+        "verify_pending": len(verify_pending_recs),
+        "verified": len(verified_recs),
         "total": len(recs)}}
 
 
@@ -362,16 +437,24 @@ def update_task(task_id: int, payload: Dict[str, Any], ctx: dict = Depends(requi
         t.verification_mode = _verification_mode(payload)
     if "status" in payload and payload["status"] in ("draft", "published", "archived"):
         t.status = payload["status"]
-    if "resource_ids" in payload or "question_ids" in payload:
-        rids = list(payload.get("resource_ids") or payload.get("question_ids") or [])
+    if "resource_ids" in payload or "question_ids" in payload or "questions" in payload:
+        q_items = payload.get("questions")
+        if q_items and isinstance(q_items, list) and len(q_items) > 0 and isinstance(q_items[0], dict):
+            q_list = [{"id": item.get("id"), "score": item.get("score")} for item in q_items if item.get("id")]
+        else:
+            rids = list(payload.get("resource_ids") or payload.get("question_ids") or [])
+            q_list = [{"id": rid, "score": None} for rid in rids]
+
         db.query(TaskResource).filter(TaskResource.task_id == t.id).delete()
-        for i, rid in enumerate(rids):
+        for i, q_info in enumerate(q_list):
+            rid = q_info["id"]
             res = db.query(ResourceItem).filter(ResourceItem.id == rid,
                                                  ResourceItem.tenant_id == ctx["tenant_id"]).first()
             if not res:
                 db.rollback()
                 raise HTTPException(status_code=400, detail=f"资源 {rid} 不存在或不属于当前企业")
-            db.add(TaskResource(task_id=t.id, resource_id=rid, score=res.score or 10, sort_order=i))
+            final_score = q_info["score"] if q_info["score"] is not None else (res.score or 10)
+            db.add(TaskResource(task_id=t.id, resource_id=rid, score=final_score, sort_order=i))
     db.commit()
     return {"code": 200, "message": "任务已修改", "data": {"task_id": t.id}}
 
@@ -424,10 +507,48 @@ def member_tasks(ctx: dict = Depends(require_member), db: Session = Depends(get_
     tasks = db.query(Task).filter(Task.tenant_id == tid, Task.status == "published").order_by(Task.id.desc()).all()
     recs = {r.task_id: r for r in db.query(TaskRecord).filter(
         TaskRecord.tenant_id == tid, TaskRecord.user_id == ctx["user"].id).all()}
-    return {"code": 200, "data": {"items": [
-        {"task_id": t.id, "title": t.title, "status": (recs[t.id].status if t.id in recs else "pending"),
-         "category_id": t.category_id,
-         "deadline": t.deadline.isoformat() if t.deadline else None} for t in tasks]}}
+    
+    # 批量预加载所有分类与题目关联，避免 N+1 慢查询
+    cat_ids = list({t.category_id for t in tasks if t.category_id})
+    cat_map: Dict[int, str] = {}
+    if cat_ids:
+        for c in db.query(ResourceCategory).filter(ResourceCategory.id.in_(cat_ids)).all():
+            cat_map[c.id] = c.name
+
+    task_ids = [t.id for t in tasks]
+    tr_map: Dict[int, List[int]] = {}
+    if task_ids:
+        for tr in db.query(TaskResource).filter(TaskResource.task_id.in_(task_ids)).all():
+            tr_map.setdefault(tr.task_id, []).append(tr.score if tr.score is not None else 10)
+
+    items = []
+    for t in tasks:
+        scores = tr_map.get(t.id, [])
+        q_count = len(scores)
+        t_total = sum(scores) if scores else 100
+        p_percent = getattr(t, "pass_percent", None) or 60
+        p_score = int(round(t_total * p_percent / 100.0))
+        r = recs.get(t.id)
+
+        items.append({
+            "task_id": t.id,
+            "record_id": r.id if r else None,
+            "title": t.title,
+            "status": (r.status if r else "pending"),
+            "category_id": t.category_id,
+            "category_name": cat_map.get(t.category_id) or "",
+            "question_count": q_count,
+            "total_score": t_total,
+            "pass_score": p_score,
+            "is_timed": bool(t.is_timed),
+            "time_limit": t.time_limit or 0,
+            "start_time": t.start_time.isoformat() if t.start_time else None,
+            "deadline": t.deadline.isoformat() if t.deadline else None,
+            "score": r.score if r else None,
+            "submit_time": r.submit_time.strftime("%Y-%m-%d %H:%M:%S") if (r and r.submit_time) else None
+        })
+
+    return {"code": 200, "data": {"items": items}}
 
 
 # ---- 提交（悲观锁 + 服务端权威计时） ----
@@ -466,6 +587,80 @@ def submit_task(payload: SubmitAnswers, ctx: dict = Depends(require_member),
         rec.time_spent = server_spent
         rec.answers = payload.answers
         rec.submit_time = now
+
+    # ---- 自动评分：客观题（单选/多选/判断/填空）即时比对正确答案，简答题跳过交由核验 ----
+    # 预加载本试卷所有题目的正确答案与分值
+    links = db.query(TaskResource, ResourceItem).join(
+        ResourceItem, ResourceItem.id == TaskResource.resource_id
+    ).filter(TaskResource.task_id == task.id).all()
+    # 构建 {resource_id: {correct_answer, type, score}} 映射
+    answer_map: Dict[int, Dict[str, Any]] = {}
+    for link, res in links:
+        answer_map[res.id] = {
+            "correct_answer": res.correct_answer or [],
+            "type": res.type or "",
+            "score": link.score if link.score is not None else (res.score or 10)
+        }
+
+    total_score = 0
+    has_subjective = False  # 是否包含简答等主观题（需人工/AI核验）
+
+    for ans_item in (payload.answers or []):
+        if not isinstance(ans_item, dict):
+            continue
+        rid = ans_item.get("resource_id")
+        user_ans = ans_item.get("answer")
+        if rid is None or rid not in answer_map:
+            continue
+        meta = answer_map[rid]
+        q_type = meta["type"]
+        correct = meta["correct_answer"]
+        q_score = meta["score"]
+
+        # 简答题无法自动评分
+        if q_type in ("short", "short_answer"):
+            has_subjective = True
+            continue
+
+        # 客观题评分：用户作答与正确答案精确比对
+        if q_type in ("single", "single_choice", "multiple", "multiple_choice", "judge", "true_false"):
+            # 规范化为大写排序字符串列表
+            def _norm_list(v):
+                if isinstance(v, list):
+                    return sorted([str(x).strip().upper() for x in v if str(x).strip()])
+                if isinstance(v, str) and v.strip():
+                    return [v.strip().upper()]
+                return []
+
+            user_norm = _norm_list(user_ans)
+            correct_norm = _norm_list(correct)
+
+            # 判断题特殊映射：correct_answer 可能存储为 ['正确'/'错误']，前端提交为 ['A'/'B']
+            if q_type in ("judge", "true_false"):
+                judge_map = {"正确": "A", "对": "A", "TRUE": "A", "YES": "A",
+                             "错误": "B", "错": "B", "FALSE": "B", "NO": "B"}
+                correct_norm = sorted([judge_map.get(c, c) for c in correct_norm])
+
+            if user_norm == correct_norm:
+                total_score += q_score
+
+        # 填空题评分：逐空文本宽松比对（去空格、不区分大小写）
+        elif q_type in ("fill", "fill_in"):
+            def _norm_fill(v):
+                if isinstance(v, list):
+                    return [str(x).strip().lower() for x in v]
+                if isinstance(v, str):
+                    return [v.strip().lower()]
+                return []
+            u_list = _norm_fill(user_ans)
+            c_list = _norm_fill(correct)
+            # 填空按空数比对，全部正确才得分
+            if u_list and c_list and len(u_list) == len(c_list):
+                if all(u == c for u, c in zip(u_list, c_list)):
+                    total_score += q_score
+
+    rec.score = total_score
+
     db.flush()
     write_audit(db, tid, ctx["user"], "submit", "task_record", rec.id or 0,
                 f"提交任务 #{task.id}")
@@ -474,7 +669,9 @@ def submit_task(payload: SubmitAnswers, ctx: dict = Depends(require_member),
                       "verification", "/verification")
     db.commit()
     msg = "提交成功，等待管理员或AI核验" if need_verify else "提交成功"
-    return {"code": 200, "message": msg, "data": {"status": status,
+    return {"code": 200, "message": msg, "data": {"record_id": rec.id,
+                                                 "status": status,
+                                                 "score": total_score,
                                                  "time_spent": server_spent,
                                                  "server_now": now.isoformat()}}
 

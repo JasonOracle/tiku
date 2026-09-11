@@ -1,5 +1,9 @@
 """
 [变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[1. task_entry 接口：pending 状态用户重新进入考试时重置 created_at 为当前时间，修复因前端异常崩溃退出后重新进入导致服务端用时从旧开考时间累积计算的问题]
+[变更日志]
 修改时间：2026-09-09
 AI模型：Muse Spark
 修改内容：[服务端权威计时：入口锁定 start_time，提交时服务端结算用时并校验截止]
@@ -44,7 +48,12 @@ def task_entry(task_id: int, ctx: dict = Depends(require_member), db: Session = 
         db.commit()
         db.refresh(rec)
     else:
-        db.commit()
+        # 仍为 pending（未提交）状态：用户可能因页面崩溃/退出后重新进入，重置开考时间为当前时刻
+        if rec.status == "pending":
+            rec.created_at = now
+            db.commit()
+        else:
+            db.commit()
     started = rec.created_at or now
     return {"code": 200, "data": {
         "task_id": t.id, "exam_title": t.title, "title": t.title,
@@ -96,11 +105,19 @@ def my_result(record_id: int, ctx: dict = Depends(require_member), db: Session =
         items.append({"resource_id": rid, "content": content, "user_answer": ans,
                       "gained": None, "eq_score": score})
     pending = rec.status == "pending_verification"
+    # 及格判断：总分基于 TaskResource 分值聚合，及格线基于 task.pass_percent（默认60%）
+    total_possible = sum(i.get("eq_score", 0) for i in items)
+    if not total_possible:
+        total_possible = 100
+    pass_percent = getattr(task, "pass_percent", None) or 60
+    pass_score = int(round(total_possible * pass_percent / 100.0))
+    actual_score = rec.score if rec.score is not None else 0
+    passed = actual_score >= pass_score and rec.score is not None
     return {"code": 200, "data": {
         "record_id": rec.id, "task_id": rec.task_id,
         "task_title": task.title if task else "",
         "status": rec.status, "pending": pending,
-        "score": rec.score, "passed": bool(rec.score),
+        "score": rec.score, "passed": passed,
         "time_spent": rec.time_spent or 0,
         "comments": rec.comments or "",
         "ai_comments": (rec.ai_result or {}).get("comments", "") if isinstance(rec.ai_result, dict) else "",

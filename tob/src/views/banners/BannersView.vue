@@ -1,47 +1,86 @@
 <!--
  * [变更日志]
- * 修改时间：2026-09-04
+ * 修改时间：2026-09-11
  * AI模型：Gemini 底层
- * 修改内容：[1. 修正 Banner 新建时的 sort_order 默认逻辑为已存在最大排序 + 1]
--->
+ * 修改内容：[1. 全面对齐现代 SaaS 无硬边框、首行专用淡蓝灰底色与立体弥散阴影设计规范; 2. 统一接入全局 list-layout.css 样式系统]
+ -->
 <template>
   <div class="page-card">
     <div class="filter-bar">
       <div class="filters">
-        <span class="tip">C端首页轮播（1张静显，超1张自动轮播）。启用上限 3 张。</span>
+        <span class="muted-gray-text">C端首页轮播（1张静显，超1张自动轮播）。启用上限 3 张。</span>
       </div>
       <div class="actions">
-        <el-button type="primary" class="primary-btn" @click="openCreate">
+        <el-button type="primary" class="primary-create-btn" @click="openCreate">
           <el-icon><Plus /></el-icon> 新增Banner
         </el-button>
       </div>
     </div>
 
-    <el-table :data="banners" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column label="图片" width="170">
+    <!-- Banner 列表表格 (无硬边框，仅首行背景与微划线) -->
+    <el-table
+      :data="banners"
+      v-loading="loading"
+      class="saas-modern-table"
+      style="width: 100%"
+      :header-cell-style="{
+        backgroundColor: '#f1f5f9',
+        color: '#475569',
+        fontWeight: '700',
+        fontSize: '13px',
+        padding: '14px 16px',
+        borderBottom: '1px solid #e2e8f0',
+        whiteSpace: 'nowrap'
+      }"
+      :cell-style="{
+        padding: '16px 16px',
+        borderBottom: '1px solid #f1f5f9'
+      }"
+    >
+      <el-table-column prop="id" label="ID" width="80" align="center">
+        <template #default="{ row }">
+          <span class="col-id-text">{{ row.id }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="图片预览" width="190" align="center">
         <template #default="{ row }">
           <img :src="imgSrc(row.image_url)" class="thumb" alt="banner" />
         </template>
       </el-table-column>
-      <el-table-column label="链接" min-width="180">
+      <el-table-column label="跳转链接" min-width="240">
         <template #default="{ row }">
-          <el-tag v-if="row.link_type === 'none'" type="info" size="small">不跳转</el-tag>
-          <el-tag v-else-if="row.link_type === 'external'" type="warning" size="small">外链</el-tag>
-          <el-tag v-else type="success" size="small">站内</el-tag>
-          <span v-if="row.link_type !== 'none'" class="link-val">{{ row.link_value }}</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span class="prop-pill" v-if="row.link_type === 'none'">不跳转</span>
+            <span class="prop-pill" style="background: #fffbeb; color: #d97706" v-else-if="row.link_type === 'external'">外部链接</span>
+            <span class="prop-pill" style="background: #ecfdf5; color: #047857" v-else>站内路径</span>
+            <span v-if="row.link_type !== 'none'" class="muted-gray-text">{{ row.link_value }}</span>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column prop="sort_order" label="排序" width="80" />
-      <el-table-column label="启用" width="110">
+      <el-table-column prop="sort_order" label="排序" width="90" align="center">
         <template #default="{ row }">
-          <el-switch :model-value="row.is_enabled" @change="(v: boolean) => toggleEnabled(row, v)" />
+          <span class="col-id-text">{{ row.sort_order }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="170" fixed="right">
+      <el-table-column label="启用状态" width="130" align="center">
         <template #default="{ row }">
-          <el-button type="primary" text size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button type="danger" text size="small" @click="handleDelete(row.id)">删除</el-button>
+          <div
+            class="status-dot-pill"
+            :class="row.is_enabled ? 'published' : 'draft'"
+            @click="toggleEnabled(row, !row.is_enabled)"
+            title="点击切换启用状态"
+          >
+            <span class="dot"></span>
+            <span class="text">{{ row.is_enabled ? '已启用' : '已停用' }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="160" align="center" fixed="right">
+        <template #default="{ row }">
+          <div class="action-btn-group">
+            <el-button type="primary" link class="action-link-btn" @click="openEdit(row)">编辑</el-button>
+            <el-button type="danger" link class="action-link-btn red" @click="handleDelete(row.id)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -220,10 +259,7 @@ onMounted(loadBanners);
 </script>
 
 <style scoped>
-.page-card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03); }
-.filter-bar { display: flex; justify-content: space-between; align-items: center; }
 .tip { color: #64748b; font-size: 13px; }
-.primary-btn { background: linear-gradient(135deg, #0284c7, #0369a1); border: none; }
 .thumb { width: 150px; height: 64px; object-fit: cover; border-radius: 8px; }
 .link-val { margin-left: 8px; font-size: 12px; color: #64748b; }
 .interval-row { display: flex; align-items: center; gap: 10px; color: #475569; font-size: 14px; }

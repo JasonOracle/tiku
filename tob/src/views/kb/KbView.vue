@@ -1,6 +1,9 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-11
+ * AI模型：Gemini 底层
+ * 修改内容：[1. 文档表格全面对齐现代 SaaS 规范，接入统一 list-layout.css 与 saas-modern-table; 2. 表格外层卡片去除硬实线边框，升级为立体弥散高定阴影; 3. 表格仅首行配置淡蓝灰底色与细分割线]
+ * 修改时间：2026-09-11
  * AI模型：OpenCode / Gemini 底层
  * 修改内容：[会话隔离解耦: 抽屉测试召回切换至专属接口 /api/v1/admin/kb/query，仅做即时切片召回与回答，不生成持久化会话，彻底避免测试问题污染 AI 助理会话历史]
  * 修改时间：2026-09-11
@@ -184,8 +187,26 @@
         </div>
       </div>
 
-      <!-- 核心文件列表表格 -->
-      <el-table :data="filteredDocs" v-loading="loading" stripe style="width: 100%; margin-top: 14px">
+      <!-- 核心文件列表表格 (无硬边框，首行专属淡蓝灰底色与立体弥散阴影) -->
+      <el-table
+        :data="filteredDocs"
+        v-loading="loading"
+        class="saas-modern-table"
+        style="width: 100%; margin-top: 14px"
+        :header-cell-style="{
+          backgroundColor: '#f1f5f9',
+          color: '#475569',
+          fontWeight: '700',
+          fontSize: '13px',
+          padding: '14px 16px',
+          borderBottom: '1px solid #e2e8f0',
+          whiteSpace: 'nowrap'
+        }"
+        :cell-style="{
+          padding: '16px 16px',
+          borderBottom: '1px solid #f1f5f9'
+        }"
+      >
         <el-table-column label="文件名" min-width="260">
           <template #default="{ row }">
             <div class="file-cell">
@@ -759,13 +780,13 @@ onMounted(() => {
   background: #eff6ff !important;
 }
 
-/* 表格卡片 */
+/* 表格卡片 (对齐无硬边框、立体弥散高定阴影规范) */
 .table-card {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: none !important;
   border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+  padding: 24px;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.02), 0 1px 3px rgba(0, 0, 0, 0.03) !important;
 }
 
 .table-toolbar {

@@ -42,7 +42,6 @@ const toolMessage = ref<ToolCallMessage>({
           { key: 'D', text: '1900年' }
         ],
         answer: ['A'],
-        explanation: '1894年为甲午年，战争于该年爆发。',
         score: 10,
         ai_rag_sources: [{ document_name: '中国近代史重点考纲.pdf' }]
       }

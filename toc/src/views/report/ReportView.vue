@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 增加 passLabel 计算属性区分 submitted（自动出分）与 verified（人工核验）的成绩徽章文案；2. 修复成绩为 null 时 pass-badge 显示"已核验"的误导问题]
  * 修改时间：2026-09-09
  * AI模型：Muse Spark
  * 修改内容：[彻底清洗重写：对接成员成绩接口（核验中/得分/评语/本人作答），旧报告与解析锁体系已删除]
@@ -54,7 +57,7 @@
         </div>
 
         <div class="pass-badge" :class="{ passed: report.passed }">
-          {{ report.passed ? '已核验通过' : '已核验' }}
+          {{ passLabel }}
         </div>
         <div v-if="report.comments || report.ai_comments" class="comment-box">
           <span class="comment-title">核验评语：</span>
@@ -133,6 +136,15 @@ const statusLabel = computed(() => {
   if (s === 'pending_verification') return '核验中';
   if (s === 'submitted') return '已提交';
   return '待办';
+});
+
+// 成绩徽章文案：区分已提交（自动出分）与已核验（人工/AI确认）
+const passLabel = computed(() => {
+  const s = report.value?.status;
+  const passed = report.value?.passed;
+  if (s === 'verified') return passed ? '已核验通过' : '已核验';
+  if (s === 'submitted') return passed ? '恭喜通过' : '未达及格线';
+  return '待评定';
 });
 
 const fmtAnswer = (a: any): string => {

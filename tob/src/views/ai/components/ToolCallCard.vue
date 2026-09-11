@@ -74,9 +74,7 @@
             <div class="draft-row" style="margin-top: 6px">
               <span class="draft-label">答案:</span> {{ formatQuestion(q).answerText }}
             </div>
-            <div v-if="formatQuestion(q).explanation" class="draft-row" style="margin-top: 4px">
-              <span class="draft-label">解析:</span> {{ formatQuestion(q).explanation }}
-            </div>
+
           </el-collapse-item>
         </el-collapse>
         <el-form label-width="90px" size="small" style="margin-top: 12px">
@@ -145,9 +143,7 @@
         <div class="draft-row">
           <span class="draft-label">正确答案:</span> {{ singleQuestionPreview.answerText }}
         </div>
-        <div v-if="singleQuestionPreview.explanation" class="draft-row">
-          <span class="draft-label">解析:</span> {{ singleQuestionPreview.explanation }}
-        </div>
+
       </div>
 
       <!-- 删除试卷安全确认卡 -->
@@ -287,7 +283,7 @@ const toolArgs = computed(() => props.message.arguments || {});
 const actionResolved = computed(() => props.message.actionResolved || false);
 
 const formatQuestion = (a: any) => {
-  if (!a) return { title: '', typeLabel: '', difficulty: '', score: 0, options: [], answerText: '', explanation: '' };
+  if (!a) return { title: '', typeLabel: '', difficulty: '', score: 0, options: [], answerText: '' };
   const typeMap: Record<string, string> = { single: '单选题', multiple: '多选题', judge: '判断题', fill: '填空题', short: '简答题' };
   const rawAns = Array.isArray(a.answer) ? a.answer.map((x: any) => String(x ?? '').trim()) : (a.answer ? [String(a.answer).trim()] : []);
   const ansSet = new Set(rawAns.map((s: string) => s.toUpperCase()));
@@ -304,8 +300,7 @@ const formatQuestion = (a: any) => {
     difficulty: String(a.difficulty || 'medium'),
     score: a.score ?? 10,
     options,
-    answerText: rawAns.join('、') || '—',
-    explanation: String(a.explanation || '')
+    answerText: rawAns.join('、') || '—'
   };
 };
 

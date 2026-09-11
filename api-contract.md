@@ -163,3 +163,34 @@
   { "status": "published" } // 可选：draft, published, archived
   ```
 - **说明**：变更试卷为 `published`（已上架）后，C 端成员在答题中心立即外显可见。
+## 6. C 端任务提交流转 (Task Submission)
+
+### 6.1 提交答卷与客观题自动评分
+- **POST** `/api/v1/member/task-records/submit`
+- **说明**：提交成员作答数据。服务端执行防重交悲观锁，并立即启动客观题秒级判分。
+- **Request Body**:
+  ```json
+  {
+    "task_id": 30,
+    "time_spent": 1450,
+    "answers": [
+      { "resource_id": 168, "answer": ["A"] },
+      { "resource_id": 171, "answer": ["洛神赋图"] }
+    ]
+  }
+  ```
+- **Response 200**:
+  ```json
+  {
+    "code": 200,
+    "message": "提交成功",
+    "data": {
+      "record_id": 122,
+      "status": "submitted",
+      "score": 80,
+      "time_spent": 1450,
+      "server_now": "2026-09-11T16:50:00.000000"
+    }
+  }
+  ```
+- **核心契约**：接口会直接在 `data` 中返回 `record_id` 与核算后的 `score`，前端可利用此 `record_id` 实现无缝零延迟跳转成绩报告页。

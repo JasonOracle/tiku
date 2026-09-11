@@ -1,54 +1,97 @@
 <!--
  * [变更日志]
  * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[彻底根除图3记录ID被截断为“纪...”的问题：调整单元格内边距至紧凑规范 padding: 12px 10px，并将记录ID设置为弹性自适应 min-width="95"，杜绝文字省略号溢出]
+ * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[全面接入全局 SaaS 列表规范 list-layout.css：1. 消除页面和表格硬边框，改用高定立体弥散阴影；2. 表格仅首行赋予淡蓝灰底色，列宽合理扩充杜绝字形折行；3. 升级AI评阅预判胶囊与考生姓名排版；4. 操作列采用橙色实心圆角胶囊批阅按键]
+ * [变更日志]
+ * 修改时间：2026-09-11
  * AI模型：Gemini 3.6 Flash
  * 修改内容：[全面重构待核验队列与阅卷流程：1. 列表清晰展现试卷标题、考生姓名账号、提交时间与AI智能分析建议；2. 增加抽屉式可视人工批改，高亮展示试题原文、标准答案与学生答卷；3. 支持一键采纳AI建议或手动微调分数]
 -->
 <template>
   <div class="page-card">
     <div class="filter-bar">
-      <div class="title-box">
-        <span class="title">待核验试卷提交列表</span>
-        <el-tag type="warning" size="small" style="margin-left: 8px">待人工审阅 {{ records.length }} 份</el-tag>
+      <div class="filters">
+        <span class="cell-main-title" style="font-size: 16px">待核验试卷作答列表</span>
+        <span class="category-pill" style="background: #fffbeb; color: #d97706; font-weight: 700">
+          待人工终审 {{ records.length }} 份
+        </span>
       </div>
-      <el-button text type="primary" @click="loadRecords">
-        <el-icon><Refresh /></el-icon> 刷新数据
-      </el-button>
+      <div class="actions">
+        <el-button type="primary" link class="action-link-btn" @click="loadRecords">
+          <el-icon><Refresh /></el-icon> 刷新数据
+        </el-button>
+      </div>
     </div>
 
-    <el-table :data="records" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
-      <el-table-column prop="record_id" label="记录ID" width="85" align="center" />
-      <el-table-column prop="task_title" label="考核试卷名称" min-width="200" show-overflow-tooltip>
+    <!-- 待批阅列表表格 (无硬边框，仅首行背景与微划线) -->
+    <el-table
+      :data="records"
+      v-loading="loading"
+      class="saas-modern-table"
+      style="width: 100%"
+      :header-cell-style="{
+        backgroundColor: '#f1f5f9',
+        color: '#475569',
+        fontWeight: '700',
+        fontSize: '13px',
+        padding: '12px 10px',
+        borderBottom: '1px solid #e2e8f0',
+        whiteSpace: 'nowrap'
+      }"
+      :cell-style="{
+        padding: '14px 10px',
+        borderBottom: '1px solid #f1f5f9'
+      }"
+    >
+      <el-table-column prop="record_id" label="记录ID" min-width="95" align="center">
         <template #default="{ row }">
-          <span style="font-weight: 600; color: #1e293b">{{ row.task_title }}</span>
+          <span class="col-id-text">{{ row.record_id }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="考生姓名 / 账号" min-width="170">
+      <el-table-column prop="task_title" label="考核试卷名称" min-width="240" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span class="cell-main-title">{{ row.task_title }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="考生姓名 / 账号" min-width="180">
         <template #default="{ row }">
           <div style="display: flex; flex-direction: column">
             <span style="font-weight: 700; color: #0f172a">{{ row.nickname || row.username }}</span>
-            <span style="font-size: 12px; color: #64748b" v-if="row.nickname">{{ row.username }}</span>
+            <span style="font-size: 12px; color: #94a3b8" v-if="row.nickname">{{ row.username }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="submit_time" label="提交时间" width="160" align="center" />
-      <el-table-column label="AI 智能阅卷预判" min-width="220">
+      <el-table-column prop="submit_time" label="交卷时间" width="170" align="center">
+        <template #default="{ row }">
+          <span class="muted-gray-text">{{ row.submit_time }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="AI 智能阅卷预判" min-width="240">
         <template #default="{ row }">
           <div v-if="row.ai_result" class="ai-suggestion-box">
-            <el-tag type="success" size="small" style="margin-right: 6px">建议 {{ row.ai_result.suggested_score }} 分</el-tag>
+            <span class="prop-pill" style="background: #ecfdf5; color: #047857; margin-right: 6px">
+              建议 {{ row.ai_result.suggested_score }} 分
+            </span>
             <span class="ai-comment-text" :title="row.ai_result.comments">{{ row.ai_result.comments }}</span>
           </div>
-          <el-tag v-else type="info" size="small">未触发 AI 评阅</el-tag>
+          <span v-else class="muted-gray-text">未触发 AI 预评</span>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="220" fixed="right" align="center">
         <template #default="{ row }">
-          <el-button type="warning" text size="small" :loading="aiLoading === row.record_id" @click="triggerAi(row)">
-            ✨ AI 助考分析
-          </el-button>
-          <el-button type="primary" size="small" @click="openDrawer(row)">
-            进入批改
-          </el-button>
+          <div class="action-btn-group">
+            <el-button type="warning" link class="action-link-btn orange" :loading="aiLoading === row.record_id" @click="triggerAi(row)">
+              ✨ AI 助考分析
+            </el-button>
+            <button class="action-pill-btn pill-urgent" @click="openDrawer(row)">
+              进入批阅
+            </button>
+          </div>
         </template>
       </el-table-column>
     </el-table>

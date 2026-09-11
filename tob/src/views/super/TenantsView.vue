@@ -1,5 +1,9 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[全面接入全局 SaaS 列表规范 list-layout.css：1. 消除页面和表格硬边框，改用高定立体弥散阴影；2. 表格仅首行赋予淡蓝灰底色，列宽合理扩充杜绝字形折行；3. 升级企业状态物理圆点胶囊与属性胶囊；4. 操作列改为轻量平铺彩色链接按键]
+ * [变更日志]
  * 修改时间：2026-09-10
  * AI模型：OpenCode / Gemini 底层
  * 修改内容：[1. 标题更名为「企业管理」，消除与成员管理概念混淆; 2. 表格操作列新增「成员」按钮，点击弹出 TenantMembersDrawer 原地视察成员与企业负责人，支持快捷切换视察]
@@ -9,42 +13,86 @@
  * 修改内容：[重写为弹窗表单创建+列表编辑/封禁/解封+全字段展示]
 -->
 <template>
-  <div class="tenants">
-    <div class="head">
-      <h2>企业管理</h2>
-      <el-button type="primary" class="add-btn" @click="openCreateDialog">
-        <el-icon><Plus /></el-icon> 新建企业
-      </el-button>
+  <div class="page-card">
+    <div class="filter-bar">
+      <div class="filters">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #1e293b">企业管理</h3>
+      </div>
+      <div class="actions">
+        <el-button type="primary" class="primary-create-btn" @click="openCreateDialog">
+          <el-icon><Plus /></el-icon> 新建企业
+        </el-button>
+      </div>
     </div>
 
-    <el-table :data="items" v-loading="loading" stripe style="width: 100%">
-      <el-table-column prop="tenant_id" label="ID" width="70" />
-      <el-table-column prop="tenant_name" label="企业名称" min-width="160" />
-      <el-table-column prop="short_name" label="简称" width="120" />
-      <el-table-column prop="industry" label="行业" width="110" />
-      <el-table-column prop="scale" label="规模" width="90">
+    <el-table
+      :data="items"
+      v-loading="loading"
+      class="saas-modern-table"
+      style="width: 100%"
+      :header-cell-style="{
+        backgroundColor: '#f1f5f9',
+        color: '#475569',
+        fontWeight: '700',
+        fontSize: '13px',
+        padding: '14px 16px',
+        borderBottom: '1px solid #e2e8f0',
+        whiteSpace: 'nowrap'
+      }"
+      :cell-style="{
+        padding: '16px 16px',
+        borderBottom: '1px solid #f1f5f9'
+      }"
+    >
+      <el-table-column prop="tenant_id" label="ID" width="80" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.scale" size="small" type="info">{{ row.scale }}</el-tag>
-          <span v-else class="muted">—</span>
+          <span class="col-id-text">{{ row.tenant_id }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="contact_name" label="联系人" width="100" />
-      <el-table-column prop="status" label="状态" width="90">
+      <el-table-column prop="tenant_name" label="企业名称" min-width="180">
         <template #default="{ row }">
-          <el-tag :type="row.status === 'active' ? 'success' : 'danger'" size="small">
-            {{ row.status === 'active' ? '正常' : '已封禁' }}
-          </el-tag>
+          <span class="cell-main-title">{{ row.tenant_name }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="290" fixed="right">
+      <el-table-column prop="short_name" label="简称" width="130" align="center">
+        <template #default="{ row }">
+          <span class="prop-pill">{{ row.short_name || '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="industry" label="行业" width="130" align="center">
+        <template #default="{ row }">
+          <span class="prop-pill">{{ row.industry || '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="scale" label="规模" width="100" align="center">
+        <template #default="{ row }">
+          <span class="prop-pill">{{ row.scale || '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="contact_name" label="联系人" width="110" align="center">
+        <template #default="{ row }">
+          <span class="muted-gray-text">{{ row.contact_name || '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="status" label="状态" width="115" align="center">
+        <template #default="{ row }">
+          <div class="status-dot-pill" :class="row.status === 'active' ? 'published' : 'draft'">
+            <span class="dot"></span>
+            <span class="text">{{ row.status === 'active' ? '正常' : '已封禁' }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="260" align="center" fixed="right">
         <template #default="scope">
-          <el-button size="small" type="primary" plain @click="openMembersDrawer(scope.row)">成员</el-button>
-          <el-button size="small" @click="enter(scope.row)">进入视察</el-button>
-          <el-button size="small" @click="openEditDialog(scope.row)">编辑</el-button>
-          <el-button v-if="scope.row.status === 'active'" size="small" type="danger"
-                     @click="disable(scope.row)">封禁</el-button>
-          <el-button v-else size="small" type="success"
-                     @click="enable(scope.row)">解封</el-button>
+          <div class="action-btn-group">
+            <el-button type="primary" link class="action-link-btn" @click="openMembersDrawer(scope.row)">成员</el-button>
+            <el-button type="primary" link class="action-link-btn" @click="enter(scope.row)">视察</el-button>
+            <el-button type="primary" link class="action-link-btn" @click="openEditDialog(scope.row)">编辑</el-button>
+            <el-button v-if="scope.row.status === 'active'" type="danger" link class="action-link-btn red"
+                       @click="disable(scope.row)">封禁</el-button>
+            <el-button v-else type="success" link class="action-link-btn green"
+                       @click="enable(scope.row)">解封</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -243,9 +291,5 @@ onMounted(load);
 </script>
 
 <style scoped>
-.tenants { padding: 20px; }
-.head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.add-btn { font-weight: 600; }
-.muted { color: #94a3b8; font-size: 12px; }
 .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

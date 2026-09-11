@@ -1,5 +1,8 @@
 <!--
   * [变更日志]
+  * 修改时间：2026-09-11
+  * AI模型：Gemini 底层
+  * 修改内容：[1. 对齐现代企业级 SaaS 列表设计规范，接入统一 list-layout.css; 2. 表格增加 saas-modern-table，应用首行专属底色与立体弥散阴影]
   * 修改时间：2026-09-06 20:40:00
   * AI模型：ZCode (GLM)
   * 修改内容：[v1.2 新增消息中心: 站内信列表/未读过滤/单条与全部已读/链接跳转]
@@ -14,7 +17,26 @@
       <el-button text type="primary" @click="markAllRead">全部标记已读</el-button>
     </div>
 
-    <el-table :data="items" v-loading="loading" style="width: 100%; margin-top: 14px" @row-click="handleRowClick">
+    <el-table
+      :data="items"
+      v-loading="loading"
+      class="saas-modern-table"
+      style="width: 100%; margin-top: 14px"
+      @row-click="handleRowClick"
+      :header-cell-style="{
+        backgroundColor: '#f1f5f9',
+        color: '#475569',
+        fontWeight: '700',
+        fontSize: '13px',
+        padding: '14px 16px',
+        borderBottom: '1px solid #e2e8f0',
+        whiteSpace: 'nowrap'
+      }"
+      :cell-style="{
+        padding: '16px 16px',
+        borderBottom: '1px solid #f1f5f9'
+      }"
+    >
       <el-table-column width="50">
         <template #default="{ row }">
           <span class="dot" :class="{ unread: !row.is_read }"></span>
@@ -127,25 +149,6 @@ onMounted(loadList);
 </script>
 
 <style scoped>
-.page-card {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-}
-
-.filter-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.pagination-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
 .dot {
   display: inline-block;
   width: 8px;

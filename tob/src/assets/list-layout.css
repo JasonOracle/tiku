@@ -1,0 +1,373 @@
+/**
+ * [变更日志]
+ * 创建时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[创建全局企业级 SaaS 列表统一设计系统样式库 list-layout.css：统一所有列表页的悬浮弥散卡片、无硬边框、首行表头专属底色、微组件胶囊体系与圆角操作按键]
+ */
+
+/* ────────── 1. 悬浮弥散立体外层大卡片 (Elevated Island Card) ────────── */
+.page-card {
+  background: #ffffff !important;
+  border-radius: 18px !important;
+  padding: 24px 28px !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05),
+              0 20px 25px -5px rgba(0, 0, 0, 0.02),
+              0 1px 3px rgba(0, 0, 0, 0.03) !important;
+  border: none !important;
+  transition: box-shadow 0.2s ease;
+}
+
+/* ────────── 2. 顶部筛选过滤栏 (Filter Bar) ────────── */
+.filter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.filters {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* 高定圆角输入框与选择器 (带优雅聚焦微光) */
+.custom-search-input .el-input__wrapper,
+.custom-filter-select .el-select__wrapper,
+.filter-bar .el-input__wrapper,
+.filter-bar .el-select__wrapper {
+  border-radius: 10px !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #e2e8f0 inset !important;
+  transition: all 0.2s ease !important;
+  padding: 5px 14px !important;
+}
+
+.custom-search-input .el-input__wrapper.is-focus,
+.custom-filter-select .el-select__wrapper.is-focused,
+.filter-bar .el-input__wrapper.is-focus,
+.filter-bar .el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 2px #1d4ed8 inset !important;
+}
+
+.search-prefix-icon {
+  color: #94a3b8;
+  font-size: 15px;
+}
+
+/* 顶部深蓝主创建按钮 */
+.primary-create-btn {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border-radius: 10px !important;
+  padding: 10px 20px !important;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.25) !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.primary-create-btn:hover {
+  background: #1e40af !important;
+  border-color: #1e40af !important;
+  transform: translateY(-1px);
+}
+
+.ai-btn, .import-btn, .batch-del-btn {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+}
+
+/* ────────── 3. 核心表格：无硬边框 + 仅第一行表头底色体系 ────────── */
+.saas-modern-table,
+.page-card .el-table {
+  border: none !important;
+  --el-table-border-color: transparent !important;
+  --el-table-border: none !important;
+}
+
+/* 去掉表格原生外层边框与伪元素硬线 */
+.saas-modern-table .el-table__inner-wrapper::before,
+.saas-modern-table .el-table__border-left-patch,
+.page-card .el-table__inner-wrapper::before,
+.page-card .el-table__border-left-patch {
+  display: none !important;
+}
+
+/* 仅第一行表头赋予纯净淡蓝灰底色与细分隔线 */
+.saas-modern-table .el-table__header-wrapper th,
+.page-card .el-table__header-wrapper th {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-top: none !important;
+  border-right: none !important;
+  border-left: none !important;
+  white-space: nowrap !important;
+  letter-spacing: 0.3px;
+}
+
+.saas-modern-table .el-table__header-wrapper th .cell,
+.page-card .el-table__header-wrapper th .cell {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+/* 单元格统一内边距优化，防止由于内边距过大导致文字被 ... 截断 */
+.saas-modern-table td .cell,
+.page-card .el-table td .cell {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+/* 数据行：无竖线、纯白底色、1px 微划线、呼吸感行高 */
+.saas-modern-table .el-table__row td,
+.page-card .el-table__row td {
+  border-right: none !important;
+  border-left: none !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.saas-modern-table .el-table__row:hover td,
+.page-card .el-table__row:hover td {
+  background-color: #f8fafc !important;
+}
+
+/* 复选框圆润化 */
+.saas-modern-table .el-checkbox__inner,
+.page-card .el-checkbox__inner {
+  border-radius: 4px !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* ────────── 4. 字段微组件体系 (Pill Badges & Text) ────────── */
+.col-id-text {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cell-main-title,
+.exam-main-title,
+.question-main-title,
+.cat-name-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.5;
+}
+
+/* 极简无边框分类/属性胶囊 */
+.category-pill,
+.prop-pill {
+  display: inline-block;
+  padding: 3px 12px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 14px;
+  white-space: nowrap;
+}
+
+/* 状态指示物理圆点胶囊 */
+.status-dot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.status-dot-pill.published,
+.status-dot-pill.success {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.status-dot-pill.published .dot,
+.status-dot-pill.success .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.status-dot-pill.draft,
+.status-dot-pill.inactive {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.status-dot-pill.draft .dot,
+.status-dot-pill.inactive .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.status-dot-pill:hover {
+  filter: brightness(0.96);
+  transform: scale(1.02);
+}
+
+/* 阴性/辅助数据弱化呈现 */
+.muted-gray-text {
+  font-size: 13px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.score-highlight,
+.count-highlight {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0284c7;
+  white-space: nowrap;
+}
+
+.score-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+}
+
+.boolean-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  background: #f8fafc;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.boolean-pill.is-true {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+/* ────────── 5. 操作列按钮体系 (Actions Group) ────────── */
+.action-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+/* 实体圆角胶囊主按键 (如人工批阅) */
+.action-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.action-pill-btn.pill-primary {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+}
+
+.action-pill-btn.pill-primary:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.action-pill-btn.pill-urgent {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.35);
+}
+
+.action-pill-btn.pill-urgent:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+/* 次级无背景彩色操作文字链接 */
+.action-link-btn {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  padding: 4px 6px !important;
+  margin: 0 !important;
+  border: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.action-link-btn.primary, .action-link-btn:not([class*="red"]):not([class*="orange"]):not([class*="green"]) {
+  color: #2563eb !important;
+}
+.action-link-btn.green { color: #16a34a !important; }
+.action-link-btn.orange { color: #f97316 !important; }
+.action-link-btn.red { color: #ef4444 !important; }
+
+.action-link-btn:hover {
+  background: #eff6ff !important;
+  border-radius: 6px !important;
+}
+
+.action-link-btn.red:hover {
+  background: #fef2f2 !important;
+}
+
+/* ────────── 6. 底部分页栏 (Pagination Bar) ────────── */
+.pagination-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 12px;
+}
+
+.pagination-bar .el-pagination.is-background .el-pager li.is-active {
+  background-color: #1d4ed8 !important;
+  color: #ffffff !important;
+  border-radius: 6px !important;
+  font-weight: 700 !important;
+}
+
+.pagination-bar .el-pagination.is-background .el-pager li {
+  border-radius: 6px !important;
+  font-weight: 600 !important;
+}
+
+.pagination-bar .el-pagination .el-select .el-select__wrapper {
+  border-radius: 6px !important;
+}

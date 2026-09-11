@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 彻底移除练习模式标签，改为动态渲染试卷真实分类与限时状态; 2. 真实回显接口计算的题目数、总分、及格分; 3. 操作按钮由做题改为开始，已参加试卷显示查看成绩与已参加徽章; 4. 动态基于当前企业真实试卷提取有效分类，杜绝空虚假分类]
  * 修改时间：2026-09-09
  * AI模型：Muse Spark
  * 修改内容：[彻底清洗：对接成员任务/分类新接口，旧试卷/横幅体系已删除]
@@ -19,10 +22,10 @@
       <div class="hero-card">
         <div class="hero-main">
           <div class="hero-tag"><span class="diamond">◆</span> FEATURED</div>
-          <h2 class="hero-title">{{ heroExam?.title || '2026 企业合规与安全知识任务' }}</h2>
+          <h2 class="hero-title">{{ heroExam?.title || '企业在线测评与能力认证' }}</h2>
           <p class="hero-desc">{{ heroDesc }}</p>
           <button class="hero-btn" @click="startExam(heroExam?.id)">
-            立即挑战
+            立即开始
             <span class="arrow-circle">→</span>
           </button>
         </div>
@@ -52,10 +55,16 @@
       <div v-for="exam in exams" :key="exam.id" class="exam-card" @click="startExam(exam.id)">
         <div class="card-info">
           <div class="card-badge-row">
-            <span class="mode-tag" :class="exam.is_timed ? 'timed' : 'practice'">
-              <svg v-if="exam.is_timed" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              {{ exam.is_timed ? `${exam.time_limit}分钟限时` : '练习模式' }}
+            <!-- 真实分类与限时标签，彻底杜绝无中生有的“练习模式” -->
+            <span v-if="exam.category_name" class="cat-badge">
+              {{ exam.category_name }}
+            </span>
+            <span v-if="exam.is_timed && exam.time_limit" class="mode-tag timed">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              {{ exam.time_limit }}分钟限时
+            </span>
+            <span v-if="exam.is_done" class="done-tag">
+              已参加
             </span>
           </div>
           <h3 class="exam-title">{{ exam.title }}</h3>
@@ -77,8 +86,8 @@
           </div>
         </div>
         <div class="card-action">
-          <button class="action-btn" @click.stop="startExam(exam.id)">
-            <span>做题</span>
+          <button class="action-btn" :class="{ 'done-btn': exam.is_done }" @click.stop="startExam(exam.id)">
+            <span>{{ exam.is_done ? '查看' : '开始' }}</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
         </div>
@@ -100,9 +109,8 @@ import BannerCarousel from '../../components/BannerCarousel.vue';
 const router = useRouter();
 const userStore = useUserStore();
 
-const username = computed(() => userStore.username);
+const allTasks = ref<any[]>([]);
 const categories = ref<any[]>([]);
-const exams = ref<any[]>([]);
 const selectedCat = ref<number | null>(null);
 const banners = ref<any[]>([]);
 const bannerInterval = ref(4);
@@ -115,10 +123,20 @@ const CAT_ICONS = [
 ];
 const catIcon = (i: number) => CAT_ICONS[i % CAT_ICONS.length];
 
-const heroExam = computed(() => exams.value.find((e) => e.is_recommended) || exams.value[0] || null);
+// 响应式过滤试卷列表
+const exams = computed(() => {
+  if (!selectedCat.value) {
+    return allTasks.value;
+  }
+  return allTasks.value.filter((t: any) => t.category_id === selectedCat.value);
+});
+
+const heroExam = computed(() => exams.value[0] || null);
 const heroDesc = computed(() => {
-  if (!heroExam.value) return '精选任务等你来战';
-  return heroExam.value.is_timed ? `限时 ${heroExam.value.time_limit} 分钟任务` : '企业任务，随时开做';
+  if (!heroExam.value) return '精选企业测评等你参与';
+  return heroExam.value.is_timed && heroExam.value.time_limit
+    ? `限时 ${heroExam.value.time_limit} 分钟，共 ${heroExam.value.question_count} 道题目`
+    : `共 ${heroExam.value.question_count} 道题目，总分 ${heroExam.value.total_score} 分`;
 });
 
 const loadBanners = async () => {
@@ -131,47 +149,60 @@ const loadBanners = async () => {
   }
 };
 
-const loadCategories = async () => {
-  try {
-    const res: any = await http.get('/api/v1/member/categories');
-    categories.value = res.items || [];
-  } catch (e) {}
-};
-
-const loadExams = async () => {
+const loadData = async () => {
   try {
     const res: any = await http.get('/api/v1/member/member-tasks');
     const items = res.items || [];
-    exams.value = items
-      .filter((t: any) => !selectedCat.value || t.category_id === selectedCat.value)
-      .map((t: any) => ({
+    
+    // 映射真实字段与完成状态
+    allTasks.value = items.map((t: any) => {
+      const isDone = ['submitted', 'verified', 'pending_verification'].includes(t.status);
+      return {
         id: t.task_id,
+        record_id: t.record_id || null,
         title: t.title,
-        cover_url: 'preset:1',
-        is_timed: false,
-        time_limit: 0,
-        question_count: 0,
-        total_score: 0,
-        pass_score: 0,
-        is_recommended: false,
-        status: t.status
-      }));
-  } catch (e) {}
+        category_id: t.category_id,
+        category_name: t.category_name || '',
+        question_count: t.question_count ?? 0,
+        total_score: t.total_score ?? 100,
+        pass_score: t.pass_score ?? 60,
+        is_timed: Boolean(t.is_timed),
+        time_limit: t.time_limit || 0,
+        start_time: t.start_time,
+        deadline: t.deadline,
+        status: t.status,
+        score: t.score,
+        is_done: isDone
+      };
+    });
+
+    // 动态提取当前所有真实存在的分类，绝不展示虚假死数据
+    const catMap = new Map<number, string>();
+    for (const t of allTasks.value) {
+      if (t.category_id && t.category_name) {
+        catMap.set(t.category_id, t.category_name);
+      }
+    }
+    categories.value = Array.from(catMap.entries()).map(([id, name]) => ({ id, name }));
+  } catch (e) {
+    allTasks.value = [];
+    categories.value = [];
+  }
 };
 
 const selectCategory = (catId: number | null) => {
   selectedCat.value = catId;
-  loadExams();
 };
 
-const handleUserClick = () => {
-  router.push(userStore.token ? '/profile' : '/login');
-};
-
-const startExam = async (examId?: number) => {
+const startExam = (examId?: number) => {
   if (!examId) return;
   if (!userStore.token) {
     router.push('/login');
+    return;
+  }
+  const hit = allTasks.value.find((t) => t.id === examId);
+  if (hit && hit.is_done && hit.record_id) {
+    router.push({ path: '/report', query: { record_id: hit.record_id } });
     return;
   }
   router.push({ path: '/task', query: { task_id: examId } });
@@ -179,8 +210,7 @@ const startExam = async (examId?: number) => {
 
 onMounted(() => {
   loadBanners();
-  loadCategories();
-  loadExams();
+  loadData();
 });
 </script>
 
@@ -350,6 +380,18 @@ onMounted(() => {
 .card-badge-row {
   display: flex;
   align-items: center;
+  gap: 6px;
+}
+
+.cat-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .mode-tag {
@@ -367,9 +409,15 @@ onMounted(() => {
   color: #e11d48;
 }
 
-.mode-tag.practice {
-  background: #f0f9ff;
-  color: #0284c7;
+.done-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #ecfdf5;
+  color: #059669;
 }
 
 .exam-title {
@@ -436,5 +484,10 @@ onMounted(() => {
 
 .action-btn:active {
   transform: scale(0.95);
+}
+
+.action-btn.done-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28);
 }
 </style>

@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 底层
+ * 修改内容：[核验列表表格对齐现代企业级 SaaS 统一设计规范，接入 saas-modern-table 与首行专属底色]
  * 修改时间：2026-09-09
  * AI模型：Muse Spark
  * 修改内容：[彻底清洗重写：任务行级核验大厅全屏弹窗，旧阅卷大厅体系已删除]
@@ -13,7 +16,24 @@
     @close="handleClose"
   >
     <div v-loading="loading">
-      <el-table :data="records" stripe style="width: 100%">
+      <el-table
+        :data="records"
+        class="saas-modern-table"
+        style="width: 100%"
+        :header-cell-style="{
+          backgroundColor: '#f1f5f9',
+          color: '#475569',
+          fontWeight: '700',
+          fontSize: '13px',
+          padding: '14px 16px',
+          borderBottom: '1px solid #e2e8f0',
+          whiteSpace: 'nowrap'
+        }"
+        :cell-style="{
+          padding: '16px 16px',
+          borderBottom: '1px solid #f1f5f9'
+        }"
+      >
         <el-table-column prop="record_id" label="记录ID" width="90" />
         <el-table-column prop="user_id" label="成员ID" width="100" />
         <el-table-column label="作答" min-width="200" show-overflow-tooltip>

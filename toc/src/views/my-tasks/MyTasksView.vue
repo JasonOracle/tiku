@@ -1,51 +1,137 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 修复点击已参加试卷跳转白屏Bug：已提交任务通过 record_id 直接定向至成绩报告页 /report?record_id=...，不再错误调用开考作答接口; 2. 补齐已参加列表中的 record_id 映射透传]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 顶部标题由我的任务改为我的测试; 2. 升级三态Tab: 进行中、未开始、已参加及动态计数统计; 3. 列表卡片重构为首页同款圆角阴影卡片并展示真实分类、限时标签、题目/总分/及格指标; 4. 优化不同状态下的按钮引导]
  * 修改时间：2026-09-09
  * AI模型：Muse Spark
  * 修改内容：[彻底清洗重写：待办/已提交两态，直接对接成员任务接口，旧三态/解析锁体系已删除]
 -->
 <template>
   <div class="page">
-    <NavBar title="我的任务" />
+    <NavBar title="我的测试" />
+    
     <div class="content">
+      <!-- 三态 Tabs 切换 -->
       <div class="tabs">
-        <button v-for="t in tabs" :key="t.key" class="tab" :class="{ active: activeTab === t.key }" @click="activeTab = t.key">
+        <button
+          v-for="t in tabs"
+          :key="t.key"
+          class="tab"
+          :class="{ active: activeTab === t.key }"
+          @click="activeTab = t.key"
+        >
           {{ t.label }}
           <span class="count">{{ grouped[t.key].length }}</span>
         </button>
       </div>
 
-      <div v-if="loading" class="state-tip">加载中...</div>
+      <!-- 加载与空状态 -->
+      <div v-if="loading" class="state-tip">
+        <div class="loading-spinner"></div>
+        <p>数据加载中...</p>
+      </div>
+      
       <div v-else-if="grouped[activeTab].length === 0" class="state-tip">
-        <p class="empty-icon">📭</p>
-        <p>{{ emptyText[activeTab] }}</p>
+        <div class="empty-icon-wrap">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+          </svg>
+        </div>
+        <p class="empty-text">{{ emptyText[activeTab] }}</p>
       </div>
 
-      <div v-else class="cards">
-        <div v-for="c in grouped[activeTab]" :key="c.task_id" class="exam-card">
-          <div class="card-body">
-            <div class="card-title">{{ c.title }}</div>
-            <div class="card-meta">
-              <span v-if="c.deadline">截止 {{ fmt(c.deadline) }}</span>
-              <span v-if="c.status && c.status !== 'pending'" class="attempts">{{ statusLabel(c.status) }}</span>
+      <!-- 试卷卡片列表（参考首页精美卡片样式） -->
+      <div v-else class="exam-list">
+        <div
+          v-for="exam in grouped[activeTab]"
+          :key="exam.task_id"
+          class="exam-card"
+          @click="handleCardClick(exam)"
+        >
+          <div class="card-info">
+            <!-- 标签行：所属分类 + 限时标签 + 审核/完成状态 -->
+            <div class="card-badge-row">
+              <span v-if="exam.category_name" class="cat-badge">
+                {{ exam.category_name }}
+              </span>
+              <span v-if="exam.is_timed && exam.time_limit" class="mode-tag timed">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                {{ exam.time_limit }}分钟限时
+              </span>
+              <span v-if="exam.status && exam.status !== 'pending'" class="status-pill" :class="exam.status">
+                {{ statusLabel(exam.status) }}
+              </span>
             </div>
-            <div class="card-foot">
-              <template v-if="activeTab === 'pending'">
-                <button class="btn primary" @click="startTask(c)">开始任务</button>
-              </template>
-              <template v-else>
-                <span class="status-tag" :class="c.status === 'verified' ? 'pass' : 'grading'">
-                  {{ statusLabel(c.status) }}
+
+            <!-- 试卷标题 -->
+            <h3 class="exam-title">{{ exam.title }}</h3>
+
+            <!-- 指标徽章：题目 | 总分 | 及格分 -->
+            <div class="meta-chips">
+              <span class="chip">
+                <span class="chip-label">题目</span>
+                <span class="chip-val">{{ exam.question_count }}题</span>
+              </span>
+              <span class="chip-dot">•</span>
+              <span class="chip">
+                <span class="chip-label">总分</span>
+                <span class="chip-val">{{ exam.total_score }}分</span>
+              </span>
+              <span class="chip-dot">•</span>
+              <span class="chip">
+                <span class="chip-label">及格</span>
+                <span class="chip-val">{{ exam.pass_score }}分</span>
+              </span>
+            </div>
+
+            <!-- 时间元数据行 -->
+            <div v-if="activeTab === 'upcoming' && exam.start_time" class="time-meta">
+              开考时间：{{ fmt(exam.start_time) }}
+            </div>
+            <div v-else-if="activeTab === 'ongoing' && exam.deadline" class="time-meta">
+              截止时间：{{ fmt(exam.deadline) }}
+            </div>
+            <div v-else-if="activeTab === 'completed' && exam.submit_time" class="time-meta">
+              提交时间：{{ exam.submit_time }}
+            </div>
+          </div>
+
+          <!-- 右侧行动区 -->
+          <div class="card-action">
+            <template v-if="activeTab === 'ongoing'">
+              <button class="action-btn" @click.stop="handleCardClick(exam)">
+                <span>开始</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </template>
+            <template v-else-if="activeTab === 'upcoming'">
+              <button class="action-btn locked" disabled>
+                <span>未开始</span>
+              </button>
+            </template>
+            <template v-else>
+              <div class="result-action">
+                <span v-if="exam.score !== null && exam.score !== undefined" class="score-display">
+                  <span class="score-num">{{ exam.score }}</span>
+                  <span class="score-unit">分</span>
                 </span>
-                <span v-if="c.score != null" class="score">{{ c.score }} 分</span>
-              </template>
-            </div>
+                <button class="action-btn completed-btn" @click.stop="handleCardClick(exam)">
+                  <span>查看</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </template>
           </div>
         </div>
       </div>
     </div>
+
     <TabBar active="mytasks" />
-    <AppModal ref="modalRef" />
   </div>
 </template>
 
@@ -54,31 +140,40 @@ import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import NavBar from '../../components/NavBar.vue';
 import TabBar from '../../components/TabBar.vue';
-import AppModal from '../../components/AppModal.vue';
 import http from '../../utils/http';
 
 const router = useRouter();
 const loading = ref(true);
-const modalRef = ref<any>(null);
 
+// 三态定义：进行中、未开始、已参加
 const tabs = [
-  { key: 'pending', label: '待办' },
-  { key: 'done', label: '已提交' }
+  { key: 'ongoing', label: '进行中' },
+  { key: 'upcoming', label: '未开始' },
+  { key: 'completed', label: '已参加' }
 ] as const;
-const activeTab = ref<'pending' | 'done'>('pending');
-const emptyText: Record<string, string> = {
-  pending: '当前没有待办任务',
-  done: '还没有提交记录'
+
+type TabKey = typeof tabs[number]['key'];
+const activeTab = ref<TabKey>('ongoing');
+
+const emptyText: Record<TabKey, string> = {
+  ongoing: '当前没有正在进行中的测试',
+  upcoming: '暂无未开始的计划测试',
+  completed: '暂无已参加的测试记录'
 };
-const grouped = reactive<Record<string, any[]>>({ pending: [], done: [] });
+
+const grouped = reactive<Record<TabKey, any[]>>({
+  ongoing: [],
+  upcoming: [],
+  completed: []
+});
 
 const fmt = (s?: string | null) => (s ? String(s).replace('T', ' ').slice(0, 16) : '');
 
 const statusLabel = (s: string) => {
   if (s === 'verified') return '已核验';
-  if (s === 'pending_verification') return '核验中';
-  if (s === 'submitted') return '已提交';
-  return '待办';
+  if (s === 'pending_verification') return '待核验';
+  if (s === 'submitted') return '已交卷';
+  return '未完成';
 };
 
 const load = async () => {
@@ -86,15 +181,62 @@ const load = async () => {
   try {
     const res: any = await http.get('/api/v1/member/member-tasks');
     const items = res.items || [];
-    grouped.pending = items.filter((i: any) => i.status === 'pending');
-    grouped.done = items.filter((i: any) => i.status !== 'pending');
+    const now = new Date();
+
+    const ongoingList: any[] = [];
+    const upcomingList: any[] = [];
+    const completedList: any[] = [];
+
+    for (const item of items) {
+      const isDone = ['submitted', 'verified', 'pending_verification'].includes(item.status);
+      if (isDone) {
+        completedList.push(item);
+        continue;
+      }
+
+      // 未提交情况下，根据 start_time 判断是否尚未开始
+      if (item.start_time) {
+        const startTime = new Date(item.start_time);
+        if (now < startTime) {
+          upcomingList.push(item);
+          continue;
+        }
+      }
+
+      // 其余均为进行中
+      ongoingList.push(item);
+    }
+
+    grouped.ongoing = ongoingList;
+    grouped.upcoming = upcomingList;
+    grouped.completed = completedList;
   } finally {
     loading.value = false;
   }
 };
 
-const startTask = (c: any) => {
-  router.push({ path: '/task', query: { task_id: c.task_id } });
+const handleCardClick = async (exam: any) => {
+  if (activeTab.value === 'upcoming') {
+    return;
+  }
+  // 已参加状态：直接查看成绩与答题报告，杜绝重新请求开考接口导致的拦截或白屏
+  if (activeTab.value === 'completed' || ['submitted', 'verified', 'pending_verification'].includes(exam.status)) {
+    if (exam.record_id) {
+      router.push({ path: '/report', query: { record_id: exam.record_id } });
+      return;
+    }
+    // 兜底查一次历史记录定位 record_id
+    try {
+      const res: any = await http.get('/api/v1/member/task-records');
+      const hit = (res.items || []).find((r: any) => r.task_id === exam.task_id);
+      if (hit && hit.record_id) {
+        router.push({ path: '/report', query: { record_id: hit.record_id } });
+        return;
+      }
+    } catch {}
+  }
+  // 进行中状态：进入考场作答
+  router.push({ path: '/task', query: { task_id: exam.task_id } });
 };
 
 onMounted(load);
@@ -103,8 +245,10 @@ onMounted(load);
 <style scoped>
 .page {
   min-height: 100vh;
-  background: #f6f7fb;
-  padding-bottom: 110px;
+  background: linear-gradient(180deg, #eef4ff 0%, #f8fafc 40%);
+  padding-bottom: 140px;
+  box-sizing: border-box;
+  font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, sans-serif;
 }
 
 .content {
@@ -116,10 +260,11 @@ onMounted(load);
 .tabs {
   display: flex;
   background: #ffffff;
-  border-radius: 14px;
-  padding: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
-  margin-bottom: 14px;
+  border-radius: 16px;
+  padding: 5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+  margin-bottom: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
 }
 
 .tab {
@@ -127,127 +272,248 @@ onMounted(load);
   border: none;
   background: transparent;
   padding: 9px 0;
-  font-size: 14px;
-  color: #6b7280;
-  border-radius: 10px;
+  font-size: 13px;
+  color: #64748b;
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
+  font-weight: 600;
+  transition: all 0.2s ease;
 }
 
 .tab.active {
-  background: #0062ff;
+  background: linear-gradient(135deg, #0284c7, #6366f1);
   color: #fff;
   font-weight: 700;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
 }
 
 .count {
   font-size: 11px;
-  opacity: 0.8;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 6px;
+  border-radius: 99px;
+}
+
+.tab.active .count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
 }
 
 .state-tip {
   text-align: center;
-  color: #9ca3af;
+  color: #94a3b8;
   padding: 60px 0;
   font-size: 14px;
 }
 
-.empty-icon {
-  font-size: 40px;
-  margin-bottom: 8px;
+.empty-icon-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+  opacity: 0.8;
 }
 
-.cards {
+.empty-text {
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.exam-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
 .exam-card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 14px;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 14px 16px;
   display: flex;
-  gap: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
 }
 
-.card-cover {
-  flex-shrink: 0;
+.exam-card:active {
+  transform: scale(0.985);
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.03);
 }
 
-.card-body {
+.card-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.card-title {
-  font-size: 15px;
+.card-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cat-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
   font-weight: 700;
-  color: #111827;
-  margin-bottom: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.mode-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.mode-tag.timed {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.status-pill.verified {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.status-pill.pending_verification {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.status-pill.submitted {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.exam-title {
+  margin: 3px 0 2px;
+  font-size: 15px;
+  color: #0f172a;
+  font-weight: 800;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.card-meta {
-  display: flex;
-  gap: 10px;
-  font-size: 12px;
-  color: #6b7280;
-  margin-bottom: 8px;
-}
-
-.attempts {
-  color: #0062ff;
-  font-weight: 600;
-}
-
-.card-foot {
+.meta-chips {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.btn {
-  border: none;
-  border-radius: 999px;
-  padding: 7px 14px;
+  gap: 6px;
   font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
+  color: #64748b;
 }
 
-.btn.primary {
-  background: linear-gradient(135deg, #0062ff, #0047cc);
-  color: #fff;
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
-.status-tag {
+.chip-label {
+  color: #94a3b8;
   font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-weight: 600;
 }
 
-.status-tag.pass {
-  background: #dcfce7;
-  color: #16a34a;
+.chip-val {
+  color: #334155;
+  font-weight: 700;
+  font-size: 12px;
 }
 
-.status-tag.grading {
-  background: #fef3c7;
-  color: #b45309;
+.chip-dot {
+  color: #cbd5e1;
+  font-size: 10px;
 }
 
-.score {
-  font-size: 14px;
-  font-weight: 800;
-  color: #111827;
+.time-meta {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.card-action {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.action-btn {
+  background: linear-gradient(135deg, #0284c7 0%, #6366f1 100%);
+  color: #ffffff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.28);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.action-btn:active {
+  transform: scale(0.95);
+}
+
+.action-btn.locked {
+  background: #e2e8f0;
+  color: #94a3b8;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.action-btn.completed-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28);
+}
+
+.result-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.score-display {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+}
+
+.score-num {
+  font-size: 16px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.score-unit {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
 }
 </style>

@@ -1,5 +1,25 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[治本解决来源列文字截断问题：1. 将来源列宽度锁定为充足的 width="120"，表头与内容单元格内边距统一收紧至 10px；2. 将容易产生字体/渲染字宽不可控的 emoji 图标替换为精致矢量 SVG 火花图标(ai-sparkle-svg)与 inline-flex 精确排版；3. 操作列继续固定在最右侧(fixed="right")，彻底杜绝文字压缩与省略号截断]
+ * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[响应用户需求：彻底移除题目创建、编辑以及AI生成等全场景下的「踩分点」与「文字解析」输入/展示，仅保留各题型的标准答案作为判卷与核验基准]
+ * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 彻底修复点击编辑题目时控制台报 TypeError: (e.answer || [[""]]).map is not a function 异常：强化 openEditDialog 防御性类型转换，对字符串或畸形 answer 进行 JSON/数组安全解析；2. 移除简答题冗余的「踩分点」表单输入项，统一判卷标准答案与文字解析模式]
+ * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 底层
+ * 修改内容：[1. 重构 AI 创建题目预览区：引入 ResourcePreview 题目全貌展示，完整渲染题型、分值、结构化选项、正确答案绿色高亮与答案解析; 2. 增加批量全选与单题勾选，彻底解决只显示题干简略信息、缺失选项和解析的问题]
+ * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[对齐现代企业级SaaS列表高质感风格：1. 消除页面与表格硬边框，外层赋以高定悬浮多层立体弥散阴影(Elevated Island Box-Shadow)；2. 仅首行表头赋予清爽淡蓝灰底色(#f1f5f9)与微划线，杜绝字形压缩折行；3. 升级题型胶囊(不同题型低饱和度色彩体系)、来源胶囊(AI紫粉/人工灰)与分类胶囊；4. 操作列改为轻盈彩色无背景链接组(溯源/复制/编辑/删除)]
+ * [变更日志]
  * 修改时间：2026-09-10
  * AI模型：OpenCode / Gemini 底层
  * 修改内容：[题目管理筛选栏升级：搜索条目关键词改为搜索题目标题，全部分类改为试卷分类，全部分型改为全部题型；增加检索按钮并改为点击后触发请求，增加重置图标按钮]
@@ -26,11 +46,36 @@
   <div class="page-card">
     <div class="filter-bar">
       <div class="filters">
-        <el-input v-model="filters.keyword" placeholder="搜索条目关键词..." clearable style="width: 200px" @change="loadQuestions" />
-        <el-select v-model="filters.category_id" placeholder="全部分类" clearable style="width: 140px" @change="loadQuestions">
+        <el-input
+          v-model="filters.keyword"
+          placeholder="搜索条目关键词、题干..."
+          clearable
+          class="custom-search-input"
+          style="width: 240px"
+          @change="loadQuestions"
+        >
+          <template #prefix>
+            <el-icon class="search-prefix-icon"><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-select
+          v-model="filters.category_id"
+          placeholder="全部分类"
+          clearable
+          class="custom-filter-select"
+          style="width: 160px"
+          @change="loadQuestions"
+        >
           <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
         </el-select>
-        <el-select v-model="filters.type" placeholder="全部分型" clearable style="width: 120px" @change="loadQuestions">
+        <el-select
+          v-model="filters.type"
+          placeholder="全部题型"
+          clearable
+          class="custom-filter-select"
+          style="width: 140px"
+          @change="loadQuestions"
+        >
           <el-option label="单选题" value="single" />
           <el-option label="多选题" value="multiple" />
           <el-option label="判断题" value="judge" />
@@ -44,66 +89,104 @@
           v-if="selectedQuestionIds.length > 0"
           type="danger"
           plain
+          class="batch-del-btn"
           @click="handleBatchDelete"
         >
           <el-icon><Delete /></el-icon> 批量删除 ({{ selectedQuestionIds.length }})
         </el-button>
         <el-button type="warning" plain class="ai-btn" @click="openAiDialog">✨ AI 创建</el-button>
-        <el-button type="primary" class="primary-btn" @click="openCreateDialog">
+        <el-button type="primary" class="primary-create-btn" @click="openCreateDialog">
           <el-icon><Plus /></el-icon> 新建题目
         </el-button>
-        <el-button type="success" plain @click="openImportDialog">
+        <el-button type="success" plain class="import-btn" @click="openImportDialog">
           <el-icon><Upload /></el-icon> Excel 导入
         </el-button>
       </div>
     </div>
 
-    <!-- 条目数据表格 -->
+    <!-- 条目数据表格 (无硬边框，仅首行背景与微划线，右侧操作列固定，支持横向弹性滚动) -->
     <el-table
       :data="questions"
       v-loading="loading"
-      stripe
-      style="width: 100%; margin-top: 16px"
+      class="saas-modern-table"
+      style="width: 100%"
+      :header-cell-style="{
+        backgroundColor: '#f1f5f9',
+        color: '#475569',
+        fontWeight: '700',
+        fontSize: '13px',
+        padding: '12px 10px',
+        borderBottom: '1px solid #e2e8f0',
+        borderTop: 'none',
+        borderRight: 'none',
+        borderLeft: 'none',
+        whiteSpace: 'nowrap'
+      }"
+      :cell-style="{
+        padding: '14px 10px',
+        borderBottom: '1px solid #f1f5f9',
+        borderRight: 'none',
+        borderLeft: 'none'
+      }"
       @selection-change="handleSelectionChange"
     >
-      <el-table-column type="selection" width="50" />
-      <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column prop="type" label="题型" width="90">
+      <el-table-column type="selection" width="50" align="center" />
+      <el-table-column prop="id" label="ID" width="80" align="center">
         <template #default="{ row }">
-          <el-tag :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
+          <span class="col-id-text">{{ row.id }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="来源" width="90">
+      <el-table-column prop="type" label="题型" min-width="100" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.source === 'ai'" type="warning" size="small" effect="dark">AI生成</el-tag>
-          <el-tag v-else type="info" size="small" effect="plain">人工</el-tag>
+          <span class="type-pill" :class="row.type">
+            {{ getTypeLabel(row.type) }}
+          </span>
         </template>
       </el-table-column>
-      <el-table-column prop="category_id" label="所属分类" width="110">
+      <el-table-column label="来源" width="120" align="center">
         <template #default="{ row }">
-          <el-tag type="info" effect="plain">{{ getCategoryName(row.category_id) }}</el-tag>
+          <span v-if="row.source === 'ai'" class="source-ai-pill">
+            <svg class="ai-sparkle-svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L13.8 8.2L20 10L13.8 11.8L12 18L10.2 11.8L4 10L10.2 8.2L12 2Z" />
+            </svg>
+            AI生成
+          </span>
+          <span v-else class="source-manual-pill">人工录入</span>
         </template>
       </el-table-column>
-      <el-table-column prop="title" label="题干" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="score" label="默认分值" width="90">
+      <el-table-column prop="category_id" label="所属分类" min-width="130" align="center">
         <template #default="{ row }">
-          <span style="font-weight: 700; color: #0284c7">{{ row.score || 10 }} 分</span>
+          <span class="category-pill">
+            {{ getCategoryName(row.category_id) || '未分类' }}
+          </span>
         </template>
       </el-table-column>
-      <el-table-column label="锁定" width="70">
+      <el-table-column prop="title" label="题干描述" min-width="320" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span class="question-main-title">{{ row.title }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="score" label="默认分值" min-width="100" align="center">
+        <template #default="{ row }">
+          <span class="score-highlight">{{ row.score || 10 }} 分</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="锁定" width="75" align="center">
         <template #default="{ row }">
           <el-tooltip v-if="row.locked" content="已被上架/归档任务引用，全局只读（可复制新题）">
-            <span class="lock-icon">🔒</span>
+            <span class="lock-icon" title="锁定中">🔒</span>
           </el-tooltip>
-          <span v-else style="color: #cbd5e1">—</span>
+          <span v-else class="muted-gray-text">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="270" fixed="right">
+      <el-table-column label="操作" width="220" align="center" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="(row.ai_rag_sources || []).length" type="success" text size="small" @click="openTrace(row)">引用溯源</el-button>
-          <el-button v-if="row.locked" type="warning" text size="small" @click="handleCopy(row)">复制新题</el-button>
-          <el-button v-else type="primary" text size="small" @click="openEditDialog(row)">编辑</el-button>
-          <el-button type="danger" text size="small" @click="handleDelete(row.id)">删除</el-button>
+          <div class="action-btn-group">
+            <el-button v-if="(row.ai_rag_sources || []).length" type="success" link class="action-link-btn green" @click="openTrace(row)">溯源</el-button>
+            <el-button v-if="row.locked" type="warning" link class="action-link-btn orange" @click="handleCopy(row)">复制</el-button>
+            <el-button v-else type="primary" link class="action-link-btn" @click="openEditDialog(row)">编辑</el-button>
+            <el-button type="danger" link class="action-link-btn red" @click="handleDelete(row.id)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -191,20 +274,12 @@
           </el-form-item>
         </template>
 
-        <!-- 简答题: 标准答案 + 踩分点 -->
+        <!-- 简答题: 标准答案 -->
         <template v-if="form.type === 'short'">
           <el-form-item label="标准答案" required>
-            <el-input v-model="shortAnswer" type="textarea" :rows="3" placeholder="参考答案全文（供老师与 AI 核验对照）" />
-          </el-form-item>
-          <el-form-item label="踩分点">
-            <el-input v-model="gradingPointsStr" type="textarea" :rows="3"
-                      placeholder="每行一个踩分点，AI 核验时按点给分。如：&#10;无状态协议&#10;基于TCP" />
+            <el-input v-model="shortAnswer" type="textarea" :rows="3" placeholder="参考答案全文（供判卷与核验对照）" />
           </el-form-item>
         </template>
-
-        <el-form-item label="文字解析">
-          <el-input v-model="form.explanation" type="textarea" :rows="2" placeholder="解析说明..." />
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -278,35 +353,57 @@
           </el-collapse-item>
         </el-collapse>
 
-        <!-- 预览区 -->
-        <div v-if="aiPreview.length" class="ai-preview">
-          <el-divider content-position="left"><strong>生成结果预览（勾选后入库）</strong></el-divider>
-          <el-table :data="aiPreview" size="small" @selection-change="aiSelected = $event" max-height="320">
-            <el-table-column type="selection" width="45" />
-            <el-table-column prop="type" label="题型" width="80">
-              <template #default="{ row }">
-                <el-tag size="small" :type="getTypeTag(row.type)">{{ getTypeLabel(row.type) }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="title" label="题干" min-width="200" show-overflow-tooltip />
-            <el-table-column label="答案" min-width="140" show-overflow-tooltip>
-              <template #default="{ row }">
-                {{ formatAnswer(row) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="explanation" label="解析" min-width="140" show-overflow-tooltip />
-          </el-table>
+        <!-- 预览区 (完整展示题干、题型、选项高亮与答案解析) -->
+        <div v-if="aiPreview.length" class="ai-preview-section">
+          <div class="ai-preview-toolbar">
+            <div class="tb-left">
+              <el-checkbox
+                :model-value="isAllAiSelected"
+                :indeterminate="isAiIndeterminate"
+                @change="toggleSelectAllAi"
+              >
+                全选所有生成题目 (已选 {{ aiSelected.length }} / {{ aiPreview.length }})
+              </el-checkbox>
+            </div>
+            <div class="tb-right">
+              <span class="preview-tip">请核对题干、选项与正确答案后勾选入库</span>
+            </div>
+          </div>
+
+          <div class="ai-preview-cards-list">
+            <div
+              v-for="(q, idx) in aiPreview"
+              :key="idx"
+              class="ai-q-card"
+              :class="{ 'is-checked': isAiItemChecked(idx) }"
+              @click="toggleAiItemCheck(idx)"
+            >
+              <div class="ai-q-header">
+                <el-checkbox
+                  :model-value="isAiItemChecked(idx)"
+                  @click.stop
+                  @change="toggleAiItemCheck(idx)"
+                />
+                <span class="ai-q-seq">第 {{ idx + 1 }} 题</span>
+                <el-tag size="small" :type="getTypeTag(q.type)">{{ getTypeLabel(q.type) }}</el-tag>
+                <span class="ai-q-score">{{ q.score || 10 }} 分</span>
+              </div>
+              <div class="ai-q-title">{{ q.title }}</div>
+              <!-- 嵌入试题核心结构化预览（选项高亮、正确答案、解析） -->
+              <ResourcePreview :resource="q" />
+            </div>
+          </div>
         </div>
       </div>
 
       <template #footer>
         <el-button @click="aiDialogVisible = false">关闭</el-button>
         <el-button v-if="!aiPreview.length" type="warning" :loading="aiGenerating" @click="generateQuestions">
-          {{ aiGenerating ? 'AI 生成中...' : '保存' }}
+          {{ aiGenerating ? 'AI 生成中...' : '生成题目' }}
         </el-button>
         <el-button v-else type="primary" :loading="aiImporting" :disabled="aiSelected.length === 0"
                    @click="confirmImport">
-          确认入库 ({{ aiSelected.length }})
+          确认勾选入库 ({{ aiSelected.length }})
         </el-button>
       </template>
     </el-dialog>
@@ -322,7 +419,7 @@
       <el-dialog v-model="importDialogVisible" title="批量导入条目" width="520px">
       <div style="margin-bottom: 12px; color: #64748b; font-size: 13px">
         分类按 Excel “分类”列逐题归入（不存在自动新建，留空归第一个分类）。<br />
-        填空题答案格式：<code>北京,北京市|是</code>（逗号=一空多答，竖线=分空）；简答题“答案”列为标准答案，可选“踩分点”列用分号分隔。
+        填空题答案格式：<code>北京,北京市|是</code>（逗号=一空多答，竖线=分空）；简答题“答案”列为极简标准答案全文。
       </div>
 
       <el-upload
@@ -349,6 +446,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Upload, Delete, UploadFilled, Search, RefreshRight } from '@element-plus/icons-vue';
 import request from '../../utils/request';
 import TraceDrawer from './components/TraceDrawer.vue';
+import ResourcePreview from '../tasks/components/ResourcePreview.vue';
 
 import { useRouter } from 'vue-router';
 
@@ -524,12 +622,45 @@ const generateQuestions = async () => {
       category_id: aiForm.category_id
     }, { timeout: 120000 }); // 真实大模型创建较慢, 覆盖全局 10s 超时
     aiPreview.value = res.questions || [];
-    aiSelected.value = [];
+    // 默认全选所有生成的高质量条目，方便用户直接一键入库或自由取消勾选
+    aiSelected.value = [...(res.questions || [])];
     ElMessage.success(res.message || 'AI 已生成，请预览勾选后入库');
   } catch (e) {
     /* 拦截器已提示 */
   } finally {
     aiGenerating.value = false;
+  }
+};
+
+const isAiItemChecked = (index: number) => {
+  const item = aiPreview.value[index];
+  return item && aiSelected.value.includes(item);
+};
+
+const toggleAiItemCheck = (index: number) => {
+  const item = aiPreview.value[index];
+  if (!item) return;
+  const idx = aiSelected.value.indexOf(item);
+  if (idx >= 0) {
+    aiSelected.value.splice(idx, 1);
+  } else {
+    aiSelected.value.push(item);
+  }
+};
+
+const isAllAiSelected = computed(() => {
+  return aiPreview.value.length > 0 && aiSelected.value.length === aiPreview.value.length;
+});
+
+const isAiIndeterminate = computed(() => {
+  return aiSelected.value.length > 0 && aiSelected.value.length < aiPreview.value.length;
+});
+
+const toggleSelectAllAi = (val: any) => {
+  if (val) {
+    aiSelected.value = [...aiPreview.value];
+  } else {
+    aiSelected.value = [];
   }
 };
 
@@ -650,17 +781,28 @@ const openEditDialog = (row: any) => {
   form.difficulty = row.difficulty || 'medium';
   form.category_id = row.category_id || firstCategoryId();
   form.options = row.options || [];
-  form.answer = row.answer || [];
-  form.grading_points = row.grading_points || [];
-  form.explanation = row.explanation || '';
+  // 规范化 answer 为数组，防御字符串或 null 异常
+  let rawAnswer = row.answer;
+  if (typeof rawAnswer === 'string') {
+    try {
+      rawAnswer = JSON.parse(rawAnswer);
+    } catch {
+      rawAnswer = rawAnswer ? [rawAnswer] : [];
+    }
+  }
+  if (!Array.isArray(rawAnswer)) {
+    rawAnswer = rawAnswer ? [rawAnswer] : [];
+  }
+  form.answer = rawAnswer;
+
   // 题型相关编辑态
   if (row.type === 'fill') {
-    fillAnswers.value = (row.answer || [['']]).map((blank: any) =>
-      Array.isArray(blank) ? [...blank] : [String(blank)]
-    );
+    fillAnswers.value = rawAnswer.length > 0
+      ? rawAnswer.map((blank: any) => (Array.isArray(blank) ? [...blank] : [String(blank ?? '')]))
+      : [['']];
   }
   if (row.type === 'short') {
-    shortAnswer.value = (row.answer || [''])[0] || '';
+    shortAnswer.value = rawAnswer[0] || '';
     gradingPointsStr.value = (row.grading_points || []).join('\n');
   }
   dialogVisible.value = true;
@@ -705,8 +847,8 @@ const saveQuestion = async () => {
       ElMessage.error('简答题必须填写标准答案');
       return;
     }
-    payload.answer = [shortAnswer.value];
-    payload.grading_points = gradingPointsStr.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    payload.answer = [shortAnswer.value.trim()];
+    payload.grading_points = [];
     payload.options = [];
   } else {
     payload.grading_points = [];
@@ -794,31 +936,229 @@ onMounted(() => {
 
 <style scoped>
 .page-card {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 24px 28px;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.02), 0 1px 3px rgba(0, 0, 0, 0.03);
+  border: none;
 }
 
 .filter-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 24px;
 }
 
 .filters {
   display: flex;
-  gap: 12px;
+  gap: 14px;
+  align-items: center;
 }
 
 .actions {
   display: flex;
   gap: 12px;
+  align-items: center;
 }
 
-.primary-btn {
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  border: none;
+/* 高定圆角输入框与选择器 */
+.custom-search-input :deep(.el-input__wrapper),
+.custom-filter-select :deep(.el-select__wrapper) {
+  border-radius: 10px !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #e2e8f0 inset !important;
+  transition: all 0.2s ease !important;
+  padding: 5px 14px !important;
+}
+
+.custom-search-input :deep(.el-input__wrapper.is-focus),
+.custom-filter-select :deep(.el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 2px #1d4ed8 inset !important;
+}
+
+.search-prefix-icon {
+  color: #94a3b8;
+  font-size: 15px;
+}
+
+/* 顶部深蓝主创建按钮与操作按钮群 */
+.primary-create-btn {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border-radius: 10px !important;
+  padding: 10px 20px !important;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.25) !important;
+  transition: all 0.2s ease !important;
+}
+
+.primary-create-btn:hover {
+  background: #1e40af !important;
+  border-color: #1e40af !important;
+  transform: translateY(-1px);
+}
+
+.ai-btn, .import-btn, .batch-del-btn {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+}
+
+/* ─────────── 现代高质感 SaaS 列表样式体系 ─────────── */
+.saas-modern-table {
+  border: none !important;
+}
+
+/* 仅第一行表头赋予浅蓝灰底色与细分隔线 */
+.saas-modern-table :deep(.el-table__header-wrapper th) {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-right: none !important;
+  border-top: none !important;
+  border-left: none !important;
+  white-space: nowrap !important;
+  letter-spacing: 0.3px;
+}
+
+.saas-modern-table :deep(.el-table__header-wrapper th .cell) {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+}
+
+.saas-modern-table :deep(.el-table__inner-wrapper::before) {
+  display: none;
+}
+
+.saas-modern-table :deep(.el-table__row td) {
+  border-right: none !important;
+  border-left: none !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.saas-modern-table :deep(.el-table__row:hover td) {
+  background-color: #f8fafc !important;
+}
+
+.saas-modern-table :deep(.el-checkbox__inner) {
+  border-radius: 4px !important;
+  border-color: #cbd5e1 !important;
+}
+
+.col-id-text {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.question-main-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.5;
+}
+
+/* 题型圆角胶囊 */
+.type-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.type-pill.single { background: #eff6ff; color: #1d4ed8; }
+.type-pill.multiple { background: #f5f3ff; color: #7c3aed; }
+.type-pill.judge { background: #fef3c7; color: #b45309; }
+.type-pill.fill { background: #ecfdf5; color: #047857; }
+.type-pill.short { background: #fff1f2; color: #e11d48; }
+
+/* 来源胶囊 */
+.source-ai-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: #fdf4ff;
+  color: #c026d3;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.ai-sparkle-svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: #c026d3;
+}
+
+.source-manual-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  background: #f8fafc;
+  color: #64748b;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* 分类胶囊 */
+.category-pill {
+  display: inline-block;
+  padding: 3px 12px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 14px;
+  white-space: nowrap;
+}
+
+.score-highlight {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0284c7;
+  white-space: nowrap;
+}
+
+.muted-gray-text {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* 操作列链接按钮组 */
+.action-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.action-link-btn {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  padding: 4px 6px !important;
+  margin: 0 !important;
+}
+
+.action-link-btn.green { color: #16a34a !important; }
+.action-link-btn.orange { color: #f97316 !important; }
+.action-link-btn.red { color: #ef4444 !important; }
+
+.action-link-btn:hover {
+  background: #f1f5f9 !important;
+  border-radius: 6px !important;
 }
 
 .pagination-bar {
@@ -945,5 +1285,89 @@ onMounted(() => {
 
 .adv-row .grow {
   flex: 1;
+}
+
+/* ─────────── ✨ AI 创建题目结果卡片全貌展示体系 ─────────── */
+.ai-preview-section {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.preview-tip {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.ai-preview-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.ai-q-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ai-q-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.ai-q-card.is-checked {
+  border-color: #3b82f6;
+  background: #f8fbff;
+  box-shadow: 0 0 0 1px #3b82f6 inset;
+}
+
+.ai-q-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ai-q-seq {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.ai-q-score {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0284c7;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: auto;
+}
+
+.ai-q-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.6;
+  margin-bottom: 6px;
 }
 </style>

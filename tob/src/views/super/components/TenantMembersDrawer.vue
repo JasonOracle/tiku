@@ -1,9 +1,12 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 底层
+ * 修改内容：[表格对齐现代 SaaS 统一规范，接入 saas-modern-table 统一浅蓝灰表头首行与去边框细节]
  * 修改时间：2026-09-10
  * AI模型：OpenCode / Gemini 底层
  * 修改内容：[新建企业成员视察抽屉组件：超管上帝视角直查企业成员，所有者卡片置顶，支持手机号/姓名过滤，附带一键切换视察快捷入口]
--->
+ -->
 <template>
   <el-drawer
     :model-value="visible"
@@ -59,8 +62,26 @@
         <span class="total-text">共 {{ total }} 名成员</span>
       </div>
 
-      <!-- 成员列表表格 -->
-      <el-table :data="members" stripe size="small" style="width: 100%; margin-top: 12px;">
+      <!-- 成员列表表格 (无硬边框，仅首行背景与微划线) -->
+      <el-table
+        :data="members"
+        class="saas-modern-table"
+        size="small"
+        style="width: 100%; margin-top: 12px;"
+        :header-cell-style="{
+          backgroundColor: '#f1f5f9',
+          color: '#475569',
+          fontWeight: '700',
+          fontSize: '12px',
+          padding: '10px 12px',
+          borderBottom: '1px solid #e2e8f0',
+          whiteSpace: 'nowrap'
+        }"
+        :cell-style="{
+          padding: '12px 12px',
+          borderBottom: '1px solid #f1f5f9'
+        }"
+      >
         <el-table-column prop="user_id" label="UID" width="65" />
         <el-table-column prop="display_name" label="姓名" min-width="110">
           <template #default="{ row }">

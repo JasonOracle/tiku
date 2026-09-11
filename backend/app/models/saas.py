@@ -1,5 +1,9 @@
 """
 [变更日志]
+修改时间：2026-09-11
+AI模型：Gemini 系列
+修改内容：[在 ResourceItem 模型中新增 source 字段 (ai/manual/import)，准确持久化与区分 AI 出题、人工录入与 Excel 导入数据来源]
+[变更日志]
 修改时间：2026-09-09
 AI模型：Muse Spark
 修改内容：[新建多租户 SaaS 底座模型：租户/用户/关联+资源/任务/记录/知识库，全部强制 tenant_id 隔离，兼容旧 exams/questions 表]
@@ -95,6 +99,7 @@ class ResourceItem(Base):
     score = Column(Integer, default=10)
     creator_id = Column(Integer, ForeignKey("sys_user.id", ondelete="SET NULL"), nullable=True)
     is_deleted = Column(Boolean, default=False)
+    source = Column(String(20), default="manual", comment="来源：ai/manual/import")
     ai_rag_sources = Column(JSON, nullable=True, comment="切片级溯源 [{document_id,file_name,chunk_content,similarity_score}]")
     created_at = Column(DateTime, default=datetime.now)
 

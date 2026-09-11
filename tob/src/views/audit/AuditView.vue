@@ -1,5 +1,9 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-11
+ * AI模型：Gemini 系列
+ * 修改内容：[全面接入全局 SaaS 列表规范 list-layout.css：1. 消除页面和表格硬边框，改用高定立体弥散阴影；2. 表格仅首行赋予淡蓝灰底色，列宽合理扩充杜绝字形折行；3. 升级操作者/动作/对象胶囊体系；4. 快照详情块采用精致内嵌浅灰圆角卡片]
+ * [变更日志]
  * 修改时间：2026-09-06 20:40:00
  * AI模型：ZCode (GLM)
  * 修改内容：[v1.2 新增审计日志查询 (仅超管): 双域留痕(人类/AI)全量检索与详情展开]
@@ -22,7 +26,26 @@
       </div>
     </div>
 
-    <el-table :data="logs" v-loading="loading" stripe style="width: 100%; margin-top: 16px">
+    <!-- 审计日志表格 (无硬边框，仅首行背景与微划线) -->
+    <el-table
+      :data="logs"
+      v-loading="loading"
+      class="saas-modern-table"
+      style="width: 100%"
+      :header-cell-style="{
+        backgroundColor: '#f1f5f9',
+        color: '#475569',
+        fontWeight: '700',
+        fontSize: '13px',
+        padding: '14px 16px',
+        borderBottom: '1px solid #e2e8f0',
+        whiteSpace: 'nowrap'
+      }"
+      :cell-style="{
+        padding: '16px 16px',
+        borderBottom: '1px solid #f1f5f9'
+      }"
+    >
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="audit-detail">
@@ -37,18 +60,38 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column label="操作者" width="150">
+      <el-table-column prop="id" label="ID" width="80" align="center">
         <template #default="{ row }">
-          <el-tag :type="row.operator_type === 'ai' ? 'warning' : 'primary'" size="small">
-            {{ row.operator_type === 'ai' ? '🤖 AI员工' : '👤 ' + (row.operator_name || '未知') }}
-          </el-tag>
+          <span class="col-id-text">{{ row.id }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="action_type" label="动作" width="120" />
-      <el-table-column prop="target_type" label="对象" width="90" />
-      <el-table-column prop="summary" label="摘要" min-width="280" show-overflow-tooltip />
-      <el-table-column prop="created_at" label="时间" width="170" />
+      <el-table-column label="操作者" width="160" align="center">
+        <template #default="{ row }">
+          <span class="prop-pill" :style="row.operator_type === 'ai' ? 'background: #fdf4ff; color: #c026d3' : 'background: #eff6ff; color: #1d4ed8'">
+            {{ row.operator_type === 'ai' ? '🤖 AI员工' : '👤 ' + (row.operator_name || '人类操作') }}
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="action_type" label="动作" width="130" align="center">
+        <template #default="{ row }">
+          <span class="prop-pill">{{ row.action_type }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="target_type" label="对象" width="110" align="center">
+        <template #default="{ row }">
+          <span class="muted-gray-text">{{ row.target_type }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="summary" label="摘要" min-width="280" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span class="cell-main-title">{{ row.summary }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="created_at" label="时间" width="180" align="center">
+        <template #default="{ row }">
+          <span class="muted-gray-text">{{ row.created_at }}</span>
+        </template>
+      </el-table-column>
     </el-table>
 
     <div class="pagination-bar">
@@ -92,30 +135,6 @@ onMounted(loadLogs);
 </script>
 
 <style scoped>
-.page-card {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-}
-
-.filter-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.filters {
-  display: flex;
-  gap: 12px;
-}
-
-.pagination-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
 .audit-detail {
   padding: 8px 16px;
   display: flex;
