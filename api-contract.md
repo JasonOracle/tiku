@@ -135,7 +135,7 @@ X-Tenant-Id: <tenant_id>
 
 ### 3.3 考生提交试卷 (交卷)
 - **端点**：`POST /api/v1/saas/task-records/submit`
-- **说明**：交卷端点挂载在 tasks 模块上。
+- **说明**：交卷端点挂载在 tasks 模块上。单选/多选/判断必须提交**选项Key**（如 "A" 或 ["A", "C"]），判断题必须提交 "A" 或 "B"，严禁传中文选项文本。
 - **请求体**：
 ```json
 {
@@ -144,7 +144,7 @@ X-Tenant-Id: <tenant_id>
   "answers": [
     {
       "resource_id": 101,
-      "answer": "Win+L 锁屏"
+      "answer": "A"
     },
     {
       "resource_id": 102,

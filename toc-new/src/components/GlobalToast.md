@@ -25,6 +25,7 @@
 2. **selector 必须成对**。模板上写 `selector="global-toast"`，setup 里就必须 `useToast("global-toast")`。`useToast` 底层是 `provide/inject`，selector 不一致等于注入了两个互不相干的配置对象，表现为「调用不报错但永远不弹窗」。
 3. **弹完立即复位**。派发后立刻调 `consume()` 清空状态，否则页面重建（切走再切回）会重复弹出同一条历史提示。
 4. **没挂载也不会丢错误**。组件在 `onMounted` / `onUnmounted` 时向 store 登记挂载数量；当数量为 0（当前页面漏放挂载点）时，`useGlobalToast()` 自动降级为 `uni.showToast`，保证错误永远可见而不是静默消失。
+5. **提示必须归属到触发它的那个页面**。`uni.navigateTo` 之后，上一页仍然留在页面栈里、其 `GlobalToast` 依然挂载着，两个实例共用同一个 store。若不做归属区分，**后台页面的实例会抢先 `consume()` 掉提示**，用户在当前页面完全看不到任何反馈（这一条在阶段三的考场切屏警告上真实踩到过）。因此：`useGlobalToast()` 投递时会带上当前栈顶路由，组件在 `onMounted` 时锁存自己的路由，**只有两者一致的挂载点才派发**；归属路由为空时视为全局提示，人人可派发。
 
 `selector` 单独命名还有一个好处：后续新增 `GlobalLoading` 时，只要换一个 selector，两者就不会互相覆盖。
 

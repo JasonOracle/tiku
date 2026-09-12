@@ -1,3 +1,9 @@
+/**
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 提示负载新增触发页路由，解决页面栈中多个挂载点共用同一状态时后台页面抢先消费提示、导致当前页面看不到反馈的缺陷]
+ */
 import { defineStore } from "pinia";
 
 /** 轻提示类型，与 wot-design-uni Toast 实例上的可用方法一一对应 */
@@ -14,6 +20,12 @@ export interface ToastPayload {
   position?: ToastPosition;
   /** 触发时刻，仅用于排查提示时序问题 */
   triggeredAt: number;
+  /**
+   * 触发时所在的页面路由。
+   * 页面栈里可能同时存在多个挂载了 GlobalToast 的页面（如首页 navigateTo 到考场后首页仍在栈中），
+   * 若不做区分，后台页面的实例会抢先消费提示，导致用户在当前页面根本看不到反馈。
+   */
+  page: string;
 }
 
 type ToastState = {
@@ -28,6 +40,13 @@ type ToastState = {
  * 之所以绕这一层，是因为 wot-design-uni 的 useToast() 依赖 provide/inject，
  * 在拦截器、路由守卫等无 setup 上下文的纯 TS 文件中无法直接调用。
  */
+/** 读取当前栈顶页面路由，作为提示的归属页面标记 */
+function currentRoutePath(): string {
+  const pages = getCurrentPages();
+  const page = pages[pages.length - 1] as unknown as { route?: string } | undefined;
+  return page?.route ?? "";
+}
+
 export const useToastStore = defineStore("toast", {
   state: (): ToastState => ({
     current: null,
@@ -35,8 +54,8 @@ export const useToastStore = defineStore("toast", {
   }),
   actions: {
     /** 投递一条提示，每次投递都会产生新的对象引用，保证监听方可被稳定触发 */
-    push(payload: Omit<ToastPayload, "triggeredAt">): void {
-      this.current = { ...payload, triggeredAt: Date.now() };
+    push(payload: Omit<ToastPayload, "triggeredAt" | "page">): void {
+      this.current = { ...payload, triggeredAt: Date.now(), page: currentRoutePath() };
     },
     /** 提示已被消费，立即复位，避免后续进入新页面时重复弹出历史提示 */
     consume(): void {
