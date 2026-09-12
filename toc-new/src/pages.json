@@ -1,0 +1,33 @@
+{
+	// [变更日志]
+	// 修改时间：2026-09-12
+	// AI模型：Deepseek-V4.1-Flash 底层
+	// 修改内容：[1. 增加 wot-design-uni 的 easycom 自动引入规则; 2. 注册 login 页并统一自定义导航栏; 3. 本阶段不配置 tabBar，待三大 Tab 页面落地后再补]
+	"easycom": {
+		"autoscan": true,
+		"custom": {
+			"^wd-(.*)": "wot-design-uni/components/wd-$1/wd-$1.vue"
+		}
+	},
+	"pages": [ //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+		{
+			"path": "pages/index/index",
+			"style": {
+				// 通顶沉浸式：禁用系统原生 TitleBar，由页面自绘 Header
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/login/index",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "智题库",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8"
+	}
+}

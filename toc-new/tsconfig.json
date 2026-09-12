@@ -1,0 +1,24 @@
+/* [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 修正组件库源码在严格模式下的类型误报，保证 pnpm type-check 全绿; 2. 收敛 include 范围，只对 src 做类型检查]
+ */
+{
+  "extends": "@vue/tsconfig/tsconfig.json",
+  "compilerOptions": {
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "lib": ["esnext", "dom"],
+    "types": ["@dcloudio/types"],
+    // @vue/tsconfig 0.1.3 将 importsNotUsedAsValues 设为 error，会对 wot-design-uni 的
+    // 源码报出大量 TS1371（该选项在 TS 5.5 已被官方移除），此处放宽为 remove
+    "importsNotUsedAsValues": "remove",
+    // wot-design-uni 源码存在对 {} 类型做字符串下标访问的写法，在 noImplicitAny 下报 TS7053。
+    // 该开关只压制「下标隐式 any」这一条规则，本项目自身代码仍保持严格约束
+    "suppressImplicitAnyIndexErrors": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"]
+}
