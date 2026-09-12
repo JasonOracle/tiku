@@ -79,6 +79,9 @@
 						:model-value="answerToValue(item.user_answer)"
 						:index="index"
 						:total="record.items.length"
+						:review-mode="!isAuditing"
+						:correct-answer="!isAuditing ? item.correct_answer : null"
+						readonly
 					/>
 
 					<!--

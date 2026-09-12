@@ -16,14 +16,35 @@
 				v-for="option in visibleOptions"
 				:key="option.key"
 				class="option-card"
-				:class="{ 'option-card--active': singleValue === option.key }"
-				hover-class="option-card--pressed"
-				@click="selectSingle(option.key)"
+				:class="[
+					!reviewMode && singleValue === option.key && 'option-card--active',
+					reviewMode && resolveOptionReviewClass(option.key)
+				]"
+				:hover-class="readonly ? '' : 'option-card--pressed'"
+				@click="!readonly && selectSingle(option.key)"
 			>
-				<view class="option-card__badge" :class="{ 'option-card__badge--active': singleValue === option.key }">
+				<view
+					class="option-card__badge"
+					:class="[
+						!reviewMode && singleValue === option.key && 'option-card__badge--active',
+						reviewMode && resolveOptionReviewBadgeClass(option.key)
+					]"
+				>
 					<text class="option-card__badge-text">{{ option.key }}</text>
 				</view>
 				<text class="option-card__text">{{ option.text }}</text>
+				<!-- 复盘专属正误标记 -->
+				<view v-if="reviewMode && isCorrectOption(option.key)" class="option-card__status-icon option-card__status-icon--right">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+						<polyline points="20 6 9 17 4 12" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+					</svg>
+				</view>
+				<view v-else-if="reviewMode && isUserWrongOption(option.key)" class="option-card__status-icon option-card__status-icon--wrong">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+						<line x1="18" y1="6" x2="6" y2="18" stroke="#DC2626" stroke-width="3" stroke-linecap="round"/>
+						<line x1="6" y1="6" x2="18" y2="18" stroke="#DC2626" stroke-width="3" stroke-linecap="round"/>
+					</svg>
+				</view>
 			</view>
 		</view>
 
@@ -33,14 +54,34 @@
 				v-for="option in visibleOptions"
 				:key="option.key"
 				class="option-card"
-				:class="{ 'option-card--active': multipleValue.includes(option.key) }"
-				hover-class="option-card--pressed"
-				@click="toggleMultiple(option.key)"
+				:class="[
+					!reviewMode && multipleValue.includes(option.key) && 'option-card--active',
+					reviewMode && resolveOptionReviewClass(option.key)
+				]"
+				:hover-class="readonly ? '' : 'option-card--pressed'"
+				@click="!readonly && toggleMultiple(option.key)"
 			>
-				<view class="option-card__badge option-card__badge--square" :class="{ 'option-card__badge--active': multipleValue.includes(option.key) }">
+				<view
+					class="option-card__badge option-card__badge--square"
+					:class="[
+						!reviewMode && multipleValue.includes(option.key) && 'option-card__badge--active',
+						reviewMode && resolveOptionReviewBadgeClass(option.key)
+					]"
+				>
 					<text class="option-card__badge-text">{{ option.key }}</text>
 				</view>
 				<text class="option-card__text">{{ option.text }}</text>
+				<view v-if="reviewMode && isCorrectOption(option.key)" class="option-card__status-icon option-card__status-icon--right">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+						<polyline points="20 6 9 17 4 12" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+					</svg>
+				</view>
+				<view v-else-if="reviewMode && isUserWrongOption(option.key)" class="option-card__status-icon option-card__status-icon--wrong">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+						<line x1="18" y1="6" x2="6" y2="18" stroke="#DC2626" stroke-width="3" stroke-linecap="round"/>
+						<line x1="6" y1="6" x2="18" y2="18" stroke="#DC2626" stroke-width="3" stroke-linecap="round"/>
+					</svg>
+				</view>
 			</view>
 		</view>
 
@@ -50,9 +91,12 @@
 				v-for="option in visibleOptions"
 				:key="option.key"
 				class="judge-pill"
-				:class="{ 'judge-pill--active': singleValue === option.key }"
-				hover-class="judge-pill--pressed"
-				@click="selectSingle(option.key)"
+				:class="[
+					!reviewMode && singleValue === option.key && 'judge-pill--active',
+					reviewMode && resolveOptionReviewClass(option.key)
+				]"
+				:hover-class="readonly ? '' : 'judge-pill--pressed'"
+				@click="!readonly && selectSingle(option.key)"
 			>
 				<text class="judge-pill__text">{{ option.text }}</text>
 			</view>
@@ -97,16 +141,29 @@ type QuestionKind = "single" | "multiple" | "judge" | "fill" | "short";
 
 type AnswerValue = string | string[];
 
-const props = defineProps<{
-	/** 单题数据，服务端已剥离正确答案与解析 */
-	question: ExamQuestion;
-	/** 当前答案：单选 / 判断 / 简答 / 单空填空为 string，多选 / 多空填空为 string[] */
-	modelValue: AnswerValue;
-	/** 当前题序，从 0 开始 */
-	index: number;
-	/** 题目总数 */
-	total: number;
-}>();
+const props = withDefaults(
+	defineProps<{
+		/** 单题数据，服务端已剥离正确答案与解析 */
+		question: ExamQuestion;
+		/** 当前答案：单选 / 判断 / 简答 / 单空填空为 string，多选 / 多空填空为 string[] */
+		modelValue: AnswerValue;
+		/** 当前题序，从 0 开始 */
+		index: number;
+		/** 题目总数 */
+		total: number;
+		/** 是否处于报告复盘模式 */
+		reviewMode?: boolean;
+		/** 正确答案（仅在出分复盘模式传入） */
+		correctAnswer?: string | string[] | null;
+		/** 是否只读（禁止点击修改） */
+		readonly?: boolean;
+	}>(),
+	{
+		reviewMode: false,
+		correctAnswer: null,
+		readonly: false,
+	}
+);
 
 const emit = defineEmits<{
 	"update:modelValue": [value: AnswerValue];
@@ -224,6 +281,39 @@ function toggleMultiple(key: string): void {
 	emit("update:modelValue", next);
 }
 
+/** 复盘判定逻辑 */
+const parsedCorrectKeys = computed<string[]>(() => {
+	if (!props.correctAnswer) return [];
+	if (Array.isArray(props.correctAnswer)) return props.correctAnswer.map((k) => String(k).trim().toUpperCase());
+	return String(props.correctAnswer).split(",").map((k) => k.trim().toUpperCase()).filter(Boolean);
+});
+
+const userSelectedKeys = computed<string[]>(() => {
+	if (questionKind.value === "multiple") return multipleValue.value.map((k) => k.trim().toUpperCase());
+	return singleValue.value ? [singleValue.value.trim().toUpperCase()] : [];
+});
+
+function isCorrectOption(key: string): boolean {
+	return parsedCorrectKeys.value.includes(key.toUpperCase());
+}
+
+function isUserWrongOption(key: string): boolean {
+	const upper = key.toUpperCase();
+	return userSelectedKeys.value.includes(upper) && !parsedCorrectKeys.value.includes(upper);
+}
+
+function resolveOptionReviewClass(key: string): string {
+	if (isCorrectOption(key)) return "option-card--review-correct";
+	if (isUserWrongOption(key)) return "option-card--review-wrong";
+	return "";
+}
+
+function resolveOptionReviewBadgeClass(key: string): string {
+	if (isCorrectOption(key)) return "option-card__badge--review-correct";
+	if (isUserWrongOption(key)) return "option-card__badge--review-wrong";
+	return "";
+}
+
 /** 多空填空：始终按空位总数补齐数组，避免稀疏数组被序列化成 null 导致后端比对失败 */
 function handleFillInput(blankIndex: number, value: string | number): void {
 	const size = blankCount.value;
@@ -300,6 +390,32 @@ function handleFillInput(blankIndex: number, value: string | number): void {
 	border-color: #1d63ff;
 }
 
+.option-card--review-correct {
+	background-color: #ECFDF5;
+	border-color: #10B981;
+
+	.option-card__text {
+		color: #047857;
+		font-weight: 600;
+	}
+}
+
+.option-card--review-wrong {
+	background-color: #FEF2F2;
+	border-color: #EF4444;
+
+	.option-card__text {
+		color: #B91C1C;
+	}
+}
+
+.option-card__status-icon {
+	margin-left: 16rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
 .option-card__badge {
 	display: flex;
 	align-items: center;
@@ -318,6 +434,24 @@ function handleFillInput(blankIndex: number, value: string | number): void {
 .option-card__badge--active {
 	border-color: #1d63ff;
 	background-color: #1d63ff;
+}
+
+.option-card__badge--review-correct {
+	border-color: #059669;
+	background-color: #059669;
+
+	.option-card__badge-text {
+		color: #ffffff;
+	}
+}
+
+.option-card__badge--review-wrong {
+	border-color: #DC2626;
+	background-color: #DC2626;
+
+	.option-card__badge-text {
+		color: #ffffff;
+	}
 }
 
 .option-card__badge-text {
