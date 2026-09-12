@@ -14,20 +14,24 @@ A modern, lightweight AI-Native assessment and examination platform: **B-end Saa
 This project strictly adheres to an **agile, progressive development** lifecycle, ensuring every iteration delivers verifiable software artifacts and frozen snapshots:
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   v1.0 MVP   │ ──> │v1.2 AI-Native│ ──> │v1.3 RAG/State│ ──> │v1.4 SaaS/LLM │ ──> │v1.5 Geek App │
-│Basic Objective│     │Fill/Essay+AI │     │KB RAG & Guard│     │Multi-Tenancy │     │Uni-app Mobile│
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-  Archived (v1.0)      Archived (v1.2)      Archived (v1.3)     Archived(v1.4-final)    In Progress...
+┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐
+│  v1.0 MVP │──>│ v1.1 Data │──>│v1.2 AI Grd│──>│v1.3 KB RAG│──>│v1.4 SaaS  │──>│ v1.5 Geek │
+│Objective  │   │Lock & Safe│   │Fill/Essay │   │Source-text│   │Multi-tenan│   │Uni-app    │
+└───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘
+  Archived(v1.0)  Archived(v1.1)  Archived(v1.2)  Archived(v1.3)  Archived(v1.4)   In Progress..
 ```
 
 - **v1.0 (MVP Closed Loop)**:
   - Completed single/multiple choice and true/false questions, exam assembly, PC/H5 test-taking, and automated instant scoring.
+- **v1.1 (Data Governance & Exam Lock)**:
+  - **Exam Locking & Immutability**: Introduced "published locking" to prevent modifying questions during ongoing tests, with rounded pass percentage calculations;
+  - **Category & Question Safeguards**: Snapshotting `category_name` and deletion reference checks to prevent orphaned exam items;
+  - **C-End Experience**: Profile center with SVG avatars, submission history, exam exit prevention modals, and pure SVG rendering standards.
 - **v1.2 (AI-Native Upgrade)**:
   - Added fill-in-the-blank and essay questions; integrated SenseNova LLM for automated essay pre-grading; introduced instructor isolation and audit logs.
 - **v1.3 (Private Knowledge Base RAG & State Machine Governance)**:
   - **RAG-Driven Question Generation**: Integrated vector retrieval over private document chunks, automatically highlighting source text in drawer overlays;
-  - **Strict Asset Lifecycle**: Formalized the immutable `draft → published → archived` exam lifecycle, and added reference guards preventing accidental deletion of referenced questions;
+  - **Strict Asset Lifecycle**: Formalized the immutable `draft → published → archived` exam lifecycle;
   - **Server-Authoritative Anti-Cheating**: Exam timer locked server-side upon first entry to prevent client clock manipulation.
 - **v1.4 (SaaS Multi-Tenancy & Agent Interaction Revolution - Current Stable)**:
   - **Strict Multi-Tenant Isolation**: Complete logical data isolation between educational institutions (e.g., Xingya Education) and enterprise compliance training (e.g., Haoshi Group);
