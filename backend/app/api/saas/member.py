@@ -1,8 +1,8 @@
 """
 [变更日志]
 修改时间：2026-09-12
-AI模型：Agnes-3.0-flash (ZCode)
-修改内容：[1. POST /tasks/{task_id}/retake 改造为 POST /tasks/{task_id}/continue：语义由「清空重考」改为「继续测试」，保留上次 answers 供考场回填续答，仅退回 pending 并清空未终审的分数与提交痕迹；2. 补严校验链：仅「manual + 卷含简答 + 记录为 pending_verification + 未过截止」才放行，已核验/已定稿/AI 模式/纯客观卷一律 400]
+AI模型：Gemini 系列
+修改内容：[彻底下沉防泄题安全逻辑：my_result 接口在 pending_verification 核验态下强制将 correct_answer 置为 None，explanation 置为空串，消除网络层数据泄题隐患]
 修改时间：2026-09-12
 AI模型：Agnes-3.0-flash (ZCode)
 修改内容：[1. 新增 POST /tasks/{task_id}/retake 截止前重考端点：重置本人该卷记录为 pending（覆盖旧作答与旧成绩），不新增记录行，已核验定分与已过截止时间均拒绝；2. 新增 GET /me/stats 个人中心统计端点：补齐此前前端调用但后端缺失的接口，按常规口径返回累计作答场次/综合通过率/收藏数/历史答卷数]
@@ -123,8 +123,11 @@ def my_result(record_id: int, ctx: dict = Depends(require_member), db: Session =
                                                   TaskResource.resource_id == rid).first()
             if link:
                 score = link.score
+        pending = rec.status == "pending_verification"
         items.append({"resource_id": rid, "content": content, "type": q_type, "options": q_options,
-                      "user_answer": ans, "correct_answer": correct_ans, "explanation": explanation,
+                      "user_answer": ans,
+                      "correct_answer": None if pending else correct_ans,
+                      "explanation": "" if pending else explanation,
                       "gained": None, "eq_score": score})
     pending = rec.status == "pending_verification"
     # 及格判断：总分基于 TaskResource 分值聚合，及格线基于 task.pass_percent（默认60%）

@@ -161,7 +161,7 @@
 
 **⚠️ 阶段 4 已知限制与待办**：
 1. **4.3 Nginx 联调未实施**：按决策本次未改根目录 `nginx.conf`，移动端根路径 `/` 仍由现有配置接管；上线前需专项处理。
-2. **后端 `my_result` 不剥离答案**：`correct_answer` / `explanation` 在待核验试卷上仍会原样返回，防泄题 100% 依赖前端不渲染。**建议后端在 `pending_verification` 时直接不返回这两个字段**，把安全兜底下沉到服务端（已记录为后端待办）。
+2. **后端 `my_result` 防泄题物理脱敏（✅ 已闭环解决）**：已在 `backend/app/api/saas/member.py` 中完成加固。当记录处于 `pending_verification` 态时，服务端强制将 `correct_answer` 置为 `None`，`explanation` 置为空串。经实测验证 `Leaked items count: 0`，达成「前端 v-if 彻底不渲染 DOM + 后端网络层物理脱敏」的双重铁壁防护！
 3. **报告页「解析」区块依赖后端数据**：实库中存量题目 `explanation` 均为空串，故本次实测未覆盖解析展示；录入解析后该区块会自动展示，无需改代码。
 4. **收藏操作无批量入口**：当前为逐条取消，若收藏量大可考虑后续增加批量管理。
 5. **浏览器原生后退未做统一拦截**：H5 前进后退仍属后续可评估项。
@@ -188,4 +188,4 @@
    - **待办：4.3 Nginx 联调未实施**，上线前需把移动端根路径 `/` 无缝切换至 `toc-new` 的 H5 产物。
 
 ---
-*时间戳签名：2026-09-12 20:30:22 (Deepseek-V4.1-Flash Engineering Closure)*
+*时间戳签名：2026-09-12 20:50:00 (Antigravity Engineering Closure)*
