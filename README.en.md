@@ -14,17 +14,23 @@ A modern, lightweight AI-Native assessment and examination platform: **B-end Saa
 This project strictly adheres to an **agile, progressive development** lifecycle, ensuring every iteration delivers verifiable software artifacts and frozen snapshots:
 
 ```
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│     v1.0 MVP    │  ──>  │  v1.2 AI-Native │  ──>  │ v1.4 SaaS & Agent│ ──>  │   v1.5 Geek App │
-│ Objective Tests │       │Fill/Essay + AI  │       │ Multi-Tenant+LLM│       │ Uni-app Mobile  │
-└─────────────────┘       └─────────────────┘       └─────────────────┘       └─────────────────┘
-  Archived (v1.0)           Archived (v1.2)           Archived (v1.4-final)       In Progress...
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   v1.0 MVP   │ ──> │v1.2 AI-Native│ ──> │v1.3 RAG/State│ ──> │v1.4 SaaS/LLM │ ──> │v1.5 Geek App │
+│Basic Objective│     │Fill/Essay+AI │     │KB RAG & Guard│     │Multi-Tenancy │     │Uni-app Mobile│
+└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+  Archived (v1.0)      Archived (v1.2)      Archived (v1.3)     Archived(v1.4-final)    In Progress...
 ```
 
-- **v1.0 (MVP Closed Loop)**: Completed basic single/multiple choice and true/false questions, exam assembly, PC/H5 test-taking, and automated scoring.
-- **v1.2 (AI-Native Upgrade)**: Added fill-in-the-blank and essay questions; integrated SenseNova LLM for automated essay pre-grading; introduced instructor isolation and audit logs.
+- **v1.0 (MVP Closed Loop)**:
+  - Completed single/multiple choice and true/false questions, exam assembly, PC/H5 test-taking, and automated instant scoring.
+- **v1.2 (AI-Native Upgrade)**:
+  - Added fill-in-the-blank and essay questions; integrated SenseNova LLM for automated essay pre-grading; introduced instructor isolation and audit logs.
+- **v1.3 (Private Knowledge Base RAG & State Machine Governance)**:
+  - **RAG-Driven Question Generation**: Integrated vector retrieval over private document chunks, automatically highlighting source text in drawer overlays;
+  - **Strict Asset Lifecycle**: Formalized the immutable `draft → published → archived` exam lifecycle, and added reference guards preventing accidental deletion of referenced questions;
+  - **Server-Authoritative Anti-Cheating**: Exam timer locked server-side upon first entry to prevent client clock manipulation.
 - **v1.4 (SaaS Multi-Tenancy & Agent Interaction Revolution - Current Stable)**:
-  - **Strict Multi-Tenant Isolation**: Complete logical and data isolation between educational institutions (e.g., Xingya Education) and enterprise compliance training (e.g., Haoshi Group);
+  - **Strict Multi-Tenant Isolation**: Complete logical data isolation between educational institutions (e.g., Xingya Education) and enterprise compliance training (e.g., Haoshi Group);
   - **Deep AI Agent Integration**: Conversational batch question generation, dynamic drafting cards, anti-leakage guards, and full history persistence (`action_card_data`);
   - **Automated Snapshot Engineering**: Built-in Playwright automated headless screenshot and Markdown generation engine (`scripts/snapshot_showcase.py`).
 - **v1.5 (Cross-Platform Geek Remodel - Currently Underway)**:
@@ -63,10 +69,10 @@ tiku/
 ├── tob/                      # B-end admin console (Vue 3.5 + Element Plus + Pinia)
 ├── toc/                      # C-end H5 client (Vue 3.5)
 ├── toc-new/                  # [v1.5 in progress] C-end uni-app + Wot Design Uni project
-├── docs/                     # System snapshots and illustrated showcases
+├── docs/                     # Public showcase center (product reports and live screenshots)
 │   ├── v1.4_showcase.md      # v1.4 full walkthrough report
-│   └── images/v1.4/          # 12 high-resolution real-world screenshots
-├── history/                  # Historical specification archives (v1.3 / v1.4)
+│   └── images/v1.4/          # 12 high-resolution screenshots referenced by README and showcase
+├── history/                  # Historical specification archives (contains v1.3 and v1.4 specs)
 ├── scripts/                  # Automation & headless screenshot engine
 │   ├── snapshot_showcase.py  # Playwright automated capture script
 │   └── ...
@@ -114,4 +120,5 @@ This repository is also a comprehensive case study in **human-AI collaborative s
 - **[`product.md`](./product.md)** — Latest Product Requirements Document (PRD).
 - **[`tech-spec.md`](./tech-spec.md)** — System architecture and technical specifications.
 - **[`api-contract.md`](./api-contract.md)** — Backend API contracts and security rules.
-- **[`history/`](./history/)** — Historical version specifications.
+- **[`docs/`](./docs/)** — **Public Showcase Center**: Illustrated walkthroughs and UI snapshots.
+- **[`history/`](./history/)** — **Specification Archives**: Historical PRDs, technical designs, and notes (including `progress_v1.3_legacy.md`).
