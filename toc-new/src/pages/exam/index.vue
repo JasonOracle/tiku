@@ -84,11 +84,11 @@
 		</view>
 
 		<!-- 交卷成功后的过渡遮罩，点击可立即前往记录页 -->
-		<view v-if="finished" class="exam__finish-mask" @click="goMyRecords">
+		<view v-if="finished" class="exam__finish-mask" @click="goReport">
 			<view class="exam__finish-card">
 				<text class="exam__finish-title">交卷成功</text>
 				<text class="exam__finish-score">{{ finishedScoreText }}</text>
-				<text class="exam__finish-tip">正在前往「我的测试」查看记录</text>
+				<text class="exam__finish-tip">正在前往成绩报告</text>
 			</view>
 		</view>
 
@@ -106,6 +106,10 @@
 
 <script setup lang="ts">
 /**
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 交卷成功后由「跳我的测试」改为 redirectTo 成绩报告页并携带 record_id（redirectTo 出栈替换，避免返回退回到已交卷的考场）; 2. 已提交不可重入态仍保留前往「我的测试」的引导]
  * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Deepseek-V4.1-Flash 底层
@@ -149,6 +153,7 @@ const remainingSeconds = ref(0);
 const hasCountdown = ref(false);
 const submittedScore = ref<number | null>(null);
 const submittedStatus = ref("");
+const submittedRecordId = ref(0);
 const stateTitle = ref("");
 const stateDescription = ref("");
 
@@ -417,7 +422,7 @@ function handleJumpTo(index: number): void {
 
 function handleBack(): void {
 	if (finished.value) {
-		goMyRecords();
+		goReport();
 		return;
 	}
 	uni.showModal({
@@ -473,6 +478,7 @@ async function submitPaper(auto: boolean): Promise<void> {
 		finished.value = true;
 		submittedScore.value = result.score;
 		submittedStatus.value = result.status;
+		submittedRecordId.value = result.record_id;
 
 		if (result.status === "pending_verification") {
 			toast.success(auto ? "时间已到，已自动交卷，等待核验" : "交卷成功，等待核验");
@@ -480,9 +486,11 @@ async function submitPaper(auto: boolean): Promise<void> {
 			toast.success(auto ? `时间已到，已自动交卷，得分 ${result.score} 分` : `交卷成功，得分 ${result.score} 分`);
 		}
 
+		// 用 redirectTo 出栈替换考场页：若用 navigateTo，考生从报告页返回会退回已交卷的考场。
+		// 报告页非 tabBar 页，redirectTo 合法。
 		redirectTimer = setTimeout(() => {
 			redirectTimer = null;
-			uni.switchTab({ url: "/pages/records/index" });
+			uni.redirectTo({ url: `/pages/report/index?record_id=${result.record_id}` });
 		}, REDIRECT_DELAY_MS);
 	} catch (error) {
 		// 交卷失败必须保留当前作答并恢复倒计时，允许考生重试，绝不跳页
@@ -504,9 +512,20 @@ function computeTimeSpent(): number {
 	return entryElapsedSeconds + localElapsed;
 }
 
+/** 已提交过的试卷：引导前往「我的测试」查看历史记录 */
 function goMyRecords(): void {
 	clearRedirectTimer();
 	uni.switchTab({ url: "/pages/records/index" });
+}
+
+/** 交卷成功后前往本次作答的成绩报告页 */
+function goReport(): void {
+	clearRedirectTimer();
+	if (submittedRecordId.value) {
+		uni.redirectTo({ url: `/pages/report/index?record_id=${submittedRecordId.value}` });
+		return;
+	}
+	goMyRecords();
 }
 </script>
 

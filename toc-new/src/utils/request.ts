@@ -2,6 +2,10 @@
  * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 业务成功码判定由固定 200 放宽为 2xx 区间，兼容新增类接口返回的 201（如添加题目收藏）]
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
  * 修改内容：[1. 失败响应兼容解析后端 FastAPI 的 { detail } 结构，避免登录等失败原因被吞成通用文案]
  */
 import { useUserStore } from "@/stores/user";
@@ -27,8 +31,13 @@ export interface RequestOptions {
   showError?: boolean;
 }
 
-/** 后端约定的业务成功码 */
-const SUCCESS_CODE = 200;
+/**
+ * 业务成功码的判定区间。
+ * 后端新增类接口（如添加题目收藏 POST /member/favorites）返回 code 为 201，
+ * 若只认 200 会把这类成功响应误判为业务失败并弹出错误提示，故按 2xx 区间判定。
+ */
+const SUCCESS_CODE_MIN = 200;
+const SUCCESS_CODE_MAX = 300;
 /** 登录页路径，401 后统一回落到此 */
 const LOGIN_PAGE = "/pages/login/index";
 
@@ -104,7 +113,7 @@ export function request<T>(options: RequestOptions): Promise<T> {
           return;
         }
 
-        if (body.code !== SUCCESS_CODE) {
+        if (body.code < SUCCESS_CODE_MIN || body.code >= SUCCESS_CODE_MAX) {
           const message = body.message || "操作失败，请稍后重试";
           if (showError) useGlobalToast().error(message);
           reject(new Error(message));

@@ -75,15 +75,19 @@ import { onShow } from "@dcloudio/uni-app";
 import CustomHeader from "@/components/CustomHeader.vue";
 import GlobalToast from "@/components/GlobalToast.vue";
 import PageState from "@/components/PageState.vue";
+/**
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 「我的收藏」由阶段性提示改为跳转到真实收藏子页面; 2. 移除不再使用的全局轻提示依赖]
+ */
 import { fetchMyStats, type MyStatsResult } from "@/api/exam";
-import { useGlobalToast } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
 import { formatRole, maskPhone } from "@/utils/format";
 
 type StatsStatus = "loading" | "error" | "ready";
 
 const userStore = useUserStore();
-const toast = useGlobalToast();
 
 const statsStatus = ref<StatsStatus>("loading");
 const stats = ref<MyStatsResult | null>(null);
@@ -125,8 +129,9 @@ async function loadStats(silent = false): Promise<void> {
 	}
 }
 
+/** 进入我的收藏子页面（非 tabBar 页，用 navigateTo） */
 function handleFavorites(): void {
-	toast.info("重点题目收藏将在后续阶段开放");
+	uni.navigateTo({ url: "/pages/favorites/index" });
 }
 
 function handleAbout(): void {

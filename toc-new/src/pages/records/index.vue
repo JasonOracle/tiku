@@ -25,7 +25,13 @@
 			/>
 
 			<view v-else class="records__list">
-				<view v-for="item in filteredRecords" :key="item.record_id" class="record-card">
+				<view
+				v-for="item in filteredRecords"
+				:key="item.record_id"
+				class="record-card"
+				hover-class="record-card--pressed"
+				@click="goReport(item.record_id)"
+			>
 					<view class="record-card__head">
 						<text class="record-card__title">{{ item.task_title }}</text>
 						<wd-tag :type="resolveTagType(item.status)" plain round>{{ formatRecordStatus(item.status) }}</wd-tag>
@@ -49,6 +55,12 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 历史作答记录卡片支持点击查看，跳转成绩报告页复盘（携带 record_id）]
+ */
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import CustomHeader from "@/components/CustomHeader.vue";
@@ -117,6 +129,11 @@ async function loadRecords(silent = false): Promise<void> {
 
 function handleTabChange(key: TabKey): void {
 	activeKey.value = key;
+}
+
+/** 进入本次作答的成绩报告页复盘（报告页非 tabBar 页，用 navigateTo） */
+function goReport(recordId: number): void {
+	uni.navigateTo({ url: `/pages/report/index?record_id=${recordId}` });
 }
 
 onShow(() => {
@@ -197,6 +214,12 @@ onShow(() => {
 	background-color: #ffffff;
 	border-radius: 24rpx;
 	box-shadow: 0 4rpx 20rpx rgba(29, 99, 255, 0.06);
+	transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.record-card--pressed {
+	transform: scale(0.98);
+	opacity: 0.92;
 }
 
 .record-card__head {

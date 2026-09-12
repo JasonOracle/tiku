@@ -2,6 +2,10 @@
  * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 放宽 ExamRecordItem.correct_answer 类型以兼容填空题的字符串答案; 2. 新增重点题目收藏的查询 / 添加 / 移除三组接口与类型]
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
  * 修改内容：[1. 追加「我的测试」记录列表与个人中心统计两组接口及类型; 2. 既有接口与类型保持原样，未做任何签名变更]
  */
 import { request } from "@/utils/request";
@@ -106,7 +110,12 @@ export type ExamRecordItem = {
   type: string | null;
   options: QuestionOption[];
   user_answer: string | string[] | null;
-  correct_answer: string[] | null;
+  /**
+   * 标准答案。实库中 multiple_choice 为数组 ["A","B","D"]，
+   * 而 fill_in / short_answer 为字符串（如 "2"），因此必须保留联合类型。
+   * 该字段在「核验中」的试卷上由后端照常返回，防泄题必须由前端不渲染来兜底。
+   */
+  correct_answer: string | string[] | null;
   explanation: string;
   /** 后端预留字段，当前固定为 null */
   gained: null;
@@ -200,5 +209,48 @@ export function fetchMyRecords(): Promise<MyRecordListResult> {
 export function fetchMyStats(): Promise<MyStatsResult> {
   return request<MyStatsResult>({
     url: "/api/v1/member/me/stats",
+  });
+}
+
+/** 收藏的题目条目：GET /api/v1/member/favorites */
+export type FavoriteItem = {
+  id: number;
+  resource_id: number;
+  /** 后端同时返回的题目 ID 别名，与 resource_id 取值相同 */
+  question_id: number;
+  content: string;
+  title: string;
+  type: string;
+  options: QuestionOption[];
+};
+
+export type FavoriteListResult = {
+  items: FavoriteItem[];
+};
+
+/** 获取本人重点题目收藏列表 */
+export function fetchFavorites(): Promise<FavoriteListResult> {
+  return request<FavoriteListResult>({
+    url: "/api/v1/member/favorites",
+  });
+}
+
+/**
+ * 添加题目收藏。
+ * 后端对已收藏的题目做幂等处理，重复调用不会产生重复数据；成功响应 code 为 201 且不含 data 字段。
+ */
+export function addFavorite(resourceId: number): Promise<void> {
+  return request<void>({
+    url: "/api/v1/member/favorites",
+    method: "POST",
+    data: { resource_id: resourceId },
+  });
+}
+
+/** 取消题目收藏，成功响应 code 为 200 且不含 data 字段 */
+export function removeFavorite(resourceId: number): Promise<void> {
+  return request<void>({
+    url: `/api/v1/member/favorites/${resourceId}`,
+    method: "DELETE",
   });
 }

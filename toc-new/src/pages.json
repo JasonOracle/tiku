@@ -2,6 +2,10 @@
 	// [变更日志]
 	// 修改时间：2026-09-12
 	// AI模型：Deepseek-V4.1-Flash 底层
+	// 修改内容：[1. 注册 report 成绩报告页与 favorites 我的收藏页两个子页面路由，均为自定义导航栏]
+	// [变更日志]
+	// 修改时间：2026-09-12
+	// AI模型：Deepseek-V4.1-Flash 底层
 	// 修改内容：[1. 注册 records / profile / exam 三个页面路由; 2. 正式激活 tabBar 并挂载三大 Tab 与透明底 PNG 双色态图标; 3. globalStyle 背景色对齐极客蓝体系底色]
 	// [变更日志]
 	// 修改时间：2026-09-12
@@ -41,6 +45,18 @@
 		},
 		{
 			"path": "pages/exam/index",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/report/index",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/favorites/index",
 			"style": {
 				"navigationStyle": "custom"
 			}

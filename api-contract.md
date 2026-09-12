@@ -11,8 +11,9 @@
 ### 1.1 基础前缀与网关
 - **API 统一根路径**：`/api/v1/`
 - **公共鉴权**：`/api/v1/auth/`
-- **SaaS 机构业务 (B端)**：`/api/v1/saas/`
+- **机构管理业务 (B端)**：`/api/v1/admin/`、`/api/v1/super-admin/`
 - **C 端学员专区 (真实实库挂载)**：`/api/v1/member/`
+- ⚠️ **不存在 `/api/v1/saas/` 前缀**：`saas` 仅为后端 Python 模块目录名（`backend/app/api/saas/`），不是 URL 前缀。全部路由以 `backend/app/main.py` 的 `include_router` 注册为准，切勿据此拼路径。
 
 ### 1.2 鉴权与租户请求头
 除登录接口外，所有受保护接口必须在 HTTP Header 中携带：
@@ -134,7 +135,7 @@ X-Tenant-Id: <tenant_id>
 ---
 
 ### 3.3 考生提交试卷 (交卷)
-- **端点**：`POST /api/v1/saas/task-records/submit`
+- **端点**：`POST /api/v1/member/task-records/submit`
 - **说明**：交卷端点挂载在 tasks 模块上。单选/多选/判断必须提交**选项Key**（如 "A" 或 ["A", "C"]），判断题必须提交 "A" 或 "B"，严禁传中文选项文本。
 - **请求体**：
 ```json
