@@ -1,7 +1,7 @@
 <template>
 	<view class="report-apple">
-		<!-- 沉浸式微质感导航栏 -->
-		<CustomHeader title="成绩报告" show-back variant="gradient" />
+		<!-- 沉浸式白色微质感导航栏 -->
+		<CustomHeader title="成绩报告" show-back variant="solid" />
 
 		<view v-if="!record" class="rp-state">
 			<PageState
@@ -167,9 +167,9 @@
 <script setup lang="ts">
 /**
  * [变更日志]
- * 修改时间：2026-09-12
+ * 修改时间：2026-09-13
  * AI模型：Gemini 系列
- * 修改内容：[1. 完全采用与 preview-apple 一致的原生 Apple 钛金微光风设计语言：深空夜蓝看板 rp-board、双重漫反射光晕、折叠式逐题复盘卡片 rp-item、绿勾红叉状态徽标 rp-item__mark、选项行 rp-row、考点解析卡片 rp-point; 2. 移除外层 QuestionCard 冗余嵌套，消除旧版白底灰边普通样式; 3. 真实对接 GET /api/v1/member/task-records/{id}，严格保持安全防泄题逻辑]
+ * 修改内容：[1. 顶部导航栏按要求切换为内置标准的白色微质感 Navbar（CustomHeader variant="solid"），告别蓝底突兀感; 2. 保持原生 Apple 钛金微光风设计语言与真机防泄题安全逻辑]
  */
 import { computed, reactive, ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";

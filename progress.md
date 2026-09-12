@@ -2,6 +2,10 @@
  * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 新增「UI 选型双风格静态预览体系」交付记录（preview-linear / preview-apple 各 7 页 + preview-nav 索引台 + PreviewFloat 悬浮球组件）; 2. 补齐双风格验收证据与已知限制; 3. 刷新状态冻结时间]
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
  * 修改内容：[1. 勾选阶段 4.1 与 4.2（4.3 按决策不纳入本次）并补齐交付物、验收证据与已知限制; 2. 修正 api-contract.md 中仅剩的两处 /api/v1/saas/* 错误路由前缀; 3. 更新接手检查清单为阶段 1～4 全部收口并签署时间戳]
  * [变更日志]
  * 修改时间：2026-09-12
@@ -20,7 +24,7 @@
 # 智题库 (TiKu) 动态事实与研发进度总览 (Progress)
 
 > **当前全局版本**：v1.5 (C端跨端极客重构)  
-> **最新状态冻结时间**：2026-09-12 20:30:22  
+> **最新状态冻结时间**：2026-09-12 22:55:50  
 > **执行标准**：严格执行 `agent.md`「最高行为准则」与「跨版本大更迭最高协议」
 
 ---
@@ -175,7 +179,9 @@
 2. **确认服务健康**：
    - 后端容器：`docker ps` 确保 `tiku_backend` 为 `healthy`。
    - B端管理后台：`http://localhost/admin` 正常运行。
-3. **开发展开点**：**阶段 1～4 已全部收口**，v1.5 C 端「登录 → 测评 → 作答 → 交卷 → 成绩复盘 → 题目收藏」主干业务闭环全部贯通。后续按需展开：
+3. **开发展开点**：**阶段 1～4 已全部收口**，v1.5 C 端「登录 → 测评 → 作答 → 交卷 → 成绩复盘 → 题目收藏」主干业务闭环全部贯通。
+   - **UI 选型双风格静态预览体系已就绪**（依据根目录 `improveUI.md`）：`preview-linear/`（A 风格 Linear 极客冷灰，拨盘 5/4/5）与 `preview-apple/`（B 风格 Apple 钛金微光，拨盘 8/7/3）各含首页 / 我的测试 / 在线考场 / 成绩报告 / 个人中心 / 我的收藏 / 登录页 7 页，另有 `preview-nav/index` 索引台与全局 `PreviewFloat` 悬浮球（组件文档见 `src/components/PreviewFloat.md`）；全部为内置静态 Mock 数据，不接入真实接口、不触碰 `pages/` 正式业务代码；选型完成后可整体删除 `preview-linear/`、`preview-apple/`、`preview-nav/` 三目录与 `PreviewFloat` 组件；
+   - 后续按需展开：
    - C 端工程位于 `toc-new/`，启动命令 `cd toc-new && pnpm dev:h5`（端口 5174）；
    - 新增页面时务必在页面模板内挂载 `<GlobalToast />`，否则轻提示会降级为原生 toast；
    - 数据页面统一复用 `CustomHeader` + `PageState` + `<GlobalToast />` 结构，三态（加载 / 空 / 错误）必须齐全；
@@ -188,4 +194,4 @@
    - **待办：4.3 Nginx 联调未实施**，上线前需把移动端根路径 `/` 无缝切换至 `toc-new` 的 H5 产物。
 
 ---
-*时间戳签名：2026-09-12 20:50:00 (Antigravity Engineering Closure)*
+*时间戳签名：2026-09-12 22:55:50 (Deepseek-V4.1-Flash Engineering Closure)*

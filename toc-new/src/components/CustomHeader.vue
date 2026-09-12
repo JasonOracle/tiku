@@ -1,3 +1,11 @@
+<!--
+  /**
+   * [变更日志]
+   * 修改时间：2026-09-13
+   * AI模型：Gemini 系列
+   * 修改内容：[1. 强化 solid 模式的 Apple 冷白磨砂视觉规范，采用与页面一致的柔和边框与纯正墨色文字; 2. 优化返回键交互与状态栏高度兼容]
+   */
+-->
 <template>
 	<view class="custom-header" :class="`custom-header--${variant}`">
 		<!-- 状态栏占位：仅在设备真实存在状态栏高度时撑开（App / 小程序），H5 端为 0 不产生多余空白 -->
@@ -94,17 +102,23 @@ function handleBack(): void {
 </script>
 
 <style lang="scss" scoped>
+@import "@/styles/tokens-apple.scss";
+
 .custom-header {
 	position: relative;
 	width: 100%;
+	transition: background 0.25s ease;
 
 	&--solid {
-		background-color: #ffffff;
-		box-shadow: 0 2rpx 12rpx rgba(28, 35, 49, 0.04);
+		background-color: rgba(255, 255, 255, 0.92);
+		backdrop-filter: $glass-blur;
+		border-bottom: 1px solid $line;
+		box-shadow: 0 2rpx 12rpx rgba(20, 30, 60, 0.03);
 	}
 
 	&--gradient {
-		background-image: linear-gradient(135deg, #1d63ff 0%, #0045d8 100%);
+		background-image: linear-gradient(135deg, #1852e0 0%, #0a3299 100%);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 	}
 
 	&--transparent {
@@ -133,15 +147,21 @@ function handleBack(): void {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 60rpx;
-	height: 60rpx;
+	width: 64rpx;
+	height: 64rpx;
 	margin-left: -12rpx;
 	border-radius: 50%;
-	transition: background-color 0.2s ease;
+	cursor: pointer;
+	transition: all 0.2s ease;
 }
 
 .custom-header__back--active {
-	background-color: rgba(255, 255, 255, 0.16);
+	background-color: rgba(20, 30, 60, 0.08);
+	transform: scale(0.94);
+}
+
+.custom-header--gradient .custom-header__back--active {
+	background-color: rgba(255, 255, 255, 0.2);
 }
 
 .custom-header__back-icon {

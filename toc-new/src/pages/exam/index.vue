@@ -232,7 +232,7 @@
  * [变更日志]
  * 修改时间：2026-09-13
  * AI模型：Gemini 系列
- * 修改内容：[1. 100% 像素级将 preview-apple/exam/index.vue 原生模板完整移植到主项目，告别白屏和外层 QuestionCard 丢失; 2. 单选、多选、判断题（双大胶囊）、填空题、简答题全部原生直接内联展开; 3. 完美承接真实接口 GET /api/v1/member/tasks/{id}/entry 与 POST /api/v1/member/task-records/submit 并完整校验题干 content 与 title]
+ * 修改内容：[1. 强化简答题textarea和填空题input的清晰度和对比度：采用实色高清晰度边框#cbd5e1、加深占位文案色彩#64748b、优化字体30rpx与微光聚焦光晕，杜绝低对比度白底难辨问题; 2. 保持100% Apple钛金微光风原生质感]
  */
 import { computed, onBeforeUnmount, reactive, ref } from "vue";
 import { onLoad, onHide } from "@dcloudio/uni-app";
@@ -959,49 +959,69 @@ onBeforeUnmount(() => {
 
 .ex-blank__label {
 	font-size: 24rpx;
-	color: $muted;
+	font-weight: 600;
+	color: $ink-2;
 	margin-bottom: 12rpx;
 }
 
 .ex-blank__input {
 	width: 100%;
-	height: 88rpx;
+	height: 104rpx;
 	box-sizing: border-box;
-	background: rgba(20, 30, 60, 0.04);
-	border: 1px solid transparent;
+	background: #ffffff;
+	border: 2rpx solid #cbd5e1;
 	border-radius: 20rpx;
-	padding: 0 28rpx;
-	font-size: 28rpx;
-	color: $ink;
+	padding: 0 32rpx;
+	font-size: 30rpx;
+	color: #0f172a;
+	transition: all 0.22s ease;
+	box-shadow: 0 2rpx 8rpx rgba(15, 23, 42, 0.04);
+}
+
+.ex-blank__input:focus {
+	background: #ffffff;
+	border-color: #1852e0;
+	box-shadow: 0 0 0 6rpx rgba(24, 82, 224, 0.14);
 }
 
 .ex-ph {
-	color: $faint;
+	color: #64748b;
+	font-size: 28rpx;
+	font-weight: 400;
 }
 
-/* 简答题 */
+/* 简答题高辨识度输入框 */
 .ex-essay {
 	margin-top: 32rpx;
 }
 
 .ex-essay__area {
 	width: 100%;
-	height: 320rpx;
+	height: 380rpx;
 	box-sizing: border-box;
-	background: rgba(20, 30, 60, 0.04);
-	border: 1px solid transparent;
-	border-radius: 22rpx;
-	padding: 24rpx;
-	font-size: 28rpx;
-	line-height: 1.6;
-	color: $ink;
+	background: #ffffff;
+	border: 2rpx solid #cbd5e1;
+	border-radius: 24rpx;
+	padding: 30rpx;
+	font-size: 30rpx;
+	line-height: 1.7;
+	color: #0f172a;
+	transition: all 0.22s ease;
+	box-shadow: 0 2rpx 8rpx rgba(15, 23, 42, 0.04);
+}
+
+.ex-essay__area:focus {
+	background: #ffffff;
+	border-color: #1852e0;
+	box-shadow: 0 0 0 6rpx rgba(24, 82, 224, 0.14);
 }
 
 .ex-essay__count {
 	margin-top: 14rpx;
 	text-align: right;
-	font-size: 22rpx;
-	color: $faint;
+	font-size: 24rpx;
+	font-weight: 600;
+	color: #64748b;
 }
 
 .ex-essay__count--hot {
