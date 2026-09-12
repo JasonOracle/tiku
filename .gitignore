@@ -27,7 +27,10 @@ yarn-error.log*
 Thumbs.db
 
 # 本地测试上传文件
+backend/app/uploads/
 backend/app/api/uploads/
+.zcode/
+.codebuddy/
 
 # Python 缓存
 __pycache__/
