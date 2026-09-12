@@ -2,13 +2,17 @@
  * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 勾选阶段 1.4 与阶段 2 全部完成项并补齐交付物与验收证据; 2. 更新阶段 2 已知限制与待办; 3. 刷新状态冻结时间]
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
  * 修改内容：[1. 勾选阶段一 1.1～1.3 完成项并补齐交付物与验收证据; 2. 新增「接口契约与后端实际路由不符」待办（不擅自修改核心文档）; 3. 刷新状态冻结时间]
  */
 
 # 智题库 (TiKu) 动态事实与研发进度总览 (Progress)
 
 > **当前全局版本**：v1.5 (C端跨端极客重构)  
-> **最新状态冻结时间**：2026-09-12 17:39:01  
+> **最新状态冻结时间**：2026-09-12 18:05:57  
 > **执行标准**：严格执行 `agent.md`「最高行为准则」与「跨版本大更迭最高协议」
 
 ---
@@ -44,7 +48,7 @@
 - [x] 1.1 初始化 `toc-new` 脚手架（基于 `uni-app` Vue3 + TS + Vite 模板）
 - [x] 1.2 使用 `pnpm` 安装核心依赖：`wot-design-uni`、`pinia 3.0.4`、`pinia-plugin-persistedstate 4.7.1`、`sass`（修正 pnpm 软链传递依赖解析）
 - [x] 1.3 搭建网络层：`src/utils/request.ts`（统一拦截器、自动注入 `Authorization` 与 `X-Tenant-Id`、401 自动跳回登录，GlobalToast 全局轻提示桥接）
-- [ ] 1.4 配置极客蓝 SCSS 主题变量与纯正 SVG 图标集（移至阶段二配合 UI 落地）
+- [x] 1.4 配置极客蓝 SCSS 主题变量与纯正 SVG 图标集（本项已于阶段 2 随 UI 落地一并完成）
 
 **阶段 1 交付物清单（`toc-new/`）**：
 - 脚手架：官方模板 `dcloudio/uni-preset-vue#vite-ts`；依赖 `wot-design-uni 1.14.0`、`pinia 3.0.4`、`pinia-plugin-persistedstate 4.7.1`、`sass`（dev）。
@@ -66,13 +70,31 @@
 3. **pnpm 软链解析**：uni 工具链开启了 `preserveSymlinks`，导致 pinia 的传递依赖解析失败，已在 `vite.config.ts` 用 post 优先级插件纠正为 `false`。
 4. **`answers` 取值语义未裁决**：`"A"`（选项字母）与选项原文两种表述均被后端评分逻辑兼容，类型层用 `string | string[]` 保留双形态，待作答流实现时确认。
 
-### 阶段 2：应用骨架与三大 Tab 体系 (Phase 2: App Skeleton & Tabs)
-- [ ] 2.1 极简登录页 `pages/login/index.vue`（手机号+密码，极客蓝通顶微渐变，租户自动静默绑定）
-- [ ] 2.2 底部三 Tabbar 配置（`pages.json`）：
+### 阶段 2：应用骨架与三大 Tab 体系 (Phase 2: App Skeleton & Tabs) —— 【已完成】
+- [x] 2.1 极简登录页 `pages/login/index.vue`（手机号+密码，极客蓝通顶微渐变，租户自动静默绑定）
+- [x] 2.2 底部三 Tabbar 配置（`pages.json`）：
   - 🏠 首页 `pages/index/index.vue`
   - 📝 我的测试 `pages/records/index.vue`
   - 🧑 个人中心 `pages/profile/index.vue`
-- [ ] 2.3 自定义沉浸式通顶 Header 组件
+- [x] 2.3 自定义沉浸式通顶 Header 组件
+
+**阶段 2 交付物清单（`toc-new/`）**：
+- 主题与图标：`src/uni.scss`（极客蓝 SCSS 变量 + `card-surface` / `gradient-surface` mixin，仅放编译期内容）；`src/App.vue`（全局 CSS 自定义属性 + `page` 基础样式，避免规则被重复注入每个组件）；`src/static/icons/` 下 6 个 TabBar 图标的「SVG 源文件 + 81×81 RGBA 透明 PNG」（`tab-home` / `tab-records` / `tab-profile` × 普通态中灰 + 极客蓝选中态）与 `brand-logo.svg`。
+- 通用组件：`src/components/CustomHeader.vue` + `CustomHeader.md`（状态栏高度自适应、标题/副标题、返回键双行为、solid / gradient / transparent 三态底色）；`src/components/PageState.vue` + `PageState.md`（加载骨架 / 空态 / 错误态三合一，插画为内联手写 SVG，零图片资源）。
+- 工具层：`src/utils/format.ts`（时间、截止、限时、手机号脱敏，以及作答状态与租户角色的中文映射，杜绝英文枚举外露）。
+- 接口层：`src/api/exam.ts` 增补 `fetchMyRecords`、`fetchMyStats`（既有导出签名零变更）；`src/utils/request.ts` 失败响应兼容 FastAPI 的 `{ detail }` 结构，登录失败不再被吞成「服务异常（400）」。
+- 页面：登录页（真实表单 + 前端校验 + 提交态 + 无企业归属拦截 + `switchTab` 进首页）、首页（通顶渐变 Header 展示机构名 + 欢迎统计 + 测评卡片流）、我的测试（吸顶分类「全部 / 待核验 / 已完成」+ 滑动指示器 + 记录卡片）、个人中心（通顶名片 + 四宫格统计 + 功能列表 + 二次确认退出登录）、考场占位页（承接首页卡片跳转并透传测评编号与名称）。
+- 路由：`src/pages.json` 注册 5 个页面并正式激活 `tabBar`（3 项 + 6 个 PNG 双色态图标，选中色 `#1D63FF`）。
+- 验收证据（终端与真实浏览器物理输出）：
+  1. `pnpm type-check`（`vue-tsc --noEmit`）零报错；
+  2. `pnpm build:h5` 输出 `DONE Build complete.`，产物 `dist/build/h5/static/icons/` 含全部图标文件；
+  3. 真实浏览器（Chromium，390×844 移动端视口）完整闭环实测通过：未登录打开应用自动落到登录页 → 空表单提交触发「请输入手机号」内联校验 → 以 `13900000001 / 123456` 真实登录并跳转首页 → 首页渲染所属机构「浙江省星雅教育有限公司」与 3 张真实测评卡 → **tabBar 三个 PNG 图标全部正常渲染**（选中态极客蓝实心、未选中态中灰）→ 切到「我的测试」显示 3 条真实作答记录与分类栏 → 切到「个人中心」显示昵称、脱敏手机号、中文角色与 3 / 3 / 100% / 0 统计 → 切回首页 → 退出登录二次确认后回到登录页；控制台除模板默认缺失的 `/favicon.ico`（404，非功能性）外无任何报错。
+
+**⚠️ 阶段 2 已知限制与待办**：
+1. **页面内图标仍为内联 `<svg>`**：H5 端渲染正常，但小程序端不支持内联 svg 标签。TabBar 已按决策改用 PNG 规避跨端问题，后续若要上小程序，页面内图标需同样改为 `<image src="/static/icons/*.svg" />`。
+2. **「我的收藏」入口为阶段性提示**：收藏接口后端已存在（`/api/v1/member/favorites`），按计划归属阶段 4.2，当前点击给出明确提示而非死链。
+3. **历史成绩卡片与报告页跳转**：成绩报告页属阶段 4.1，当前「我的测试」记录卡片为纯展示，未绑定跳转。
+4. **未引入全局路由守卫**：未登录访问 Tab 页仍依赖 `request.ts` 的 401 拦截回登录页；首页已在 `onShow` 前置判定登录态，避免无凭证请求导致骨架空闪。阶段 3 引入作答流后可评估是否统一守卫。
 
 ### 阶段 3：沉浸式单题作答流 (Phase 3: Immersive Exam Flow)
 - [ ] 3.1 考场初始化与开考页 `pages/exam/index.vue`
@@ -94,10 +116,13 @@
 2. **确认服务健康**：
    - 后端容器：`docker ps` 确保 `tiku_backend` 为 `healthy`。
    - B端管理后台：`http://localhost/admin` 正常运行。
-3. **开发展开点**：阶段 1 已收口，直接从【阶段 2：应用骨架与三大 Tab 体系】开始。
+3. **开发展开点**：阶段 1、2 均已收口，直接从【阶段 3：沉浸式单题作答流】开始。
    - C 端工程位于 `toc-new/`，启动命令 `cd toc-new && pnpm dev:h5`（端口 5174）；
    - 新增页面时务必在页面模板内挂载 `<GlobalToast />`，否则轻提示会降级为原生 toast；
-   - 所有 C 端接口调用一律以 `/api/v1/member/*` 为准（真实后端路由），不要使用 `api-contract.md` 里的 `/api/v1/saas/*`。
+   - 数据页面统一复用 `CustomHeader` + `PageState` + `<GlobalToast />` 结构，三态（加载 / 空 / 错误）必须齐全；
+   - 所有 C 端接口调用一律以 `/api/v1/member/*` 为准（真实后端路由），不要使用 `api-contract.md` 里的 `/api/v1/saas/*`；
+   - **准入考接口 `/member/tasks/{id}/entry` 有不可逆副作用**（服务端会真实落库 pending 记录并锁定开考时刻），除考场页开考流程外严禁在任何预览、预检场景调用；
+   - 登录态跳转规则：目标为 tabBar 页（首页 / 我的测试 / 个人中心）用 `uni.switchTab`，目标为非 tab 页（登录页 / 考场页）用 `uni.reLaunch` 或 `uni.navigateTo`。
 
 ---
-*时间戳签名：2026-09-12 17:55:00 (Antigravity Engineering Closure)*
+*时间戳签名：2026-09-12 18:05:57 (Deepseek-V4.1-Flash Engineering Closure)*

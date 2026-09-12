@@ -1,3 +1,9 @@
+/**
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 失败响应兼容解析后端 FastAPI 的 { detail } 结构，避免登录等失败原因被吞成通用文案]
+ */
 import { useUserStore } from "@/stores/user";
 import { useGlobalToast } from "@/stores/toast";
 
@@ -80,7 +86,11 @@ export function request<T>(options: RequestOptions): Promise<T> {
         }
 
         if (statusCode < 200 || statusCode >= 300) {
-          const message = `服务异常（${statusCode}）`;
+          // 后端 FastAPI 抛出的 HTTPException 结构为 { detail }，业务接口的业务码结构为 { code, message }，
+          // 两者都要能取到真实原因，否则登录失败会被吞成「服务异常（400）」
+          const errorBody = res.data as { detail?: unknown; message?: unknown } | undefined;
+          const detail = typeof errorBody?.detail === "string" ? errorBody.detail : "";
+          const message = detail || `服务异常（${statusCode}）`;
           if (showError) useGlobalToast().error(message);
           reject(new Error(message));
           return;

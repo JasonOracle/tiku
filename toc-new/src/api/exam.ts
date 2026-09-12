@@ -1,3 +1,9 @@
+/**
+ * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 追加「我的测试」记录列表与个人中心统计两组接口及类型; 2. 既有接口与类型保持原样，未做任何签名变更]
+ */
 import { request } from "@/utils/request";
 
 /**
@@ -154,5 +160,45 @@ export function submitExam(payload: ExamSubmitPayload): Promise<ExamSubmitResult
 export function fetchExamRecord(recordId: number): Promise<ExamRecordDetail> {
   return request<ExamRecordDetail>({
     url: `/api/v1/member/task-records/${recordId}`,
+  });
+}
+
+/** 单条历史作答记录：GET /api/v1/member/task-records */
+export type MyRecordItem = {
+  record_id: number;
+  task_id: number;
+  task_title: string;
+  /** pending 进行中 / submitted 已定稿 / pending_verification 核验中 / verified 已核验 */
+  status: string;
+  /** 未出分时为 null */
+  score: number | null;
+  submit_time: string;
+};
+
+export type MyRecordListResult = {
+  items: MyRecordItem[];
+};
+
+/** 个人中心统计：GET /api/v1/member/me/stats */
+export type MyStatsResult = {
+  total_exams_taken: number;
+  history_count: number;
+  passed_count: number;
+  /** 综合通过率，后端已按百分比数值返回（如 91.7） */
+  pass_rate: number;
+  favorite_count: number;
+};
+
+/** 获取本人历史作答记录列表（按记录 ID 倒序，后端不分页） */
+export function fetchMyRecords(): Promise<MyRecordListResult> {
+  return request<MyRecordListResult>({
+    url: "/api/v1/member/task-records",
+  });
+}
+
+/** 获取个人中心统计数据 */
+export function fetchMyStats(): Promise<MyStatsResult> {
+  return request<MyStatsResult>({
+    url: "/api/v1/member/me/stats",
   });
 }

@@ -2,6 +2,10 @@
 	// [变更日志]
 	// 修改时间：2026-09-12
 	// AI模型：Deepseek-V4.1-Flash 底层
+	// 修改内容：[1. 注册 records / profile / exam 三个页面路由; 2. 正式激活 tabBar 并挂载三大 Tab 与透明底 PNG 双色态图标; 3. globalStyle 背景色对齐极客蓝体系底色]
+	// [变更日志]
+	// 修改时间：2026-09-12
+	// AI模型：Deepseek-V4.1-Flash 底层
 	// 修改内容：[1. 增加 wot-design-uni 的 easycom 自动引入规则; 2. 注册 login 页并统一自定义导航栏; 3. 本阶段不配置 tabBar，待三大 Tab 页面落地后再补]
 	"easycom": {
 		"autoscan": true,
@@ -18,16 +22,60 @@
 			}
 		},
 		{
+			"path": "pages/records/index",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/index",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/login/index",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/exam/index",
 			"style": {
 				"navigationStyle": "custom"
 			}
 		}
 	],
+	"tabBar": {
+		"color": "#94A3B8",
+		"selectedColor": "#1D63FF",
+		"backgroundColor": "#FFFFFF",
+		"borderStyle": "white",
+		"list": [
+			{
+				"pagePath": "pages/index/index",
+				"text": "首页",
+				"iconPath": "static/icons/tab-home.png",
+				"selectedIconPath": "static/icons/tab-home-active.png"
+			},
+			{
+				"pagePath": "pages/records/index",
+				"text": "我的测试",
+				"iconPath": "static/icons/tab-records.png",
+				"selectedIconPath": "static/icons/tab-records-active.png"
+			},
+			{
+				"pagePath": "pages/profile/index",
+				"text": "个人中心",
+				"iconPath": "static/icons/tab-profile.png",
+				"selectedIconPath": "static/icons/tab-profile-active.png"
+			}
+		]
+	},
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
 		"navigationBarTitleText": "智题库",
 		"navigationBarBackgroundColor": "#F8F8F8",
-		"backgroundColor": "#F8F8F8"
+		"backgroundColor": "#F6F8FC"
 	}
 }
