@@ -1,5 +1,11 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Gemini 系列
+ * 修改内容：[修复底部双重操作按钮Bug：将通用 action-footer 的排除条件补充 create_question_draft 与 delete_question，彻底杜绝出现两对'确认/取消'按钮]
+ * 修改时间：2026-09-12
+ * AI模型：Gemini 系列
+ * 修改内容：[重构 create_question_draft 批量出题卡片：区分批量出题参数确认与已有题目草稿预览形态，支持真实材料、多选/单选题型标签、出题数量、难度与题库分类选择，解决数据错配导致界面空白/单选题/正确答案破折号的问题]
  * 修改时间：2026-09-10
  * AI模型：OpenCode / Gemini 底层
  * 修改内容：[1. 修正试卷分类接口入参 target_type 为 task，彻底解决分类下拉列表为空的Bug; 2. 增强 hasShortQuestion 题型匹配，兼容 short/essay/subjective/qa，无简答题自动隐藏AI阅卷选项，有简答题显示且默认ai_auto]
@@ -25,7 +31,7 @@
     </div>
     <div class="tool-card__body">
       <div v-if="!content" class="tool-card__desc">
-        请确认是否执行刚才的操作 ({{ toolName }})
+        请确认是否执行刚才的操作【{{ toolCnName }}】
       </div>
       <div v-else class="tool-card__desc">
         风险等级: <strong :style="{ color: riskColor }">{{ riskLabel }}风险</strong><br/>
@@ -124,29 +130,95 @@
         </div>
       </div>
 
-      <!-- 新建题目卡 -->
-      <div v-else-if="toolName === 'create_question_draft'" class="draft-preview">
-        <div class="draft-title">{{ toolArgs?.title || 'AI 批量出题' }}</div>
-        <div class="draft-meta">
-          <el-tag size="small" type="primary">{{ singleQuestionPreview.typeLabel }}</el-tag>
-          <span>难度 {{ singleQuestionPreview.difficulty }} · {{ singleQuestionPreview.score }} 分</span>
-        </div>
-        <div v-if="singleQuestionPreview.options.length" class="draft-opts">
-          <div
-            v-for="(opt, oi) in singleQuestionPreview.options"
-            :key="oi"
-            class="draft-opt"
-            :class="{ correct: opt.correct }"
-          >
-            <span class="draft-opt-key">{{ opt.label }}</span>
-            <span>{{ opt.text }}</span>
-            <span v-if="opt.correct" class="draft-opt-mark">✓</span>
+      <!-- 批量/单道出题确认卡 (create_question_draft) -->
+      <div v-else-if="toolName === 'create_question_draft'" class="exam-draft-card">
+        <div class="exam-draft-title" style="color: #0284c7; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <el-icon><MagicStick /></el-icon>
+            <span>AI 批量出题确认</span>
           </div>
-        </div>
-        <div class="draft-row">
-          <span class="draft-label">正确答案:</span> {{ singleQuestionPreview.answerText }}
+          <el-tag size="small" type="primary" effect="plain">{{ questionDraftSummary.totalCount }} 道题目</el-tag>
         </div>
 
+        <!-- 场景A：若参数中已包含完整题目草稿列表 (questions 数组) -->
+        <template v-if="questions.length > 0">
+          <div class="exam-draft-summary">{{ examTypeSummary }}</div>
+          <el-collapse>
+            <el-collapse-item
+              v-for="(q, qi) in questions"
+              :key="qi"
+              :name="qi"
+            >
+              <template #title>
+                <div class="collapse-title-wrap">
+                  <div class="title-text">第 {{ qi + 1 }} 题 · {{ q.title || '（未命题干）' }}</div>
+                  <div class="draft-meta title-meta">
+                    <el-tag size="small" type="primary">{{ formatQuestion(q).typeLabel }}</el-tag>
+                    <span class="score-badge">{{ formatQuestion(q).score }} 分</span>
+                  </div>
+                </div>
+              </template>
+              <div v-if="formatQuestion(q).options.length" class="draft-opts">
+                <div
+                  v-for="(opt, oi) in formatQuestion(q).options"
+                  :key="oi"
+                  class="draft-opt"
+                  :class="{ correct: opt.correct }"
+                >
+                  <span class="draft-opt-key">{{ opt.label }}</span>
+                  <span>{{ opt.text }}</span>
+                  <span v-if="opt.correct" class="draft-opt-mark">✓</span>
+                </div>
+              </div>
+              <div class="draft-row">
+                <span class="draft-label">正确答案:</span> {{ formatQuestion(q).answerText }}
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+        </template>
+
+        <!-- 场景B：若参数为批量出题指令（包含材料、题型、数量、难度等出题参数） -->
+        <template v-else>
+          <div class="draft-meta" style="margin-top: 8px; margin-bottom: 12px;">
+            <el-tag v-for="t in questionDraftSummary.typeLabels" :key="t" size="small" type="primary">{{ t }}</el-tag>
+            <el-tag size="small" type="warning">难度: {{ questionDraftSummary.difficultyLabel }}</el-tag>
+            <span style="font-size: 12px; color: #64748b;">计划生成 {{ questionDraftSummary.totalCount }} 道题目</span>
+          </div>
+
+          <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px;">
+            <div style="font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">出题需求 / 背景材料：</div>
+            <div style="font-size: 13px; color: #1e293b; line-height: 1.6; word-break: break-word;">
+              {{ questionDraftSummary.material || '无特定出题材料，按通用业务标准生成' }}
+            </div>
+          </div>
+        </template>
+
+        <!-- 出题入库表单设置 (归属题库分类等) -->
+        <el-form v-if="!actionResolved" size="small" label-position="top" style="margin-top: 10px;">
+          <el-form-item label="归属题库分类 (可选)">
+            <el-select
+              v-model="questionForm.category_id"
+              placeholder="默认未分类（可选择目标题库）"
+              clearable
+              style="width: 100%;"
+            >
+              <el-option
+                v-for="c in resourceCategories"
+                :key="c.id"
+                :label="c.name"
+                :value="c.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+
+        <div v-if="!actionResolved" class="action-footer" style="margin-top: 8px;">
+          <button class="btn-confirm-medium" @click="handleConfirmQuestionDraft">确认生成题目并入库</button>
+          <button class="btn-cancel" @click="$emit('cancel', message)">取消</button>
+        </div>
+        <div v-else class="tool-card__desc" style="margin-top: 8px;">
+          已确认批量出题，题目生成后将自动归档至题库。
+        </div>
       </div>
 
       <!-- 删除试卷安全确认卡 -->
@@ -196,7 +268,7 @@
         <pre>{{ JSON.stringify(toolArgs, null, 2) }}</pre>
       </div>
 
-      <div v-if="!actionResolved && toolName !== 'create_exam_draft' && toolName !== 'delete_exam'" class="action-footer">
+      <div v-if="!actionResolved && !['create_exam_draft', 'create_question_draft', 'delete_exam', 'delete_question'].includes(toolName)" class="action-footer">
         <button class="btn-confirm-medium" @click="handleConfirm">
           确认执行
         </button>
@@ -235,15 +307,30 @@ const emit = defineEmits<{
 }>();
 
 const categories = ref<any[]>(props.categories || []);
+const resourceCategories = ref<any[]>([]);
 
 onMounted(async () => {
   if (categories.value.length === 0) {
     try {
       const res: any = await request.get('/api/v1/admin/categories', { params: { target_type: 'task' } });
       categories.value = Array.isArray(res) ? res : (res.items || []);
+      if (!examForm.value.category_id && categories.value.length > 0) {
+        examForm.value.category_id = categories.value[0].id;
+      }
     } catch (e) {
       categories.value = [];
     }
+  } else if (!examForm.value.category_id && categories.value.length > 0) {
+    examForm.value.category_id = categories.value[0].id;
+  }
+  try {
+    const resRes: any = await request.get('/api/v1/admin/categories', { params: { target_type: 'resource' } });
+    resourceCategories.value = Array.isArray(resRes) ? resRes : (resRes.items || []);
+    if (!questionForm.value.category_id && resourceCategories.value.length > 0) {
+      questionForm.value.category_id = resourceCategories.value[0].id;
+    }
+  } catch (e) {
+    resourceCategories.value = [];
   }
 });
 
@@ -282,8 +369,49 @@ const resolvedClass = computed(() => {
 });
 
 const toolName = computed(() => props.message.toolName || '');
+const toolCnName = computed(() => {
+  const map: Record<string, string> = {
+    create_exam_draft: '智能组卷',
+    create_question_draft: 'AI 批量出题',
+    delete_exam: '删除试卷',
+    delete_question: '删除题目'
+  };
+  return map[toolName.value] || toolName.value;
+});
 const toolArgs = computed(() => props.message.arguments || {});
 const actionResolved = computed(() => props.message.actionResolved || false);
+
+const questionDraftSummary = computed(() => {
+  const args = toolArgs.value || {};
+  const typeMap: Record<string, string> = { single: '单选题', multiple: '多选题', judge: '判断题', fill: '填空题', short: '简答题' };
+  const diffMap: Record<string, string> = { easy: '简单', medium: '中等', hard: '困难' };
+  const rawTypes = Array.isArray(args.types) ? args.types : (args.types ? [args.types] : (args.type ? [args.type] : ['single']));
+  const typeLabels = rawTypes.map((t: string) => typeMap[t] || t);
+  const totalCount = args.count || (Array.isArray(args.questions) ? args.questions.length : 5);
+  const difficultyLabel = diffMap[args.difficulty] || args.difficulty || '中等';
+  const material = args.material || args.description || '';
+  return {
+    typeLabels: typeLabels.length ? typeLabels : ['多选题'],
+    totalCount,
+    difficultyLabel,
+    material
+  };
+});
+
+const questionForm = ref({
+  category_id: toolArgs.value?.category_id || null as number | null
+});
+
+const handleConfirmQuestionDraft = () => {
+  const mergedArguments = {
+    ...toolArgs.value,
+    category_id: questionForm.value.category_id
+  };
+  emit('confirm', {
+    ...props.message,
+    arguments: mergedArguments
+  });
+};
 
 const formatQuestion = (a: any) => {
   if (!a) return { title: '', typeLabel: '', difficulty: '', score: 0, options: [], answerText: '' };

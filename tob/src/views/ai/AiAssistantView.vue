@@ -1,5 +1,11 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：OpenCode / DeepSeek
+ * 修改内容：[AI 助管卡片闭环：SSE action_required 分支构造卡片消息时回填 id = ev.assistant_message_id，使 handleToolConfirm 能携带真实 message_id，打通后端卡片 status=executed 状态持久化]
+ * 修改时间：2026-09-12
+ * AI模型：Gemini 系列
+ * 修改内容：[消除全站英文函数名暴露：将 SSE action_required 消息及操作卡中的英文工具名（create_question_draft/create_exam_draft等）统一映射为人类友好的简体中文语义，杜绝出现'请确认是否执行 create_question_draft'等工程师式英文]
  * 修改时间：2026-09-10
  * AI模型：OpenCode / Gemini 底层
  * 修改内容：[修正试卷分类加载参数 target_type 为 task，解决分类下拉列表为空的Bug]
@@ -554,7 +560,14 @@ const send = async (customText?: string): Promise<void> => {
           const actionTypeMap: Record<string, string> = {
             create_exam_draft: 'create_exam',
             create_question_draft: 'batch_questions',
-            delete_exam: 'delete_exam'
+            delete_exam: 'delete_exam',
+            delete_question: 'delete_question'
+          };
+          const toolLabelMap: Record<string, string> = {
+            create_exam_draft: '智能组卷',
+            create_question_draft: 'AI 批量出题',
+            delete_exam: '删除试卷',
+            delete_question: '删除题目'
           };
           const riskLevelMap: Record<string, 'low' | 'medium' | 'high'> = {
             high: 'high', medium: 'medium', low: 'low'
@@ -562,6 +575,7 @@ const send = async (customText?: string): Promise<void> => {
           const toolName = ev.tool_name || 'unknown';
           const actionType = actionTypeMap[toolName] || 'sensitive_operation';
           const riskLevel = riskLevelMap[ev.risk_level] || 'medium';
+          const toolCnName = toolLabelMap[toolName] || toolName;
 
           // 根据工具名构建 displayFields
           let displayFields: Array<{ label: string; value: string | number }> = [];
@@ -575,7 +589,7 @@ const send = async (customText?: string): Promise<void> => {
           } else if (toolName === 'create_question_draft') {
             displayFields = [
               { label: '出题材料', value: String(args.material || '').substring(0, 50) + (String(args.material || '').length > 50 ? '...' : '') },
-              { label: '题目数量', value: args.count || 5 },
+              { label: '题目数量', value: args.count || (Array.isArray(args.questions) ? args.questions.length : 5) },
               { label: '风险等级', value: riskLevel }
             ];
           } else if (toolName === 'delete_exam') {
@@ -586,11 +600,13 @@ const send = async (customText?: string): Promise<void> => {
             ];
           }
 
+          const friendlySummary = `请确认是否执行【${toolCnName}】操作`;
+
           const actionCard: ActionCardPayload = {
             actionId: ev.tool_call_id || `action_${Date.now()}`,
             actionType,
             title: `确认：${riskLevel === 'high' ? '高' : riskLevel === 'medium' ? '中' : '低'}风险业务操作`,
-            summary: ev.message || `请确认是否执行 ${toolName}`,
+            summary: friendlySummary,
             riskLevel,
             displayFields,
             rawParams: args,
@@ -598,8 +614,9 @@ const send = async (customText?: string): Promise<void> => {
           };
 
           messages.value.push({
+            id: ev.assistant_message_id,  // 回填后端消息ID，供 execute_tool 精确标记卡片状态并持久化
             role: 'assistant',
-            content: ev.message || '',
+            content: friendlySummary,
             quote,
             actionCard,
             actionRequired: true,

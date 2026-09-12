@@ -1,5 +1,8 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：Gemini 系列
+ * 修改内容：[修复引用条自我复读Bug，将硬编码的'| 回复 全Ai系统'优化为语义清晰的'| 引用: {{ quote }}']
  * 修改时间：2026-09-10
  * AI模型：OpenCode / Gemini 底层
  * 修改内容：[优化用户头像: 当 username 为空或无首字母时呈现优雅的默认 User 矢量图标兜底]
@@ -27,7 +30,7 @@
     <div class="content-col">
       <div class="sender-name">{{ role === 'user' ? username : 'AI 智能助管' }}</div>
 
-      <div v-if="quote" class="quote-bar">| 回复 全Ai系统: {{ quote }}</div>
+      <div v-if="quote" class="quote-bar">| 引用: {{ quote }}</div>
 
       <!-- 常规 Markdown 气泡 -->
       <div

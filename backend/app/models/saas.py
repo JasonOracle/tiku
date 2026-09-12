@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-12
+AI模型：OpenCode / DeepSeek
+修改内容：[AI 助管加固：AiMessage 新增 action_card_data(JSON) 列，持久化工具调用交互卡片结构（工具名/参数/风险等级/执行状态），修复刷新或二次进入会话后出题/组卷确认卡片丢失的缺陷]
 修改时间：2026-09-11
 AI模型：Codex 3
 修改内容：[ResourceItem 新增 explanation 列：持久化题目答案解析/采分要点，支撑 B 端出题表单、AI 出题/组卷与 C 端成绩报告解析闭环]
@@ -258,6 +261,7 @@ class AiMessage(Base):
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     rag_sources = Column(JSON, nullable=True)
+    action_card_data = Column(JSON, nullable=True)  # 工具调用与业务确认卡片结构（持久化卡片状态）
     created_at = Column(DateTime, default=datetime.now)
 
 
