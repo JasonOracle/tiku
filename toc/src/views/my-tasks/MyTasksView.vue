@@ -54,7 +54,6 @@
           v-for="exam in grouped[activeTab]"
           :key="exam.task_id"
           class="exam-card"
-          @click="handleCardClick(exam)"
         >
           <div class="card-info">
             <!-- 标签行：所属分类 + 限时标签 + 审核/完成状态 -->

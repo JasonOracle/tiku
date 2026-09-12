@@ -1,5 +1,8 @@
 <!--
   * [变更日志]
+  * 修改时间：2026-09-12
+  * AI模型：OpenCode / DeepSeek
+  * 修改内容：[权限隔离重构：数据看板/分类配置/题目管理/试卷管理/阅卷管理/AI知识库/AI助理 七项业务菜单统一加 canManage 角色判定（owner/admin/超管可见），非管理人员不渲染，与路由守卫形成纵深防御]
   * 修改时间：2026-09-10
   * AI模型：OpenCode / Gemini 底层
   * 修改内容：[将侧边栏超管菜单「我的团队」修正为「企业管理」，与「成员管理」精准划分平台级 vs 租户级边界]
@@ -39,30 +42,32 @@
         text-color="#475569"
         active-text-color="#0284c7"
       >
-        <el-menu-item index="/dashboard">
-          <el-icon><HomeFilled /></el-icon>
-          <span>数据看板</span>
-        </el-menu-item>
-        <el-menu-item index="/categories">
-          <el-icon><Folder /></el-icon>
-          <span>分类配置</span>
-        </el-menu-item>
-        <el-menu-item index="/resources">
-          <el-icon><Document /></el-icon>
-          <span>题目管理</span>
-        </el-menu-item>
-        <el-menu-item index="/tasks">
-          <el-icon><Reading /></el-icon>
-          <span>试卷管理</span>
-        </el-menu-item>
-        <el-menu-item index="/verification">
-          <el-icon><EditPen /></el-icon>
-          <span>阅卷管理</span>
-        </el-menu-item>
-        <el-menu-item index="/kb">
-          <el-icon><Collection /></el-icon>
-          <span>AI知识库</span>
-        </el-menu-item>
+        <template v-if="canManage">
+          <el-menu-item index="/dashboard">
+            <el-icon><HomeFilled /></el-icon>
+            <span>数据看板</span>
+          </el-menu-item>
+          <el-menu-item index="/categories">
+            <el-icon><Folder /></el-icon>
+            <span>分类配置</span>
+          </el-menu-item>
+          <el-menu-item index="/resources">
+            <el-icon><Document /></el-icon>
+            <span>题目管理</span>
+          </el-menu-item>
+          <el-menu-item index="/tasks">
+            <el-icon><Reading /></el-icon>
+            <span>试卷管理</span>
+          </el-menu-item>
+          <el-menu-item index="/verification">
+            <el-icon><EditPen /></el-icon>
+            <span>阅卷管理</span>
+          </el-menu-item>
+          <el-menu-item index="/kb">
+            <el-icon><Collection /></el-icon>
+            <span>AI知识库</span>
+          </el-menu-item>
+        </template>
         <template v-if="userStore.isSuper() || userStore.role === 'admin'">
           <el-menu-item index="/members">
             <el-icon><User /></el-icon>
@@ -83,7 +88,7 @@
             <span>模型中心</span>
           </el-menu-item>
         </template>
-        <el-menu-item index="/ai-assistant">
+        <el-menu-item v-if="canManage" index="/ai-assistant">
           <el-icon><MagicStick /></el-icon>
           <span>✨ AI 助理</span>
         </el-menu-item>
@@ -178,6 +183,8 @@ const promoUrl = `${import.meta.env.BASE_URL}images/ai-edu.png`;
 
 const activePath = computed(() => route.path);
 const currentTitle = computed(() => (route.meta.title as string) || '仪表盘');
+// 管理后台业务菜单可见性：与后端 require_admin 对齐（owner/admin，超管由 isSuper 放行）
+const canManage = computed(() => userStore.isSuper() || ['admin', 'owner'].includes(userStore.role));
 const username = computed(() => userStore.username || 'Admin');
 const displayName = computed(() => userStore.name || userStore.nickname || userStore.username || 'Admin');
 const unreadCount = ref(0);

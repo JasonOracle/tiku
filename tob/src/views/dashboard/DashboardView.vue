@@ -1,5 +1,9 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：OpenCode / DeepSeek
+ * 修改内容：[1. 试卷分类占比下拉由硬编码改为拉取 /admin/categories 全量试卷分类动态渲染; 2. 选中具体分类时环形图与图例联动过滤; 3. 首页含"任务"的文案统一改为"试卷"]
+ * [变更日志]
  * 修改时间：2026-09-09
  * AI模型：Muse Spark
  * 修改内容：[彻底清洗：通用化看板文案，旧考试/额度词汇已删除]
@@ -16,8 +20,8 @@
     <!-- 顶部 Banner -->
     <div class="banner">
       <div class="banner-text">
-        <h1>任务数据看板 · 助力组织成长</h1>
-        <p>用数据让每一次任务更有价值</p>
+        <h1>试卷数据看板 · 助力组织成长</h1>
+        <p>用数据让每一份试卷更有价值</p>
       </div>
       <img class="banner-img" :src="bannerUrl" alt="数据看板插画" />
     </div>
@@ -49,7 +53,7 @@
       <div class="card trend-card">
         <div class="card-head">
           <div>
-            <div class="card-title"><el-icon class="title-icon"><TrendCharts /></el-icon>成员任务趋势分析</div>
+            <div class="card-title"><el-icon class="title-icon"><TrendCharts /></el-icon>成员试卷趋势分析</div>
             <div class="card-sub">近 7 天提交人次与平均分变化趋势</div>
           </div>
           <div class="range-tabs">
@@ -68,11 +72,12 @@
       <div class="card donut-card">
         <div class="card-head">
           <div>
-            <div class="card-title"><el-icon class="title-icon"><PieChart /></el-icon>任务分类占比</div>
-            <div class="card-sub">各分类任务在总数中的占比</div>
+            <div class="card-title"><el-icon class="title-icon"><PieChart /></el-icon>试卷分类占比</div>
+            <div class="card-sub">各分类试卷在总数中的占比</div>
           </div>
           <el-select v-model="donutFilter" size="small" style="width: 110px">
             <el-option label="全部类型" value="all" />
+            <el-option v-for="c in categoryOptions" :key="c" :label="c" :value="c" />
           </el-select>
         </div>
         <div class="donut-body">
@@ -154,7 +159,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { ArrowRight, TrendCharts, PieChart, Document, User, Cpu, Clock } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
@@ -189,7 +194,7 @@ const kpis = computed(() => {
   const dl = stats.value?.deltas || { exams: '—', records: '—', ai_usage: '—' };
   const sp = stats.value?.sparks || { exams: [], records: [], ai: [] };
   return [
-    { key: 'exams', label: '任务总数', value: fmt(k.exams), delta: dl.exams, down: isDown(dl.exams), bg: 'linear-gradient(135deg,#3b82f6,#60a5fa)', icon: Document, spark: sp.exams, color: '#3b82f6' },
+    { key: 'exams', label: '试卷总数', value: fmt(k.exams), delta: dl.exams, down: isDown(dl.exams), bg: 'linear-gradient(135deg,#3b82f6,#60a5fa)', icon: Document, spark: sp.exams, color: '#3b82f6' },
     { key: 'users', label: '提交人次', value: fmt(k.records), delta: dl.records, down: isDown(dl.records), bg: 'linear-gradient(135deg,#22c55e,#4ade80)', icon: User, spark: sp.records, color: '#22c55e' },
     { key: 'ai', label: 'AI 调用次数', value: fmt(k.ai_usage), delta: dl.ai_usage, down: isDown(dl.ai_usage), bg: 'linear-gradient(135deg,#8b5cf6,#a78bfa)', icon: Cpu, spark: sp.ai, color: '#8b5cf6' },
     { key: 'pending', label: '待核验', value: fmt(k.pending), delta: '—', down: false, bg: 'linear-gradient(135deg,#f43f5e,#fb7185)', icon: Clock, spark: sp.records.map(() => 0), color: '#f43f5e' }
@@ -198,9 +203,24 @@ const kpis = computed(() => {
 
 const donutPalette = ['#3b82f6', '#8b5cf6', '#14b8a6', '#f59e0b', '#64748b', '#cbd5e1'];
 
+// 试卷分类下拉选项：取租户完整「试卷分类」列表（含当前尚无试卷的分类）
+const categoryOptions = ref<string[]>([]);
+
+const loadCategories = async () => {
+  try {
+    const res: any = await request.get('/api/v1/admin/categories', { params: { target_type: 'task' } });
+    categoryOptions.value = (res?.items || []).map((c: any) => c.name).filter(Boolean);
+  } catch (e) {
+    categoryOptions.value = [];
+  }
+};
+
 const donutData = computed(() => {
-  const total = (stats.value?.donut || []).reduce((s, d) => s + d.value, 0);
-  return (stats.value?.donut || []).map((d, i) => ({
+  const list = stats.value?.donut || [];
+  // 选中具体分类时只保留该分类，实现下拉与环形图联动
+  const filtered = donutFilter.value === 'all' ? list : list.filter((d) => d.name === donutFilter.value);
+  const total = filtered.reduce((s, d) => s + d.value, 0);
+  return filtered.map((d, i) => ({
     name: d.name,
     value: d.value,
     pct: total > 0 ? `${((d.value * 100) / total).toFixed(1)}%` : '0%',
@@ -248,6 +268,7 @@ const donutRef = ref<HTMLElement | null>(null);
 const ringRef = ref<HTMLElement | null>(null);
 const sparkRefs: Record<string, HTMLElement | null> = {};
 const charts: echarts.ECharts[] = [];
+let donutChart: echarts.ECharts | null = null;
 
 const setSparkRef = (el: unknown, key: string) => {
   sparkRefs[key] = el as HTMLElement | null;
@@ -265,6 +286,28 @@ const lineStyle = (color: string) => ({
     ])
   }
 });
+
+// 环形图 option 独立成函数，便于下拉切换时按新数据重绘
+const buildDonutOption = (): echarts.EChartsOption => {
+  const total = donutTotal.value;
+  return {
+    tooltip: { trigger: 'item' },
+    graphic: [
+      { type: 'text', left: 'center', top: '42%', style: { text: '总计', fontSize: 12, fill: '#94a3b8', textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '50%', style: { text: String(total), fontSize: 22, fontWeight: 800, fill: '#0f172a', textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '60%', style: { text: '试卷总数', fontSize: 12, fill: '#94a3b8', textAlign: 'center' } }
+    ],
+    series: [{
+      type: 'pie',
+      radius: ['62%', '82%'],
+      center: ['50%', '52%'],
+      avoidLabelOverlap: true,
+      label: { show: false },
+      itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 4 },
+      data: donutData.value.map((d) => ({ name: d.name, value: d.value, itemStyle: { color: d.color } }))
+    }]
+  };
+};
 
 const initCharts = () => {
   for (const k of kpis.value) {
@@ -296,26 +339,9 @@ const initCharts = () => {
     charts.push(c);
   }
   if (donutRef.value) {
-    const c = echarts.init(donutRef.value);
-    const total = donutTotal.value;
-    c.setOption({
-      tooltip: { trigger: 'item' },
-      graphic: [
-        { type: 'text', left: 'center', top: '42%', style: { text: '总计', fontSize: 12, fill: '#94a3b8', textAlign: 'center' } },
-        { type: 'text', left: 'center', top: '50%', style: { text: String(total), fontSize: 22, fontWeight: 800, fill: '#0f172a', textAlign: 'center' } },
-        { type: 'text', left: 'center', top: '60%', style: { text: '任务总数', fontSize: 12, fill: '#94a3b8', textAlign: 'center' } }
-      ],
-      series: [{
-        type: 'pie',
-        radius: ['62%', '82%'],
-        center: ['50%', '52%'],
-        avoidLabelOverlap: true,
-        label: { show: false },
-        itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 4 },
-        data: donutData.value.map((d) => ({ name: d.name, value: d.value, itemStyle: { color: d.color } }))
-      }]
-    });
-    charts.push(c);
+    donutChart = echarts.init(donutRef.value);
+    donutChart.setOption(buildDonutOption());
+    charts.push(donutChart);
   }
   if (ringRef.value) {
     const c = echarts.init(ringRef.value);
@@ -341,6 +367,9 @@ const initCharts = () => {
 
 const handleResize = () => charts.forEach((c) => c.resize());
 
+// 下拉切换分类时重绘环形图（notMerge 保证旧数据被整体替换）
+watch(donutFilter, () => donutChart?.setOption(buildDonutOption(), true));
+
 const loadStats = async () => {
   loading.value = true;
   try {
@@ -356,6 +385,7 @@ const loadStats = async () => {
 
 onMounted(() => {
   loadStats();
+  loadCategories();
   window.addEventListener('resize', handleResize);
 });
 

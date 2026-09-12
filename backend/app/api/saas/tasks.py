@@ -1,6 +1,9 @@
 """
 [变更日志]
 修改时间：2026-09-12
+AI模型：OpenCode / DeepSeek
+修改内容：[权限隔离重构：GET /resources 依赖由 require_member 收紧为 require_admin，/admin/resources 与 /member/resources 双前缀同步锁定，杜绝接口层考前泄题（经核实 C 端未调用该接口，零影响）]
+修改时间：2026-09-12
 AI模型：Agnes-3.0-flash (ZCode)
 修改内容：[收窄「继续测试」判定并修正语义过宽缺陷：can_retake 改为 can_continue，四条件缺一不可（manual 人工审核 + 记录为 pending_verification 未出成绩 + 卷内含简答题 + 考试时间未到期，deadline 为空视为长期开放），彻底消除「已出成绩/纯客观已定稿的卷子仍给继续测试入口」的错误；member_tasks 的题目分值映射升级为 TaskResource JOIN ResourceItem 一次批量查询，同时取题型用于含简答判定，不引入 N+1]
 修改时间：2026-09-12
@@ -101,7 +104,7 @@ def _task_out(t: Task, with_count: bool = False, db: Session = None, creator_nam
 
 # ---- 资源库 ----
 @router.get("/resources")
-def list_resources(ctx: dict = Depends(require_member), db: Session = Depends(get_db),
+def list_resources(ctx: dict = Depends(require_admin), db: Session = Depends(get_db),
                    page: int = 1, size: int = 10, keyword: str = "", type: str = "",
                    category_id: Optional[int] = None):
     tid = ctx["tenant_id"]

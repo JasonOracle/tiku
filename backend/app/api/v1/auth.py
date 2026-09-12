@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-12
+AI模型：OpenCode / DeepSeek
+修改内容：[权限隔离重构：B端登录（携带 X-Client: admin 标识）拦截纯学员身份——非 super_admin 且未在任一租户持有 owner/admin 角色时返回 403，落实「Member 仅限 C 端做题」严格二分法；C 端不传该标识，登录链路零改动]
 修改时间：2026-09-10
 AI模型：Muse Spark
 修改内容：[GET /me 联表回显 profile 六字段，修复资料有写无读]
@@ -111,8 +114,14 @@ def update_profile(payload: Dict[str, Any], user: SysUser = Depends(get_current_
 
 
 @router.post("/login")
-def login(payload: Dict[str, Any], db: Session = Depends(get_db)):
-    """全端统一手机号登录，返回默认租户与加入列表。"""
+def login(payload: Dict[str, Any], db: Session = Depends(get_db),
+          x_client: Optional[str] = Header(default=None, alias="X-Client")):
+    """全端统一手机号登录，返回默认租户与加入列表。
+
+    权限隔离：当请求方声明为 B 端（X-Client: admin）时，纯学员身份（未在任一租户持有
+    owner/admin 角色且非 super_admin）一律 403 拒绝，确保 member 只能从 C 端参加测评。
+    C 端不携带该标识，登录链路行为完全不变。
+    """
     phone = str(payload.get("phone") or "").strip()
     password = str(payload.get("password") or "")
     if not phone or not password:
@@ -126,6 +135,14 @@ def login(payload: Dict[str, Any], db: Session = Depends(get_db)):
         SysTenant, SysTenant.id == SysTenantUser.tenant_id
     ).filter(SysTenantUser.user_id == user.id, SysTenantUser.status == "active").all()
     joined = [{"tenant_id": t.id, "tenant_name": t.name, "role": r.role} for r, t in rels]
+    # B 端登录拦截：仅对声明为 B 端的请求校验；任一租户持有 owner/admin 即视为管理人员放行
+    if x_client == "admin" and not user.is_super_admin:
+        roles = {j["role"] for j in joined}
+        if not ({"owner", "admin"} & roles):
+            raise HTTPException(
+                status_code=403,
+                detail="当前账号为学员身份，请前往学员端 (C端) 参加测评",
+            )
     default_tenant = joined[0]["tenant_id"] if joined else None
     token = create_access_token(
         subject=user.id, user_type="sys",

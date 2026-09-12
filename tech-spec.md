@@ -47,6 +47,7 @@ tiku/
 - **`resources` 表含 explanation（TEXT，选填），持久化题目答案解析/采分要点。B 端题目管理人工录入、AI 出题/AI 组卷自动产出；C 端 GET /member/task-records/{id} 成绩报告与 B 端阅卷大厅抽屉均回显，作为批阅参考与复盘依据。存量库经 ackend/app/services/db_migrate.ensure_schema() 幂等补列（应用启动时自动执行）。
 
 ### 2.2 上下文穿透与安全网关
+- **客户端类型守卫 (X-Client)**：B 端后台登录时通过统一请求拦截器注入 X-Client: admin；服务端对携带该标识的纯 member 账号强制返回 403，物理斩断考前泄题路径。
 - **Header 守卫**：除登录接口外，所有业务请求必须在 Header 中携带 `X-Tenant-ID: <tenant_id>`。
 - **依赖注入校验 (`require_admin` / `require_member`)**：后端拦截器查询 `sys_tenant_user` 校验当前登录用户在目标租户中是否处于 `active` 状态。非法越权一律拦截返回 `403 Forbidden`。
 - **超级管理员视察模式**：超级管理员（`is_super_admin=True`）不设全局放行后门，视察具体企业时由前端请求主动携带该企业的 `X-Tenant-ID`，后端复用标准化业务逻辑，确保隔离机制代码简洁闭环。

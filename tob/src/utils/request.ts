@@ -1,5 +1,8 @@
 /**
  * [变更日志]
+ * 修改时间：2026-09-12
+ * AI模型：OpenCode / DeepSeek
+ * 修改内容：[权限隔离重构：B端登录统一注入 X-Client: admin 身份标识，供后端拦截纯学员(member)登录管理后台；C端使用独立 http.ts 不受影响]
  * 修改时间：2026-09-09
  * AI模型：Muse Spark
  * 修改内容：[多租户透传：所有业务请求自动携带 X-Tenant-ID，登录接口除外]
@@ -34,6 +37,10 @@ request.interceptors.request.use(
     // 多租户上下文透传（登录/初始化接口除外）
     const url = config.url || '';
     const isAuth = url.includes('/auth/login') || url.includes('/auth/init');
+    // B 端身份声明：登录时显式携带 X-Client，后端据此拦截纯学员(member)登录管理后台
+    if (url.includes('/auth/login') && config.headers) {
+      (config.headers as any)['X-Client'] = 'admin';
+    }
     if (!isAuth && config.headers) {
       const tid = localStorage.getItem('tiku_tob_tenant') || '';
       if (tid) (config.headers as any)['X-Tenant-ID'] = tid;
