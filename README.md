@@ -2,10 +2,24 @@
 
 轻量、现代化的 AI-Native 测评与考试平台：**B 端 SaaS 管理大屏**（题库资产/智能组卷/阅卷大厅/AI智能出题助手/成员与机构多租户隔离）+ **C 端移动端轻测评**（支持刷题/考试/答题卡/防泄题报告/错题收藏）+ **FastAPI 核心后端**。
 
-- **GitHub**: [https://github.com/JasonOracle/tiku](https://github.com/JasonOracle/tiku)
-- **Gitee**: [https://gitee.com/jason-oracle/tiku](https://gitee.com/jason-oracle/tiku)
+- **GitHub 源码**: [https://github.com/JasonOracle/tiku](https://github.com/JasonOracle/tiku)
+- **Gitee 镜像**: [https://gitee.com/jason-oracle/tiku](https://gitee.com/jason-oracle/tiku)
 - **English Docs**: [README.en.md](./README.en.md)
-- **v1.4 功能快照与全景展示**: [docs/v1.4_showcase.md](./docs/v1.4_showcase.md)
+- 📱 **C 端最新线上体验**: [智题库 (Cloudflare Pages)](https://tiku-toc-new.pages.dev/#/)
+- ⚡ **云端 API 文档**: [https://tiku-api.vercel.app/docs](https://tiku-api.vercel.app/docs)
+- 🎨 **v1.5 C 端全景快照指南**: [docs/v1.5_c_showcase.md](./docs/v1.5_c_showcase.md)
+- 🖥️ **v1.4 B 端全景快照指南**: [docs/v1.4_showcase.md](./docs/v1.4_showcase.md)
+
+---
+
+## 🌐 线上与本地服务体验
+
+| 端 / 服务 | 访问入口 | 测试账号 / 密码 | 说明 |
+| :--- | :--- | :--- | :--- |
+| **📱 C 端移动端 (公网最新)** | [https://tiku-toc-new.pages.dev](https://tiku-toc-new.pages.dev/#/) | `13900000001` / `123456` | Cloudflare Pages 托管，直连云端 TiDB 题库 |
+| **💻 B 端管理后台 (本地)** | `http://localhost/admin` | `13800000012` / `123456` | 皓石集团企业管理员 (Admin) |
+| **👑 B 端平台超管 (本地)** | `http://localhost/admin` | `13800000000` / `123456` | 平台最高超级管理员 (Super Admin) |
+| **⚡ FastAPI 接口文档** | `https://tiku-api.vercel.app/docs` | — | OpenAPI / Swagger 交互式文档 |
 
 ---
 
@@ -15,10 +29,10 @@
 
 ```
 ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐
-│  v1.0 MVP │──>│ v1.1 治理 │──>│v1.2 AI阅卷│──>│v1.3 RAG命题│──>│v1.4 SaaS化│──>│ v1.5 Geek │
+│  v1.0 MVP │──>│ v1.1 治理 │──>│v1.2 AI阅卷│──>│v1.3 RAG命题│──>│v1.4 SaaS化│──>│v1.5 钛金微光│
 │基础客观题 │   │锁定/数据防│   │填空简答AI │   │私有文库溯源│   │多租户/卡片│   │Uni-app重塑│
 └───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘
-  已归档(v1.0)    已归档(v1.1)    已归档(v1.2)    已归档(v1.3)    已归档(v1.4)    正在推进...
+  已归档(v1.0)    已归档(v1.1)    已归档(v1.2)    已归档(v1.3)    已归档(v1.4)    已交付(v1.5)
 ```
 
 - **v1.0 (MVP 基础闭环)**：
@@ -34,16 +48,16 @@
   - **私有知识库与 RAG 命题闭环**：接入私有文档切片检索与向量召回，AI 出题自动标注原文切片依据，支持侧边抽屉原文高亮溯源；
   - **严苛的数据资产守卫**：确立试卷 `draft → published → archived` 状态机流转（归档终态不可逆锁定）；
   - **服务端权威防作弊**：开考入口锁定服务端开考时刻，杜绝客户端篡改本地时钟作弊。
-- **v1.4 (SaaS 多租户架构与智能 Agent 交互革命 - 当前稳定版)**：
+- **v1.4 (SaaS 多租户架构与智能 Agent 交互革命)**：
   - **真正多租户隔离**：实现教育培训机构（如星雅教育）与企业合规考核（如皓石集团）的数据逻辑隔离与权限加固；
   - **AI 智能出题助手深度落地**：对话式批量出题卡片、智能组卷、安全合规防泄题拦截，消息与卡片执行状态数据库持久化（`action_card_data`）；
   - **自动化快照工程**：内置 Playwright 自动化截屏与文档生成引擎，双击批处理脚本即可一键生成系统最新图文快照。
 - **v1.5 (C 端跨端原生重塑 · Apple 钛金微光风 - 最新已交付)**：
-  - 采用 `uni-app` (Vue 3.5 + TS + Vite) 全面重塑 C 端移动端，奠定 **Apple 钛金微光风 (Light-Titanium Glassmorphism)** 视觉规范；
-  - 彻底去除外部抽象卡片与多层黑盒嵌套，单选、多选、双大胶囊判断、填空与高对比度文本域原生内联，杜绝移动端白屏；
-  - 强化考场简答题与填空题输入可视度（纯白微阴影背景 + 实体冷灰边框 + 深空蓝微光聚焦光晕）；
-  - 统一成绩报告页内置标准白色微质感 Navbar（`solid` 模式），与出分看板及保密盾牌浑然天成；
-  - 新增全自动无头快照脚本 `scripts/snapshot_v1.5_c.py` 与双击即跑的 `生成v1.5快照介绍文档.bat`。
+  - **设计系统升维**：全面推行 **Apple 钛金微光风 (Apple Light-Titanium Glassmorphism)** 规范，采用 `#fbfbfd` 冷钛白通透底盘搭配双色温漫反射呼吸微光；
+  - **技术底座重塑**：从纯 H5 全面迁移重塑为 `uni-app` (Vue 3.5 + TypeScript + Vite + Pinia) 跨端原生工程；
+  - **彻底去除外部抽象卡片**：单选、多选、双大胶囊判断、填空、简答全题型原生展开，拒绝多层黑盒组件嵌套，彻底杜绝移动端白屏与计算错位；
+  - **考务级安全防泄题**：考试未核验公开（`pending_verification`）期间，在 DOM 层面物理阻断标准答案与试题解析的渲染；
+  - **全链路云端交付**：前端成功上线 Cloudflare Pages（`https://tiku-toc-new.pages.dev`），后端托管于 Vercel Serverless，直连 TiDB Cloud 分布式数据库。
 
 ---
 
@@ -51,13 +65,13 @@
 
 ### 一、v1.5 C 端移动端全景展示 (Apple 钛金微光风)
 
-> 完整的高清快照指南请参阅 👉 **[v1.5 C端全景功能快照与视觉规范指南](./docs/v1.5_c_showcase.md)**
+> 完整的高清图文指南请参阅 👉 **[v1.5 C端全景功能快照与视觉规范指南](./docs/v1.5_c_showcase.md)**
 
 | 暮光微光登录 (Login) | 任务大厅首页 (Home) | 在线沉浸考场 (Exam) |
 | :---: | :---: | :---: |
 | ![C端登录](./docs/images/v1.5/01_toc_login.png) | ![C端首页](./docs/images/v1.5/02_toc_home.png) | ![C端考场](./docs/images/v1.5/03_toc_exam.png) |
 
-| 我的测评进度 (Records) | 成绩复盘报告 (Report) | 个人中心 (Profile) |
+| 我的测评进度 (Records) | 成绩复盘报告 (Report) | 个人中心与错题 (Profile) |
 | :---: | :---: | :---: |
 | ![我的测试](./docs/images/v1.5/04_toc_records.png) | ![成绩报告](./docs/images/v1.5/05_toc_report_done.png) | ![个人中心](./docs/images/v1.5/06_toc_profile.png) |
 
@@ -83,15 +97,16 @@
 tiku/
 ├── backend/                  # FastAPI 核心（SaaS 多租户架构、JWT鉴权、AI出题与阅卷引擎）
 ├── tob/                      # B端管理后台（Vue 3.5 + Element Plus + Pinia + Vite）
-├── toc/                      # C端轻量答题端（Vue 3.5 H5）
-├── toc-new/                  # [v1.5 演进中] C端跨端全新工程（uni-app + Wot Design Uni）
-├── docs/                     # 系统对外版本展示中心（图文产品介绍与各端实况快照）
-│   ├── v1.4_showcase.md      # v1.4 版本全景展示报告
-│   └── images/v1.4/          # 12 张高清页面实况截图（供 README 与展示文档直接引用）
-├── history/                  # 历史版本核心开发规范存档（包含 v1.3/v1.4 需求与进度底稿）
-├── scripts/                  # 运维与自动化工具
-│   ├── snapshot_showcase.py  # 全自动无头浏览器截图与文档生成引擎
-│   └── ...
+├── toc-new/                  # [v1.5 最新交付] C端跨端全新工程（uni-app + Vue 3.5 + TS + Vite）
+├── docs/                     # 系统对外版本展示与部署指南中心
+│   ├── v1.5_c_showcase.md    # v1.5 C端 Apple 钛金微光风全景指南
+│   ├── v1.4_showcase.md      # v1.4 B端系统功能快照报告
+│   ├── deploy-free-cloud.md  # 零成本公网在线部署实战指南 (TiDB + Vercel + Cloudflare)
+│   └── images/               # 各版本高清实况截屏资源
+├── history/                  # 历史版本开发需求与方案归档（含 improveUI.v1.5.md, v1.4/v1.3 底稿）
+├── scripts/                  # 自动化与快照工程
+│   ├── snapshot_v1.5_c.py    # v1.5 C端 Playwright 自动化截屏与文档生成器
+│   └── snapshot_showcase.py  # v1.4 B端自动化截屏脚本
 ├── nginx.conf                # 统一网关路由（反代后端、B端、C端）
 └── docker-compose.yml        # Docker 一键编排容器栈
 ```
@@ -100,7 +115,7 @@ tiku/
 
 ## 🚀 快速启动
 
-### 方式一：Docker Compose 一键启动（生产与集成）
+### 方式一：Docker Compose 一键启动（本地全套）
 
 ```bash
 # 启动 MySQL 8.0、FastAPI 后端与 Nginx 网关
@@ -110,12 +125,26 @@ docker compose up -d
 docker exec tiku_nginx nginx -s reload
 ```
 
-| 服务入口 | 访问地址 | 默认体验账号 / 密码 | 角色说明 |
-| :--- | :--- | :--- | :--- |
-| **B 端管理后台** | `http://localhost/admin` | `13800000012` / `123456` | 皓石集团管理员 (Admin) |
-| **B 端超级管理** | `http://localhost/admin` | `13800000000` / `123456` | 平台超级管理员 (Super Admin) |
-| **C 端考生端** | `http://localhost` | `13900000006` / `123456` | 皓石集团员工 (Member) |
-| **Swagger API** | `http://localhost/docs` | — | FastAPI 交互式接口文档 |
+### 方式二：本地分端开发启动
+
+```bash
+# 1. 启动后端 (FastAPI)
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# 2. 启动 B 端后台 (Vue 3 + Vite)
+cd ../tob
+pnpm install
+pnpm dev
+
+# 3. 启动 C 端考生端 (uni-app + Vite)
+cd ../toc-new
+pnpm install
+pnpm dev:h5
+```
 
 ---
 
@@ -125,7 +154,7 @@ docker exec tiku_nginx nginx -s reload
 
 1. **严格的宪法与行为约束**：通过根目录 [`agent.md`](./agent.md) 确立工程最高行为准则，实现“沟通即文档”、“零上下文损耗”与严格的数据隔离铁律。
 2. **跨版本大更迭死生快照**：建立“第一阶段需求冻结 -> 第二阶段宪法重审 -> 第三阶段死生快照打 Tag 归档”的标准升版机制，确保每一代演进都有迹可循、随时可回滚。
-3. **自动化自解释工程**：不仅编写业务代码，还构建了全自动页面快照生成器（`scripts/snapshot_showcase.py` 与 `生成v1.4快照介绍文档.bat`），实现软件自举式文档化。
+3. **自动化自解释工程**：不仅编写业务代码，还构建了全自动页面快照生成器（`scripts/snapshot_v1.5_c.py` 与 `生成v1.5快照介绍文档.bat`），双击脚本即可全自动化生成最新实况文档。
 
 ---
 
@@ -137,4 +166,4 @@ docker exec tiku_nginx nginx -s reload
 - **[`tech-spec.md`](./tech-spec.md)** — 架构设计与技术规范白皮书。
 - **[`api-contract.md`](./api-contract.md)** — 双端 API 契约与防泄题接口规范。
 - **[`docs/`](./docs/)** — **对外展示中心**：各版本全景功能快照报告与高清图片。
-- **[`history/`](./history/)** — **历史底稿归档区**：历代版本的 PRD、技术方案与进度历史记录（含 `progress_v1.3_legacy.md` 与 `v1.4` 系列）。
+- **[`history/`](./history/)** — **历史底稿归档区**：历代版本的 PRD、技术方案与进度历史记录。

@@ -2,10 +2,24 @@
 
 A modern, lightweight AI-Native assessment and examination platform: **B-end SaaS Management Console** (Question Assets, Intelligent Exam Assembly, Grading Center, AI Question-Generation Assistant, Multi-tenant Isolation) + **C-end Mobile Examinee App** (Quiz, Timed Exams, Answer Sheet Drawer, Anti-leakage Reports, Favorites) + **FastAPI Core Backend**.
 
-- **GitHub**: [https://github.com/JasonOracle/tiku](https://github.com/JasonOracle/tiku)
-- **Gitee**: [https://gitee.com/jason-oracle/tiku](https://gitee.com/jason-oracle/tiku)
+- **GitHub Repository**: [https://github.com/JasonOracle/tiku](https://github.com/JasonOracle/tiku)
+- **Gitee Mirror**: [https://gitee.com/jason-oracle/tiku](https://gitee.com/jason-oracle/tiku)
 - **Chinese Documentation**: [README.md](./README.md)
-- **v1.4 Feature Showcase & Snapshots**: [docs/v1.4_showcase.md](./docs/v1.4_showcase.md)
+- 📱 **Live C-End Mobile App**: [TiKu Examinee WebApp (Cloudflare Pages)](https://tiku-toc-new.pages.dev/#/)
+- ⚡ **Cloud OpenAPI Docs**: [https://tiku-api.vercel.app/docs](https://tiku-api.vercel.app/docs)
+- 🎨 **v1.5 C-End Showcase Guide**: [docs/v1.5_c_showcase.md](./docs/v1.5_c_showcase.md)
+- 🖥️ **v1.4 B-End Showcase Guide**: [docs/v1.4_showcase.md](./docs/v1.4_showcase.md)
+
+---
+
+## 🌐 Public & Local Service Access
+
+| Service / App | URL Entry | Demo Credentials | Role Description |
+| :--- | :--- | :--- | :--- |
+| **📱 C-End Mobile (Public Live)** | [https://tiku-toc-new.pages.dev](https://tiku-toc-new.pages.dev/#/) | `13900000001` / `123456` | Cloudflare Pages hosted, connected to cloud TiDB |
+| **💻 B-End Admin Console (Local)** | `http://localhost/admin` | `13800000012` / `123456` | Haoshi Group Enterprise Admin |
+| **👑 B-End Super Admin (Local)** | `http://localhost/admin` | `13800000000` / `123456` | Platform Super Administrator |
+| **⚡ FastAPI Interactive Docs** | `https://tiku-api.vercel.app/docs` | — | OpenAPI / Swagger interactive schema |
 
 ---
 
@@ -15,10 +29,10 @@ This project strictly adheres to an **agile, progressive development** lifecycle
 
 ```
 ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐
-│  v1.0 MVP │──>│ v1.1 Data │──>│v1.2 AI Grd│──>│v1.3 KB RAG│──>│v1.4 SaaS  │──>│ v1.5 Geek │
-│Objective  │   │Lock & Safe│   │Fill/Essay │   │Source-text│   │Multi-tenan│   │Uni-app    │
+│  v1.0 MVP │──>│ v1.1 Data │──>│v1.2 AI Grd│──>│v1.3 KB RAG│──>│v1.4 SaaS  │──>│v1.5 Titani│
+│Objective  │   │Lock & Safe│   │Fill/Essay │   │Source-text│   │Multi-tenan│   │Uni-app OS │
 └───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘
-  Archived(v1.0)  Archived(v1.1)  Archived(v1.2)  Archived(v1.3)  Archived(v1.4)   In Progress..
+  Archived(v1.0)  Archived(v1.1)  Archived(v1.2)  Archived(v1.3)  Archived(v1.4)  Delivered(1.5)
 ```
 
 - **v1.0 (MVP Closed Loop)**:
@@ -33,21 +47,38 @@ This project strictly adheres to an **agile, progressive development** lifecycle
   - **RAG-Driven Question Generation**: Integrated vector retrieval over private document chunks, automatically highlighting source text in drawer overlays;
   - **Strict Asset Lifecycle**: Formalized the immutable `draft → published → archived` exam lifecycle;
   - **Server-Authoritative Anti-Cheating**: Exam timer locked server-side upon first entry to prevent client clock manipulation.
-- **v1.4 (SaaS Multi-Tenancy & Agent Interaction Revolution - Current Stable)**:
+- **v1.4 (SaaS Multi-Tenancy & Agent Interaction Revolution)**:
   - **Strict Multi-Tenant Isolation**: Complete logical data isolation between educational institutions (e.g., Xingya Education) and enterprise compliance training (e.g., Haoshi Group);
   - **Deep AI Agent Integration**: Conversational batch question generation, dynamic drafting cards, anti-leakage guards, and full history persistence (`action_card_data`);
   - **Automated Snapshot Engineering**: Built-in Playwright automated headless screenshot and Markdown generation engine (`scripts/snapshot_showcase.py`).
-- **v1.5 (Cross-Platform Geek Remodel - Currently Underway)**:
-  - Complete overhaul of C-end mobile client using `uni-app` (Vue 3.5 + TS + Vite) + `Wot Design Uni`;
-  - Immersive "Geek Blue" design, pure SVG icon system, single-question focus flow, and secure review-mode dynamic reports.
+- **v1.5 (Cross-Platform Geek Remodel · Apple Light-Titanium Design - Latest Delivered)**:
+  - **Apple Light-Titanium Glassmorphism**: High-transparency `#fbfbfd` titanium background with dual-temperature subtle diffuse micro-glow;
+  - **Core Engine Rebuild**: Transitioned from legacy H5 to `uni-app` (Vue 3.5 + TypeScript + Vite + Pinia) cross-platform native codebase;
+  - **Zero-Glue Native Layout**: Native inline rendering for single/multiple choice, dual-capsule boolean, fill-in-the-blank, and essay textareas, eliminating white screen glitches;
+  - **Physical Anti-Leakage Defense**: Completely blocks rendering of standard answers and question explanations in the DOM while under verification (`pending_verification`);
+  - **Serverless Production Delivery**: Front-end deployed on Cloudflare Pages (`https://tiku-toc-new.pages.dev`), back-end on Vercel Serverless, linked to TiDB Cloud distributed database.
 
 ---
 
-## 📸 System Snapshots (v1.4 Showcase)
+## 📸 System Snapshots (Showcase)
+
+### I. v1.5 C-End Examinee Mobile Client (Apple Light-Titanium)
+
+> For the comprehensive visual specification guide, see 👉 **[v1.5 C-End Showcase & Visual Spec Guide](./docs/v1.5_c_showcase.md)**
+
+| Twilight Login | Assessment Lobby (Home) | Immersive Exam Room |
+| :---: | :---: | :---: |
+| ![Login](./docs/images/v1.5/01_toc_login.png) | ![Home](./docs/images/v1.5/02_toc_home.png) | ![Exam](./docs/images/v1.5/03_toc_exam.png) |
+
+| Assessment Progress (Records) | Score Review Report | Profile & Favorites |
+| :---: | :---: | :---: |
+| ![Records](./docs/images/v1.5/04_toc_records.png) | ![Report](./docs/images/v1.5/05_toc_report_done.png) | ![Profile](./docs/images/v1.5/06_toc_profile.png) |
+
+---
+
+### II. v1.4 B-End SaaS Admin Console (Desktop PC)
 
 > For the comprehensive snapshot guide, see 👉 **[v1.4 Showcase & System Architecture](./docs/v1.4_showcase.md)**
-
-### B-End SaaS Admin Console (Desktop PC)
 
 | Dashboard | Question Bank Assets |
 | :---: | :---: |
@@ -57,12 +88,6 @@ This project strictly adheres to an **agile, progressive development** lifecycle
 | :---: | :---: |
 | ![AI Assistant](./docs/images/v1.4/04_tob_ai_assistant.png) | ![Exams](./docs/images/v1.4/03_tob_tasks.png) |
 
-### C-End Examinee Mobile Client (iPhone Viewport)
-
-| Enterprise Workspace | Assessment List | Personal Profile & Stats |
-| :---: | :---: | :---: |
-| ![C-End Home](./docs/images/v1.4/08_toc_home.png) | ![Assessments](./docs/images/v1.4/09_toc_my_tasks.png) | ![Profile](./docs/images/v1.4/10_toc_profile.png) |
-
 ---
 
 ## 🏗️ Project Structure
@@ -71,15 +96,16 @@ This project strictly adheres to an **agile, progressive development** lifecycle
 tiku/
 ├── backend/                  # FastAPI core (SaaS multi-tenancy, JWT, AI engine)
 ├── tob/                      # B-end admin console (Vue 3.5 + Element Plus + Pinia)
-├── toc/                      # C-end H5 client (Vue 3.5)
-├── toc-new/                  # [v1.5 in progress] C-end uni-app + Wot Design Uni project
-├── docs/                     # Public showcase center (product reports and live screenshots)
-│   ├── v1.4_showcase.md      # v1.4 full walkthrough report
-│   └── images/v1.4/          # 12 high-resolution screenshots referenced by README and showcase
-├── history/                  # Historical specification archives (contains v1.3 and v1.4 specs)
+├── toc-new/                  # [v1.5 Latest] C-end uni-app + Vue 3.5 + TS cross-platform app
+├── docs/                     # Public showcase & deployment guides
+│   ├── v1.5_c_showcase.md    # v1.5 C-end Apple Light-Titanium walkthrough
+│   ├── v1.4_showcase.md      # v1.4 B-end walkthrough report
+│   ├── deploy-free-cloud.md  # Zero-cost cloud deployment guide (TiDB + Vercel + Cloudflare)
+│   └── images/               # High-resolution screenshots for docs & README
+├── history/                  # Historical specification archives (contains v1.3, v1.4, improveUI specs)
 ├── scripts/                  # Automation & headless screenshot engine
-│   ├── snapshot_showcase.py  # Playwright automated capture script
-│   └── ...
+│   ├── snapshot_v1.5_c.py    # v1.5 C-end Playwright screenshot generator
+│   └── snapshot_showcase.py  # v1.4 B-end automated capture script
 ├── nginx.conf                # Unified reverse proxy
 └── docker-compose.yml        # Docker container orchestration
 ```
@@ -88,7 +114,7 @@ tiku/
 
 ## 🚀 Quick Start
 
-### Docker Compose (Recommended)
+### Docker Compose (Recommended for Local Full-Stack)
 
 ```bash
 # Start MySQL 8.0, FastAPI backend, and Nginx reverse proxy
@@ -98,31 +124,24 @@ docker compose up -d
 docker exec tiku_nginx nginx -s reload
 ```
 
-| Portal | URL | Demo Account / Password | Role |
-| :--- | :--- | :--- | :--- |
-| **B-End Admin** | `http://localhost/admin` | `13800000012` / `123456` | Enterprise Admin (Haoshi Group) |
-| **B-End Super Admin**| `http://localhost/admin` | `13800000000` / `123456` | Platform Super Admin |
-| **C-End Examinee** | `http://localhost` | `13900000006` / `123456` | Employee / Student (Member) |
-| **Swagger API** | `http://localhost/docs` | — | Interactive OpenAPI Docs |
+---
+
+## 🤖 AI-Native Engineering Paradigm
+
+This project serves as an **AI-Native Software Engineering (AI-Driven Development) benchmark**:
+
+1. **Strict Constitutional Guardrails**: Standardized through root [`agent.md`](./agent.md), ensuring zero context degradation, explicit multi-tenant isolation, and transparent changes.
+2. **Milestone Snapshots & Immutability**: Implementing frozen requirements -> architecture review -> snapshot archiving lifecycle to maintain strict auditability.
+3. **Automated Documentation**: Self-documenting architecture via Playwright headless screenshot engines (`scripts/snapshot_v1.5_c.py`).
 
 ---
 
-## 🤖 AI-Driven Development Paradigm
+## 📚 Specifications Directory
 
-This repository is also a comprehensive case study in **human-AI collaborative software engineering**:
-
-1. **Constitutional Agent Governance**: Core guidelines laid out in [`agent.md`](./agent.md) enforce tenant isolation, change logging, and anti-context-loss workflows.
-2. **Snapshot-Driven Version Handoff**: Strict protocols govern version increments (`v1.4-final` tag, physical archiving of PRD/Tech specs to `history/`), ensuring zero drift across sprints.
-3. **Self-Documenting Architecture**: Integrated headless browser automations continuously capture and regenerate live visual proof of feature maturity.
-
----
-
-## 📚 Core Documentation Index
-
-- **[`agent.md`](./agent.md)** — **Highest Priority!** Must be read before any agent interaction.
-- **[`progress.md`](./progress.md)** — Current source of truth, roadmap, and handover checklist.
-- **[`product.md`](./product.md)** — Latest Product Requirements Document (PRD).
-- **[`tech-spec.md`](./tech-spec.md)** — System architecture and technical specifications.
-- **[`api-contract.md`](./api-contract.md)** — Backend API contracts and security rules.
-- **[`docs/`](./docs/)** — **Public Showcase Center**: Illustrated walkthroughs and UI snapshots.
-- **[`history/`](./history/)** — **Specification Archives**: Historical PRDs, technical designs, and notes (including `progress_v1.3_legacy.md`).
+- **[`agent.md`](./agent.md)** — **Highest Priority!** AI Agent rules of engagement and code ethics.
+- **[`progress.md`](./progress.md)** — Project source of truth, roadmap, and operational guidelines.
+- **[`product.md`](./product.md)** — Current Product Requirements Document (PRD).
+- **[`tech-spec.md`](./tech-spec.md)** — Technical specification and architecture whitepaper.
+- **[`api-contract.md`](./api-contract.md)** — Dual-end API contract and data privacy specifications.
+- **[`docs/`](./docs/)** — Showcase and deployment documentation center.
+- **[`history/`](./history/)** — Historical archives and previous version draft specifications.
