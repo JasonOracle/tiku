@@ -16,15 +16,16 @@
 		</view>
 
 		<scroll-view v-else class="report__scroll" scroll-y>
-			<!-- 态 A：即时出分态 -->
+			<!-- 态 A：即时出分态（深邃极客微渐变 + 层次微光晕） -->
 			<view v-if="!isAuditing" class="report__score">
+				<view class="report__score-glow" />
 				<view class="report__ring">
 					<wd-circle
 						:model-value="scorePercent"
-						:size="220"
-						:stroke-width="14"
+						:size="200"
+						:stroke-width="12"
 						color="#FFFFFF"
-						layer-color="rgba(255, 255, 255, 0.24)"
+						layer-color="rgba(255, 255, 255, 0.2)"
 						:speed="60"
 					/>
 					<view class="report__ring-center">
@@ -35,6 +36,9 @@
 
 				<view class="report__pills">
 					<view class="report__pill" :class="record.passed ? 'report__pill--pass' : 'report__pill--fail'">
+						<svg v-if="record.passed" width="12" height="12" viewBox="0 0 24 24" fill="none">
+							<polyline points="20 6 9 17 4 12" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
 						<text class="report__pill-text">{{ record.passed ? "及格" : "未及格" }}</text>
 					</view>
 					<text class="report__meta">答题用时 {{ timeSpentText }}</text>
@@ -44,10 +48,10 @@
 			<!-- 态 B：安全审核态 -->
 			<view v-else class="report__audit">
 				<svg class="report__audit-art" viewBox="0 0 160 160" fill="none">
-					<rect x="34" y="26" width="72" height="94" rx="14" stroke="#C9D4E8" stroke-width="3" />
-					<path d="M50 54h40M50 70h40M50 86h24" stroke="#DCE4F2" stroke-width="3" stroke-linecap="round" />
-					<circle cx="112" cy="104" r="22" fill="#E8F0FF" stroke="#1D63FF" stroke-width="3" />
-					<path d="M112 94v10.5l7 4" stroke="#1D63FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+					<rect x="34" y="26" width="72" height="94" rx="14" stroke="#CBD5E1" stroke-width="2.5" />
+					<path d="M50 54h40M50 70h40M50 86h24" stroke="#E2E8F0" stroke-width="2.5" stroke-linecap="round" />
+					<circle cx="112" cy="104" r="22" fill="#EFF6FF" stroke="#1D63FF" stroke-width="2.5" />
+					<path d="M112 94v10.5l7 4" stroke="#1D63FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
 				</svg>
 				<text class="report__audit-title">试卷已成功提交</text>
 				<text class="report__audit-desc">正在等待人工 / AI 批阅核验后公布成绩</text>
@@ -82,16 +86,25 @@
 						绝不可用 CSS 隐藏——DOM 中残留即等于泄题。
 					-->
 					<view v-if="!isAuditing" class="review-card__compare">
-						<view class="review-row">
-							<text class="review-row__label">我的答案</text>
-							<text class="review-row__value" :class="answerThemeClass(item)">{{ answerText(item.user_answer) }}</text>
+						<view class="review-answer-bar">
+							<view class="review-badge" :class="`review-badge--${answerThemeClass(item)}`">
+								<text class="review-badge__label">我的作答</text>
+								<text class="review-badge__content">{{ answerText(item.user_answer) }}</text>
+							</view>
+							<view class="review-badge review-badge--standard">
+								<text class="review-badge__label">标准答案</text>
+								<text class="review-badge__content">{{ answerText(item.correct_answer) }}</text>
+							</view>
 						</view>
-						<view class="review-row">
-							<text class="review-row__label">正确答案</text>
-							<text class="review-row__value review-row__value--answer">{{ answerText(item.correct_answer) }}</text>
-						</view>
+
 						<view v-if="item.explanation" class="review-card__explain">
-							<text class="review-card__explain-label">解析</text>
+							<view class="review-card__explain-header">
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+									<circle cx="12" cy="12" r="10" stroke="#1D63FF" stroke-width="2"/>
+									<path d="M12 16v-4M12 8h.01" stroke="#1D63FF" stroke-width="2" stroke-linecap="round"/>
+								</svg>
+								<text class="review-card__explain-title">答案解析</text>
+							</view>
 							<text class="review-card__explain-text">{{ item.explanation }}</text>
 						</view>
 					</view>
@@ -328,11 +341,24 @@ async function toggleFavorite(item: ExamRecordItem): Promise<void> {
 
 /* 态 A：环形得分区 */
 .report__score {
-	margin: 24rpx 32rpx 0;
-	padding: 44rpx 0 40rpx;
+	position: relative;
+	margin: 20rpx 28rpx 0;
+	padding: 40rpx 0 36rpx;
 	border-radius: 28rpx;
-	background-image: linear-gradient(135deg, #1d63ff 0%, #0045d8 100%);
-	box-shadow: 0 12rpx 32rpx rgba(29, 99, 255, 0.22);
+	background: linear-gradient(145deg, #1852E0 0%, #0A3299 100%);
+	box-shadow: 0 16rpx 40rpx rgba(10, 50, 153, 0.28);
+	overflow: hidden;
+}
+
+.report__score-glow {
+	position: absolute;
+	top: -60rpx;
+	right: -40rpx;
+	width: 220rpx;
+	height: 220rpx;
+	background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 70%);
+	border-radius: 50%;
+	pointer-events: none;
 }
 
 .report__ring {
@@ -340,7 +366,7 @@ async function toggleFavorite(item: ExamRecordItem): Promise<void> {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	height: 220px;
+	height: 200px;
 }
 
 .report__ring-center {
@@ -356,48 +382,56 @@ async function toggleFavorite(item: ExamRecordItem): Promise<void> {
 }
 
 .report__score-value {
-	font-size: 88rpx;
-	font-weight: 700;
+	font-size: 96rpx;
+	font-weight: 800;
 	line-height: 1;
 	color: #ffffff;
+	font-feature-settings: "tnum";
+	letter-spacing: -1px;
 }
 
 .report__score-total {
 	margin-top: 10rpx;
 	font-size: 22rpx;
-	color: rgba(255, 255, 255, 0.78);
+	color: rgba(255, 255, 255, 0.75);
+	font-weight: 500;
 }
 
 .report__pills {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin-top: 34rpx;
+	margin-top: 28rpx;
 }
 
 .report__pill {
-	padding: 8rpx 22rpx;
+	display: flex;
+	align-items: center;
+	gap: 6rpx;
+	padding: 8rpx 24rpx;
 	border-radius: 999rpx;
 }
 
 .report__pill--pass {
-	background-color: rgba(255, 255, 255, 0.24);
+	background: rgba(255, 255, 255, 0.2);
+	backdrop-filter: blur(8px);
+	border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .report__pill--fail {
-	background-color: #fa4350;
+	background-color: #EF4444;
 }
 
 .report__pill-text {
 	font-size: 24rpx;
-	font-weight: 600;
+	font-weight: 700;
 	color: #ffffff;
 }
 
 .report__meta {
-	margin-left: 18rpx;
+	margin-left: 20rpx;
 	font-size: 24rpx;
-	color: rgba(255, 255, 255, 0.82);
+	color: rgba(255, 255, 255, 0.85);
 }
 
 /* 态 B：安全审核区 */
@@ -434,36 +468,35 @@ async function toggleFavorite(item: ExamRecordItem): Promise<void> {
 }
 
 .report__audit-tip {
-	margin-top: 22rpx;
-	padding: 0 20rpx;
+	margin-top: 14rpx;
 	font-size: 22rpx;
-	line-height: 1.6;
+	line-height: 1.5;
 	text-align: center;
 	color: #a8b2c4;
 }
 
 /* 试卷信息条 */
 .report__paper {
-	margin: 24rpx 32rpx 0;
-	padding: 28rpx 28rpx;
+	margin: 24rpx 28rpx 0;
+	padding: 32rpx;
 	background-color: #ffffff;
-	border-radius: 24rpx;
-	box-shadow: 0 4rpx 20rpx rgba(29, 99, 255, 0.06);
+	border-radius: 20rpx;
+	box-shadow: 0 4rpx 16rpx rgba(15, 23, 42, 0.04);
+	border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .report__paper-title {
 	display: block;
-	font-size: 30rpx;
-	font-weight: 600;
-	line-height: 1.5;
-	color: #1c2331;
+	font-size: 32rpx;
+	font-weight: 700;
+	color: #0F172A;
 }
 
 .report__paper-time {
 	display: block;
 	margin-top: 12rpx;
 	font-size: 24rpx;
-	color: #a8b2c4;
+	color: #94A3B8;
 }
 
 .report__paper-comment {
@@ -471,7 +504,7 @@ async function toggleFavorite(item: ExamRecordItem): Promise<void> {
 	margin-top: 16rpx;
 	font-size: 24rpx;
 	line-height: 1.6;
-	color: #748094;
+	color: #64748B;
 }
 
 .report__section {
@@ -483,21 +516,22 @@ async function toggleFavorite(item: ExamRecordItem): Promise<void> {
 
 .report__section-title {
 	font-size: 30rpx;
-	font-weight: 600;
-	color: #1c2331;
+	font-weight: 700;
+	color: #0F172A;
 }
 
 .report__section-count {
 	font-size: 24rpx;
-	color: #748094;
+	color: #94A3B8;
 }
 
 /* 逐题复盘卡片 */
 .review-card {
-	margin: 0 32rpx 24rpx;
+	margin: 0 28rpx 24rpx;
 	background-color: #ffffff;
-	border-radius: 24rpx;
-	box-shadow: 0 4rpx 20rpx rgba(29, 99, 255, 0.06);
+	border-radius: 20rpx;
+	box-shadow: 0 4rpx 16rpx rgba(15, 23, 42, 0.04);
+	border: 1px solid rgba(226, 232, 240, 0.6);
 	overflow: hidden;
 }
 
@@ -507,64 +541,95 @@ async function toggleFavorite(item: ExamRecordItem): Promise<void> {
 }
 
 .review-card__compare {
-	padding: 26rpx 32rpx 28rpx;
-	border-top: 1rpx solid #f0f3f9;
+	padding: 24rpx 30rpx;
+	border-top: 1rpx solid #F1F5F9;
 }
 
-.review-row {
+.review-answer-bar {
 	display: flex;
-	align-items: flex-start;
+	align-items: center;
+	gap: 16rpx;
 }
 
-.review-row + .review-row {
-	margin-top: 16rpx;
-}
-
-.review-row__label {
-	width: 140rpx;
-	font-size: 24rpx;
-	color: #748094;
-}
-
-.review-row__value {
+.review-badge {
 	flex: 1;
-	font-size: 26rpx;
-	font-weight: 600;
-	line-height: 1.5;
-	color: #1c2331;
-}
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16rpx 22rpx;
+	border-radius: 14rpx;
+	background: #F8FAFC;
+	border: 1px solid #E2E8F0;
 
-.review-row__value--right {
-	color: #00b578;
-}
+	&__label {
+		font-size: 22rpx;
+		font-weight: 500;
+		color: #64748B;
+	}
 
-.review-row__value--wrong {
-	color: #fa4350;
-}
+	&__content {
+		font-size: 28rpx;
+		font-weight: 800;
+		color: #0F172A;
+	}
 
-.review-row__value--neutral {
-	color: #748094;
-}
+	&--right {
+		background: #ECFDF5;
+		border-color: #A7F3D0;
+		.review-badge__label {
+			color: #059669;
+		}
+		.review-badge__content {
+			color: #047857;
+		}
+	}
 
-.review-row__value--answer {
-	color: #1d63ff;
+	&--wrong {
+		background: #FEF2F2;
+		border-color: #FECACA;
+		.review-badge__label {
+			color: #DC2626;
+		}
+		.review-badge__content {
+			color: #B91C1C;
+		}
+	}
+
+	&--standard {
+		background: #EFF6FF;
+		border-color: #BFDBFE;
+		.review-badge__label {
+			color: #1D63FF;
+		}
+		.review-badge__content {
+			color: #1D4ED8;
+		}
+	}
 }
 
 .review-card__explain {
-	margin-top: 22rpx;
-	padding: 20rpx 22rpx;
-	border-radius: 16rpx;
-	background-color: #f6f8fc;
+	margin-top: 20rpx;
+	padding: 20rpx 24rpx;
+	border-radius: 14rpx;
+	background-color: #F8FAFC;
+	border: 1px dashed #E2E8F0;
 }
 
-.review-card__explain-label {
+.review-card__explain-header {
+	display: flex;
+	align-items: center;
+	gap: 8rpx;
+}
+
+.review-card__explain-title {
 	font-size: 22rpx;
-	color: #a8b2c4;
+	font-weight: 600;
+	color: #1D63FF;
 }
 
 .review-card__explain-text {
 	display: block;
-	margin-top: 8rpx;
+	margin-top: 10rpx;
 	font-size: 24rpx;
 	line-height: 1.65;
 	color: #748094;

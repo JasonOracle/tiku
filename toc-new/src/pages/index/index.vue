@@ -60,9 +60,12 @@
 			<PageState
 				v-if="status !== 'ready'"
 				:status="status"
-				empty-text="太棒了！当前没有待作答的测评试卷"
-				action-text="重新加载"
-				@action="loadData()"
+				:variant="status === 'empty' ? 'celebrate' : 'default'"
+				:title="status === 'empty' ? '待办任务已清空' : '加载失败'"
+				:description="status === 'empty' ? '当前没有待作答试卷，可前往「我的测试」复盘历史作答与报告' : '服务连接异常，请重试'"
+				:action-text="status === 'empty' ? '查看已测记录' : '重新加载'"
+				:action-variant="status === 'empty' ? 'ghost' : 'primary'"
+				@action="handleStateAction"
 			/>
 
 			<!-- 待答试卷卡片列表 -->
@@ -180,6 +183,14 @@ async function loadData(silent = false): Promise<void> {
 		}
 	} catch {
 		status.value = "error";
+	}
+}
+
+function handleStateAction() {
+	if (status.value === "empty") {
+		uni.switchTab({ url: "/pages/records/index" });
+	} else {
+		loadData();
 	}
 }
 

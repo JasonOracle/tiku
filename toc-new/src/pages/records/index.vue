@@ -47,45 +47,61 @@
 				>
 					<view class="record-card__head">
 						<text class="record-card__title">{{ item.title }}</text>
-						<wd-tag :type="resolveTagType(item)" plain round>
-							{{ resolveStatusText(item) }}
-						</wd-tag>
+						<view class="status-badge" :class="`status-badge--${resolveTagClass(item)}`">
+							<text class="status-badge__text">{{ resolveStatusText(item) }}</text>
+						</view>
 					</view>
 
 					<view class="record-card__meta">
-						<text class="record-card__meta-item">总分 {{ item.total_score }}</text>
+						<text class="record-card__meta-item">满分 {{ item.total_score }}</text>
 						<text class="record-card__meta-dot">·</text>
 						<text class="record-card__meta-item">{{ item.question_count }} 题</text>
 						<text class="record-card__meta-dot">·</text>
 						<text class="record-card__meta-item">限时 {{ formatTimeLimit(item.time_limit) }}</text>
 					</view>
 
-					<!-- 底部动作与信息区 -->
+					<!-- 底部信息与动作区 -->
 					<view class="record-card__foot">
-						<!-- 已参加态：展示提交时间与得分 -->
+						<!-- 已参加态：左侧提交时间，右侧显赫得分与查看报告轻按钮 -->
 						<template v-if="activeKey === 'completed'">
-							<text class="record-card__time">
-								{{ item.submit_time ? `提交于 ${formatDateTime(item.submit_time)}` : "已交卷" }}
-							</text>
-							<view class="record-card__score-wrap">
-								<text class="record-card__score" :class="{ 'record-card__score--pending': item.status === 'pending_verification' }">
-									{{ item.status === 'pending_verification' ? '审核中' : `${item.score ?? 0} 分` }}
+							<view class="record-card__foot-left">
+								<text class="record-card__time">
+									{{ item.submit_time ? `提交于 ${formatDateTime(item.submit_time)}` : "已交卷" }}
 								</text>
-								<view class="record-card__report-link">
-									<text class="record-card__report-text">查看报告</text>
+							</view>
+							<view class="record-card__foot-right">
+								<view v-if="item.status === 'pending_verification'" class="record-card__audit-pill">
 									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-										<path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+										<circle cx="12" cy="12" r="10" stroke="#F59E0B" stroke-width="2"/>
+										<polyline points="12 6 12 12 16 14" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+									</svg>
+									<text class="record-card__audit-text">批阅核验中</text>
+								</view>
+								<view v-else class="record-card__score-box">
+									<text class="record-card__score-num">{{ item.score ?? 0 }}</text>
+									<text class="record-card__score-unit">分</text>
+								</view>
+								<view class="record-card__entry-btn">
+									<text class="record-card__entry-text">复盘</text>
+									<svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+										<path d="M9 18l6-6-6-6" stroke="#1D63FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
 									</svg>
 								</view>
 							</view>
 						</template>
 
-						<!-- 未开始态：展示预计开考时间 -->
+						<!-- 未开始态：展示预计开考时间与锁定胶囊 -->
 						<template v-else-if="activeKey === 'upcoming'">
 							<text class="record-card__time">
-								{{ item.start_time ? `开考时间：${formatDateTime(item.start_time)}` : "尚未开始" }}
+								{{ item.start_time ? `预约开考：${formatDateTime(item.start_time)}` : "尚未开始" }}
 							</text>
-							<text class="record-card__upcoming-badge">未到时间</text>
+							<view class="record-card__lock-pill">
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+									<rect x="5" y="11" width="14" height="10" rx="2" stroke="#94A3B8" stroke-width="2"/>
+									<path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#94A3B8" stroke-width="2"/>
+								</svg>
+								<text class="record-card__lock-text">未到时间</text>
+							</view>
 						</template>
 
 						<!-- 进行中态：展示截止时间与进入考场按钮 -->
@@ -161,7 +177,7 @@ const emptyDescription = computed(() => {
 	return "暂无已参加的测评记录，快去完成一次测评吧";
 });
 
-function resolveTagType(item: MemberTaskItem): TagType {
+function resolveTagClass(item: MemberTaskItem): "success" | "warning" | "primary" | "default" {
 	if (activeKey.value === "completed") {
 		return item.status === "pending_verification" ? "warning" : "success";
 	}
@@ -336,42 +352,44 @@ onShow(() => {
 .record-card {
 	background: #FFFFFF;
 	border-radius: 16px;
-	padding: 16px 18px;
-	border: 1px solid rgba(226, 232, 240, 0.8);
-	box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+	padding: 18px 20px;
+	border: 1px solid rgba(226, 232, 240, 0.7);
+	box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
-	transition: all 0.15s ease;
+	gap: 12px;
+	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
 	&--pressed {
-		transform: scale(0.985);
+		transform: translateY(1px);
+		box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
 		background-color: #F8FAFC;
 	}
 
 	&--disabled {
-		opacity: 0.65;
+		opacity: 0.7;
 	}
 
 	&__head {
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: 10px;
+		gap: 12px;
 	}
 
 	&__title {
 		font-size: 15px;
 		font-weight: 700;
 		color: #0F172A;
-		line-height: 1.4;
+		line-height: 1.45;
 		flex: 1;
+		letter-spacing: -0.2px;
 	}
 
 	&__meta {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: 8px;
 		font-size: 12px;
 		color: #64748B;
 	}
@@ -384,8 +402,19 @@ onShow(() => {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding-top: 10px;
-		border-top: 1px dashed #F1F5F9;
+		padding-top: 12px;
+		border-top: 1px solid #F1F5F9;
+	}
+
+	&__foot-left {
+		display: flex;
+		align-items: center;
+	}
+
+	&__foot-right {
+		display: flex;
+		align-items: center;
+		gap: 12px;
 	}
 
 	&__time {
@@ -393,52 +422,130 @@ onShow(() => {
 		color: #94A3B8;
 	}
 
-	&__score-wrap {
+	&__score-box {
+		display: flex;
+		align-items: baseline;
+		gap: 2px;
+	}
+
+	&__score-num {
+		font-size: 20px;
+		font-weight: 800;
+		color: #059669;
+		line-height: 1;
+		font-feature-settings: "tnum";
+	}
+
+	&__score-unit {
+		font-size: 12px;
+		font-weight: 600;
+		color: #10B981;
+	}
+
+	&__audit-pill {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: 4px;
+		background: #FFFBEB;
+		padding: 4px 8px;
+		border-radius: 6px;
 	}
 
-	&__score {
-		font-size: 16px;
-		font-weight: 800;
-		color: #10B981;
-
-		&--pending {
-			font-size: 13px;
-			font-weight: 600;
-			color: #F59E0B;
-		}
+	&__audit-text {
+		font-size: 12px;
+		font-weight: 600;
+		color: #D97706;
 	}
 
-	&__report-link {
+	&__entry-btn {
 		display: flex;
 		align-items: center;
 		gap: 2px;
-		color: #1D63FF;
-		font-size: 12px;
-		font-weight: 600;
+		background: #EFF6FF;
+		border-radius: 999px;
+		padding: 4px 10px;
+		transition: background 0.15s ease;
+
+		&:active {
+			background: #DBEAFE;
+		}
 	}
 
-	&__upcoming-badge {
+	&__entry-text {
 		font-size: 12px;
 		font-weight: 600;
-		color: #94A3B8;
+		color: #1D63FF;
+	}
+
+	&__lock-pill {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		background: #F1F5F9;
+		padding: 4px 10px;
+		border-radius: 999px;
+	}
+
+	&__lock-text {
+		font-size: 11px;
+		font-weight: 600;
+		color: #64748B;
 	}
 
 	&__action-btn {
-		background: #1D63FF;
+		background: linear-gradient(135deg, #1D63FF 0%, #0045D8 100%);
 		border-radius: 999px;
-		padding: 5px 12px;
+		padding: 6px 14px;
 		display: flex;
 		align-items: center;
-		gap: 3px;
+		gap: 4px;
+		box-shadow: 0 4px 12px rgba(29, 99, 255, 0.25);
 	}
 
 	&__action-text {
 		font-size: 12px;
 		font-weight: 600;
 		color: #FFFFFF;
+	}
+}
+
+/* 状态徽章微系统 */
+.status-badge {
+	padding: 3px 8px;
+	border-radius: 6px;
+	flex-shrink: 0;
+
+	&__text {
+		font-size: 11px;
+		font-weight: 600;
+	}
+
+	&--success {
+		background: #ECFDF5;
+		.status-badge__text {
+			color: #059669;
+		}
+	}
+
+	&--warning {
+		background: #FFFBEB;
+		.status-badge__text {
+			color: #D97706;
+		}
+	}
+
+	&--primary {
+		background: #EFF6FF;
+		.status-badge__text {
+			color: #1D63FF;
+		}
+	}
+
+	&--default {
+		background: #F1F5F9;
+		.status-badge__text {
+			color: #64748B;
+		}
 	}
 }
 </style>
