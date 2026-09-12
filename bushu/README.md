@@ -161,20 +161,19 @@
 
 ---
 
-### 3.2 部署 C 端移动端/学员考试系统 (`toc`)
+### 3.2 部署 C 端移动端/学员考试系统 (`toc-new` Apple 钛金微光风)
 
 与 B 端完全相同的方式部署 C 端：
 1. 回到 Cloudflare Pages，再次点击 **连接到 Git**，选同一仓库。
-2. **构建配置**：
-   * **项目名称**: `tiku-toc`
-   * **根目录**: `toc` （**重要：指向 C 端前端目录**）
+2. **构建配置（填入以下参数）**：
+   * **项目名称**: `tiku-toc`（或 `tiku-toc-new`）
+   * **生产分支**: `master`
+   * **框架预设**: `None`（或保持默认）
+   * **根目录**: `toc-new` （**重要：指向全新 C 端目录 `toc-new`**）
    * **构建命令**: `pnpm build`
-   * **构建输出目录**: `dist`
-3. 同样在 `toc/public/` 下配置 `_redirects`：
-   ```txt
-   /api/*  https://tiku-api.onrender.com/api/:splat  200
-   /*      /index.html                               200
-   ```
+   * **构建输出目录**: `dist/build/h5` （**极其重要：uni-app H5 编译产物位于 `dist/build/h5`**）
+3. **后端 API 代理已内嵌自动就绪**：
+   项目工程已在 `toc-new/_redirects` 预置路由规则，并在 `pnpm build` 执行时自动同步拷贝至 `dist/build/h5/_redirects`，Cloudflare 会自动接管 `/api/*` 与前端路由兜底。
 4. 点击 **保存并部署**，获取 C 端学员答题专属网址：
    `https://tiku-toc.pages.dev`
 
