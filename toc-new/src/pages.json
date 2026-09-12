@@ -1,8 +1,8 @@
 {
 	// [变更日志]
-	// 修改时间：2026-09-12
-	// AI模型：Deepseek-V4.1-Flash 底层
-	// 修改内容：[1. 注册 UI 选型双风格静态预览路由：preview-linear 与 preview-apple 各 7 页; 2. 注册 preview-nav 双风格对比索引页; 3. 全部预览页均为自定义导航栏，纯静态 Mock 不涉及真实接口]
+	// 修改时间：2026-09-13
+	// AI模型：Gemini 系列
+	// 修改内容：[1. 彻底剔除已废弃的 preview-apple/preview-linear/preview-nav 静态预览路由，净化路由表; 2. 仅保留生产级 7 大核心业务页面与三大原生 TabBar]
 	// [变更日志]
 	// 修改时间：2026-09-12
 	// AI模型：Deepseek-V4.1-Flash 底层
@@ -61,96 +61,6 @@
 		},
 		{
 			"path": "pages/favorites/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-nav/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-linear/index/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-linear/records/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-linear/exam/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-linear/report/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-linear/profile/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-linear/favorites/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-linear/login/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-apple/index/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-apple/records/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-apple/exam/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-apple/report/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-apple/profile/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-apple/favorites/index",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "preview-apple/login/index",
 			"style": {
 				"navigationStyle": "custom"
 			}
