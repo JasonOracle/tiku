@@ -1,14 +1,29 @@
 /**
  * [变更日志]
  * 修改时间：2026-09-12
- * AI模型：Deepseek-V4.1-Flash 底层
- * 修改内容：[1. 放宽 ExamRecordItem.correct_answer 类型以兼容填空题的字符串答案; 2. 新增重点题目收藏的查询 / 添加 / 移除三组接口与类型]
- * [变更日志]
- * 修改时间：2026-09-12
- * AI模型：Deepseek-V4.1-Flash 底层
- * 修改内容：[1. 追加「我的测试」记录列表与个人中心统计两组接口及类型; 2. 既有接口与类型保持原样，未做任何签名变更]
+ * AI模型：Gemini 系列
+ * 修改内容：[新增 fetchMemberBanners 接口与 BannerItem 类型，支持首页轮播展示]
  */
 import { request } from "@/utils/request";
+
+export type BannerItem = {
+  id: number;
+  title: string;
+  image_url: string;
+  link_url?: string;
+};
+
+export type BannerListResult = {
+  items: BannerItem[];
+  interval_seconds: number;
+};
+
+export function fetchMemberBanners(): Promise<BannerListResult> {
+  return request<BannerListResult>({
+    url: "/api/v1/member/banners",
+    method: "GET"
+  });
+}
 
 /**
  * 路径说明（重要）：

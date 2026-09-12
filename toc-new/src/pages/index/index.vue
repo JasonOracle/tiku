@@ -1,47 +1,74 @@
 <template>
 	<view class="home">
-		<!-- 通顶渐变区：Header 透明融入，向下延伸出欢迎区与统计，底边圆角收口 -->
-		<view class="home__hero">
-			<CustomHeader variant="transparent" :title="institutionName">
-				<template #right>
-					<text class="home__hero-badge">{{ availableCount }} 场可考</text>
-				</template>
-			</CustomHeader>
+		<!-- 通顶 Header：展示当前机构名称 -->
+		<CustomHeader variant="solid" :title="institutionName">
+			<template #right>
+				<view class="home__header-badge">
+					<text class="home__header-badge-text">{{ uncompletedCards.length }} 场可考</text>
+				</view>
+			</template>
+		</CustomHeader>
 
-			<view class="home__welcome">
-				<text class="home__greeting">{{ greeting }}</text>
-				<text class="home__slogan">保持节奏，稳步提分</text>
+		<view class="home__body">
+			<!-- 滚动 Banner 轮播区 -->
+			<view class="banner-section">
+				<swiper
+					v-if="bannerList.length > 0"
+					class="banner-swiper"
+					:indicator-dots="bannerList.length > 1"
+					indicator-color="rgba(255, 255, 255, 0.4)"
+					indicator-active-color="#1D63FF"
+					autoplay
+					circular
+					:interval="bannerInterval * 1000"
+				>
+					<swiper-item v-for="b in bannerList" :key="b.id" class="banner-item">
+						<image :src="b.image_url" mode="aspectFill" class="banner-img" />
+						<view v-if="b.title" class="banner-title-mask">
+							<text class="banner-title">{{ b.title }}</text>
+						</view>
+					</swiper-item>
+				</swiper>
 
-				<view class="home__stats">
-					<view class="home__stat">
-						<text class="home__stat-value">{{ cards.length }}</text>
-						<text class="home__stat-label">全部测评</text>
+				<!-- 默认极客蓝特色 Banner（未配置自定义轮播图时展示） -->
+				<view v-else class="default-banner">
+					<view class="default-banner__content">
+						<view class="default-banner__tag">
+							<text class="default-banner__tag-text">OFFICIAL</text>
+						</view>
+						<text class="default-banner__title">企业在线测评与能力认证</text>
+						<text class="default-banner__desc">聚焦专业知识体系，沉浸式在线考核</text>
 					</view>
-					<view class="home__stat-split" />
-					<view class="home__stat">
-						<text class="home__stat-value">{{ availableCount }}</text>
-						<text class="home__stat-label">待参与</text>
-					</view>
-					<view class="home__stat-split" />
-					<view class="home__stat">
-						<text class="home__stat-value">{{ finishedCount }}</text>
-						<text class="home__stat-label">已参与</text>
+					<view class="default-banner__deco">
+						<svg width="72" height="72" viewBox="0 0 24 24" fill="none" opacity="0.15">
+							<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
 					</view>
 				</view>
 			</view>
-		</view>
 
-		<view class="home__body">
-			<view class="home__section">
-				<text class="home__section-title">可参与的测评</text>
-				<text class="home__section-count">{{ cards.length }} 项</text>
+			<!-- 标题栏 -->
+			<view class="home__section-head">
+				<view class="home__section-title-wrap">
+					<view class="home__section-bar" />
+					<text class="home__section-title">待参加测评</text>
+				</view>
+				<text class="home__section-tip">只展示未作答试卷</text>
 			</view>
 
-			<PageState v-if="status !== 'ready'" :status="status" action-text="重新加载" @action="loadTasks()" />
+			<!-- 加载/空态/错误态 -->
+			<PageState
+				v-if="status !== 'ready'"
+				:status="status"
+				empty-text="太棒了！当前没有待作答的测评试卷"
+				action-text="重新加载"
+				@action="loadData()"
+			/>
 
+			<!-- 待答试卷卡片列表 -->
 			<view v-else class="home__list">
 				<view
-					v-for="item in cards"
+					v-for="item in uncompletedCards"
 					:key="item.task_id"
 					class="exam-card"
 					hover-class="exam-card--active"
@@ -49,29 +76,39 @@
 				>
 					<view class="exam-card__head">
 						<text class="exam-card__title">{{ item.title }}</text>
-						<wd-tag :type="item.tagType" plain round>{{ item.statusText }}</wd-tag>
+						<view class="exam-card__tag">
+							<text class="exam-card__tag-text">{{ item.category_name || "综合" }}</text>
+						</view>
 					</view>
 
-					<text class="exam-card__meta">
-						总分 {{ item.total_score }} · {{ item.question_count }} 题 · 限时 {{ formatTimeLimit(item.time_limit) }}
-					</text>
-					<text class="exam-card__deadline">截止 {{ formatDeadline(item.deadline) }}</text>
+					<view class="exam-card__meta">
+						<text class="exam-card__meta-item">总分 {{ item.total_score }}</text>
+						<text class="exam-card__meta-dot">·</text>
+						<text class="exam-card__meta-item">{{ item.question_count }} 题</text>
+						<text class="exam-card__meta-dot">·</text>
+						<text class="exam-card__meta-item">限时 {{ formatTimeLimit(item.time_limit) }}</text>
+					</view>
 
 					<view class="exam-card__foot">
-						<text class="exam-card__category">{{ item.category_name || "综合测评" }}</text>
-						<view class="exam-card__go">
-							<text class="exam-card__go-text" :class="{ 'exam-card__go-text--scored': item.score !== null }">
-								{{ item.score !== null ? `得分 ${item.score}` : "进入考场" }}
-							</text>
-							<svg class="exam-card__go-icon" viewBox="0 0 24 24" fill="none">
-								<path d="m9.5 5 7 7-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+						<view class="exam-card__deadline">
+							<svg width="13" height="13" viewBox="0 0 24 24" fill="none" class="exam-card__clock-icon">
+								<circle cx="12" cy="12" r="10" stroke="#94A3B8" stroke-width="2"/>
+								<polyline points="12 6 12 12 16 14" stroke="#94A3B8" stroke-width="2" stroke-linecap="round"/>
+							</svg>
+							<text class="exam-card__deadline-text">截止 {{ formatDeadline(item.deadline) }}</text>
+						</view>
+
+						<view class="exam-card__btn">
+							<text class="exam-card__btn-text">开始测试</text>
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+								<path d="M9 18l6-6-6-6" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
 							</svg>
 						</view>
 					</view>
 				</view>
 			</view>
 
-			<!-- 原生 tabBar 与底部安全区占位 -->
+			<!-- 底部占位 -->
 			<view class="home__bottom-space" />
 		</view>
 
@@ -83,279 +120,332 @@
 /**
  * [变更日志]
  * 修改时间：2026-09-12
- * AI模型：Deepseek-V4.1-Flash 底层
- * 修改内容：[1. 由模板示例页重写为首页：通顶渐变 Header 展示机构名、欢迎统计区、测评卡片流; 2. 接入真实测评列表接口并补齐加载/空/错误三态]
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 彻底移除假大空的「晚上好/统计大色块」，恢复滚动 Banner 轮播卡片; 2. 严格按 v1.4 规则过滤首页试卷列表，仅保留未提交/待作答试卷，已交卷试卷一律隐去（去我的测试查看）]
  */
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import CustomHeader from "@/components/CustomHeader.vue";
 import GlobalToast from "@/components/GlobalToast.vue";
 import PageState from "@/components/PageState.vue";
-import { fetchMemberTasks, type MemberTaskItem } from "@/api/exam";
+import { fetchMemberTasks, fetchMemberBanners, type MemberTaskItem, type BannerItem } from "@/api/exam";
 import { useUserStore } from "@/stores/user";
-import { formatDeadline, formatRecordStatus, formatTimeLimit } from "@/utils/format";
+import { formatDeadline, formatTimeLimit } from "@/utils/format";
 
-type TagType = "default" | "primary" | "success" | "warning" | "danger";
 type PageStatus = "loading" | "empty" | "error" | "ready";
-
-/** 卡片视图模型：在接口字段之上派生展示文案与标签色 */
-type ExamCardView = MemberTaskItem & {
-	statusText: string;
-	tagType: TagType;
-};
 
 const userStore = useUserStore();
 
 const status = ref<PageStatus>("loading");
-const taskList = ref<MemberTaskItem[]>([]);
+const allTasks = ref<MemberTaskItem[]>([]);
+const bannerList = ref<BannerItem[]>([]);
+const bannerInterval = ref(4);
 
-/** 所属机构名称：从已加入租户中匹配当前生效租户，未匹配到时回退默认空间名 */
+/** 所属机构名称 */
 const institutionName = computed(() => {
 	const matched = userStore.joinedTenants.find((tenant) => tenant.tenant_id === userStore.tenantId);
 	return matched?.tenant_name || "智题库企业空间";
 });
 
-const greeting = computed(() => {
-	const hour = new Date().getHours();
-	if (hour < 6) return "夜深了";
-	if (hour < 12) return "早上好";
-	if (hour < 14) return "中午好";
-	if (hour < 18) return "下午好";
-	return "晚上好";
+/**
+ * 核心过滤规则（严格遵循 v1.4）：
+ * 首页只呈现「未作答」的测评试卷。
+ * 已交卷 (submitted)、审核中 (pending_verification)、已核验 (verified) 统一从首页隐藏，前往「我的测试」查看成绩。
+ */
+const DONE_STATUSES = ["submitted", "verified", "pending_verification"];
+const uncompletedCards = computed(() => {
+	return allTasks.value.filter((item) => !DONE_STATUSES.includes(item.status));
 });
 
-function resolveTagType(item: MemberTaskItem): TagType {
-	if (item.record_id === null) return "primary";
-	if (item.status === "pending_verification") return "warning";
-	if (item.status === "verified" || item.status === "submitted") return "success";
-	return "default";
-}
-
-const cards = computed<ExamCardView[]>(() =>
-	taskList.value.map((item) => ({
-		...item,
-		statusText: item.record_id === null ? "待参与" : formatRecordStatus(item.status),
-		tagType: resolveTagType(item),
-	}))
-);
-
-const availableCount = computed(() => taskList.value.filter((item) => item.record_id === null).length);
-const finishedCount = computed(() => taskList.value.filter((item) => item.record_id !== null).length);
-
-/**
- * 拉取可考测评列表。
- * silent 为 true 时不重置为加载态，用于从其它 Tab 切回首页时避免骨架屏闪烁。
- */
-async function loadTasks(silent = false): Promise<void> {
+async function loadData(silent = false): Promise<void> {
 	if (!silent) status.value = "loading";
 	try {
-		const data = await fetchMemberTasks();
-		taskList.value = data.items;
-		status.value = data.items.length ? "ready" : "empty";
+		// 并发拉取 Banner 与 试卷列表
+		const [bannerRes, taskRes] = await Promise.allSettled([
+			fetchMemberBanners(),
+			fetchMemberTasks()
+		]);
+
+		if (bannerRes.status === "fulfilled") {
+			bannerList.value = bannerRes.value.items || [];
+			bannerInterval.value = bannerRes.value.interval_seconds || 4;
+		}
+
+		if (taskRes.status === "fulfilled") {
+			allTasks.value = taskRes.value.items || [];
+			// 基于过滤后的有效可考列表判定空态
+			status.value = uncompletedCards.value.length ? "ready" : "empty";
+		} else {
+			status.value = "error";
+		}
 	} catch {
-		// 失败信息已由请求层统一轻提示，这里只负责切换到错误态，避免白屏
 		status.value = "error";
 	}
 }
 
-function goExam(item: MemberTaskItem): void {
-	// 严禁在此调用入考接口：后端会真实创建作答记录并锁定开考时间，属不可逆副作用
+function goExam(item: MemberTaskItem) {
 	uni.navigateTo({
-		url: `/pages/exam/index?task_id=${item.task_id}&title=${encodeURIComponent(item.title)}`,
+		url: `/pages/exam/index?task_id=${item.task_id}&title=${encodeURIComponent(item.title)}`
 	});
 }
 
 onShow(() => {
-	// 未登录时首页是应用启动页，直接回登录页，避免用无凭证请求触发 401 导致骨架屏空闪
-	if (!userStore.isLoggedIn) {
+	if (!userStore.token) {
 		uni.reLaunch({ url: "/pages/login/index" });
 		return;
 	}
-	// 首次进入展示骨架屏；已有数据时静默刷新，避免每次切回都闪一下
-	loadTasks(status.value === "ready");
+	loadData(true);
 });
 </script>
 
 <style lang="scss" scoped>
 .home {
 	min-height: 100vh;
-	background-color: #f6f8fc;
+	background-color: #F8FAFC;
+
+	&__header-badge {
+		background: rgba(29, 99, 255, 0.08);
+		border: 1px solid rgba(29, 99, 255, 0.2);
+		padding: 4px 10px;
+		border-radius: 999px;
+	}
+
+	&__header-badge-text {
+		font-size: 12px;
+		font-weight: 600;
+		color: #1D63FF;
+	}
+
+	&__body {
+		padding: 14px 16px;
+	}
+
+	&__section-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin: 20px 0 12px;
+	}
+
+	&__section-title-wrap {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	&__section-bar {
+		width: 4px;
+		height: 16px;
+		background: #1D63FF;
+		border-radius: 2px;
+	}
+
+	&__section-title {
+		font-size: 17px;
+		font-weight: 700;
+		color: #0F172A;
+	}
+
+	&__section-tip {
+		font-size: 12px;
+		color: #94A3B8;
+	}
+
+	&__list {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	&__bottom-space {
+		height: 32px;
+	}
 }
 
-.home__hero {
-	padding-bottom: 56rpx;
-	background-image: linear-gradient(135deg, #1d63ff 0%, #0045d8 100%);
-	border-bottom-left-radius: 40rpx;
-	border-bottom-right-radius: 40rpx;
+/* 轮播 Banner 模块 */
+.banner-section {
+	margin-bottom: 8px;
 }
 
-.home__hero-badge {
-	font-size: 22rpx;
-	color: rgba(255, 255, 255, 0.86);
+.banner-swiper {
+	height: 146px;
+	border-radius: 16px;
+	overflow: hidden;
+	box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
 }
 
-.home__welcome {
-	padding: 24rpx 32rpx 0;
+.banner-item {
+	position: relative;
+	width: 100%;
+	height: 100%;
 }
 
-.home__greeting {
-	display: block;
-	font-size: 46rpx;
+.banner-img {
+	width: 100%;
+	height: 100%;
+}
+
+.banner-title-mask {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 8px 14px;
+	background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.65) 100%);
+}
+
+.banner-title {
+	font-size: 13px;
 	font-weight: 600;
-	letter-spacing: 2rpx;
-	color: #ffffff;
+	color: #FFFFFF;
 }
 
-.home__slogan {
-	display: block;
-	margin-top: 10rpx;
-	font-size: 24rpx;
-	color: rgba(255, 255, 255, 0.74);
-}
-
-.home__stats {
+/* 默认极客蓝特色 Banner */
+.default-banner {
+	height: 136px;
+	background: linear-gradient(135deg, #1D63FF 0%, #0045D8 100%);
+	border-radius: 16px;
+	padding: 20px;
+	box-sizing: border-box;
 	display: flex;
-	align-items: center;
-	margin-top: 40rpx;
-	padding: 28rpx 0;
-	border-radius: 24rpx;
-	background-color: rgba(255, 255, 255, 0.14);
-}
-
-.home__stat {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-}
-
-.home__stat-split {
-	width: 1rpx;
-	height: 48rpx;
-	background-color: rgba(255, 255, 255, 0.24);
-}
-
-.home__stat-value {
-	font-size: 40rpx;
-	font-weight: 600;
-	color: #ffffff;
-}
-
-.home__stat-label {
-	margin-top: 8rpx;
-	font-size: 22rpx;
-	color: rgba(255, 255, 255, 0.74);
-}
-
-.home__body {
-	padding: 0 32rpx;
-}
-
-.home__section {
-	display: flex;
-	align-items: baseline;
 	justify-content: space-between;
-	padding: 40rpx 0 24rpx;
+	align-items: center;
+	position: relative;
+	overflow: hidden;
+	box-shadow: 0 8px 24px rgba(29, 99, 255, 0.28);
+
+	&__content {
+		position: relative;
+		z-index: 2;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
+	&__tag {
+		align-self: flex-start;
+		background: rgba(255, 255, 255, 0.22);
+		border-radius: 4px;
+		padding: 2px 6px;
+	}
+
+	&__tag-text {
+		font-size: 10px;
+		font-weight: 800;
+		color: #FFFFFF;
+		letter-spacing: 0.5px;
+	}
+
+	&__title {
+		font-size: 18px;
+		font-weight: 800;
+		color: #FFFFFF;
+		letter-spacing: 0.3px;
+	}
+
+	&__desc {
+		font-size: 12px;
+		color: rgba(255, 255, 255, 0.85);
+	}
+
+	&__deco {
+		position: absolute;
+		right: 12px;
+		bottom: 8px;
+		z-index: 1;
+	}
 }
 
-.home__section-title {
-	font-size: 32rpx;
-	font-weight: 600;
-	color: #1c2331;
-}
-
-.home__section-count {
-	font-size: 24rpx;
-	color: #748094;
-}
-
-.home__list {
-	display: flex;
-	flex-direction: column;
-}
-
+/* 试卷大卡片 */
 .exam-card {
-	padding: 32rpx;
-	margin-bottom: 24rpx;
-	background-color: #ffffff;
-	border-radius: 24rpx;
-	box-shadow: 0 4rpx 20rpx rgba(29, 99, 255, 0.06);
-	transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.exam-card--active {
-	transform: scale(0.98);
-	opacity: 0.94;
-}
-
-.exam-card__head {
+	background: #FFFFFF;
+	border-radius: 16px;
+	padding: 16px 18px;
+	border: 1px solid rgba(226, 232, 240, 0.8);
+	box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 	display: flex;
-	align-items: flex-start;
-	justify-content: space-between;
-}
+	flex-direction: column;
+	gap: 10px;
+	transition: transform 0.15s ease;
 
-.exam-card__title {
-	flex: 1;
-	margin-right: 16rpx;
-	font-size: 32rpx;
-	font-weight: 600;
-	line-height: 1.45;
-	color: #1c2331;
-}
+	&--active {
+		transform: scale(0.985);
+		background-color: #F8FAFC;
+	}
 
-.exam-card__meta {
-	display: block;
-	margin-top: 18rpx;
-	font-size: 24rpx;
-	color: #748094;
-}
+	&__head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+	}
 
-.exam-card__deadline {
-	display: block;
-	margin-top: 8rpx;
-	font-size: 24rpx;
-	color: #748094;
-}
+	&__title {
+		font-size: 16px;
+		font-weight: 700;
+		color: #0F172A;
+		line-height: 1.4;
+		flex: 1;
+	}
 
-.exam-card__foot {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-top: 26rpx;
-	padding-top: 24rpx;
-	border-top: 1rpx solid #f0f3f9;
-}
+	&__tag {
+		background: #EFF6FF;
+		border-radius: 6px;
+		padding: 3px 8px;
+		flex-shrink: 0;
+	}
 
-.exam-card__category {
-	font-size: 24rpx;
-	color: #a8b2c4;
-}
+	&__tag-text {
+		font-size: 11px;
+		font-weight: 600;
+		color: #1D63FF;
+	}
 
-.exam-card__go {
-	display: flex;
-	align-items: center;
-	color: #1d63ff;
-}
+	&__meta {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		color: #64748B;
+	}
 
-.exam-card__go-text {
-	font-size: 26rpx;
-	font-weight: 600;
-	color: #1d63ff;
-}
+	&__meta-dot {
+		color: #CBD5E1;
+	}
 
-.exam-card__go-text--scored {
-	color: #00b578;
-}
+	&__foot {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding-top: 10px;
+		border-top: 1px dashed #F1F5F9;
+	}
 
-.exam-card__go-icon {
-	width: 30rpx;
-	height: 30rpx;
-	margin-left: 4rpx;
-}
+	&__deadline {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+	}
 
-.home__bottom-space {
-	// 原生 tabBar 会占据底部空间，额外预留安全区
-	height: calc(48rpx + constant(safe-area-inset-bottom));
-	height: calc(48rpx + env(safe-area-inset-bottom));
+	&__deadline-text {
+		font-size: 12px;
+		color: #94A3B8;
+	}
+
+	&__btn {
+		background: #1D63FF;
+		border-radius: 999px;
+		padding: 6px 14px;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		box-shadow: 0 3px 8px rgba(29, 99, 255, 0.25);
+	}
+
+	&__btn-text {
+		font-size: 12px;
+		font-weight: 600;
+		color: #FFFFFF;
+	}
 }
 </style>
