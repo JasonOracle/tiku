@@ -1,32 +1,37 @@
 <template>
-	<view class="records">
-		<!-- Header + 经典三态 Tabs 整体吸顶 -->
-		<view class="records__sticky">
-			<CustomHeader title="我的测试" />
+	<view class="records-apple">
+		<!-- 漫反射暮光背景 -->
+		<view class="rc-aurora">
+			<view class="rc-aurora__blob rc-aurora__blob--1" />
+			<view class="rc-aurora__blob rc-aurora__blob--2" />
+		</view>
 
-			<view class="records__tabs">
+		<!-- 钛金通顶导航栏 -->
+		<view class="rc-header">
+			<text class="rc-header__title">我的测试</text>
+			<text class="rc-header__sub">记录你的每一次成长与突破</text>
+		</view>
+
+		<!-- Apple 柔和三态微胶囊 Tab -->
+		<view class="rc-tabs-wrap">
+			<view class="rc-tabs">
 				<view
 					v-for="tab in tabs"
 					:key="tab.key"
-					class="records__tab"
-					@click="handleTabChange(tab.key)"
+					class="rc-tab"
+					:class="{ 'rc-tab--active': activeKey === tab.key }"
+					@click="switchTab(tab.key)"
 				>
-					<view class="records__tab-content">
-						<text class="records__tab-text" :class="{ 'records__tab-text--active': activeKey === tab.key }">
-							{{ tab.label }}
-						</text>
-						<text class="records__tab-badge" :class="{ 'records__tab-badge--active': activeKey === tab.key }">
-							{{ grouped[tab.key].length }}
-						</text>
+					<text class="rc-tab__label">{{ tab.label }}</text>
+					<view v-if="badgeCount(tab.key) > 0" class="rc-tab__badge">
+						<text class="rc-tab__badge-text">{{ badgeCount(tab.key) }}</text>
 					</view>
 				</view>
-				<!-- 极客蓝滑动指示器 -->
-				<view class="records__indicator" :style="{ transform: `translateX(${activeIndex * 100}%)` }" />
 			</view>
 		</view>
 
-		<view class="records__body">
-			<!-- 加载/空态/错误态 -->
+		<view class="rc-body">
+			<!-- 状态占位 -->
 			<PageState
 				v-if="viewState !== 'ready'"
 				:status="viewState"
@@ -35,82 +40,82 @@
 				@action="loadTasks()"
 			/>
 
-			<!-- 试卷卡片流 -->
-			<view v-else class="records__list">
+			<!-- 钛金卡片流 -->
+			<view v-else class="rc-list">
 				<view
 					v-for="item in currentList"
 					:key="item.task_id"
-					class="record-card"
-					:class="{ 'record-card--disabled': activeKey === 'upcoming' }"
-					hover-class="record-card--pressed"
+					class="rc-card"
+					:class="{ 'rc-card--disabled': activeKey === 'upcoming' }"
+					hover-class="rc-card--pressed"
 					@click="handleCardClick(item)"
 				>
-					<view class="record-card__head">
-						<text class="record-card__title">{{ item.title }}</text>
-						<view class="status-badge" :class="`status-badge--${resolveTagClass(item)}`">
-							<text class="status-badge__text">{{ resolveStatusText(item) }}</text>
+					<view class="rc-card__head">
+						<text class="rc-card__title">{{ item.title }}</text>
+						<view class="rc-status-pill" :class="`rc-status-pill--${resolveTagClass(item)}`">
+							<text class="rc-status-pill__text">{{ resolveStatusText(item) }}</text>
 						</view>
 					</view>
 
-					<view class="record-card__meta">
-						<text class="record-card__meta-item">满分 {{ item.total_score }}</text>
-						<text class="record-card__meta-dot">·</text>
-						<text class="record-card__meta-item">{{ item.question_count }} 题</text>
-						<text class="record-card__meta-dot">·</text>
-						<text class="record-card__meta-item">限时 {{ formatTimeLimit(item.time_limit) }}</text>
+					<view class="rc-card__meta">
+						<text class="rc-card__meta-item">总分 {{ item.total_score }}</text>
+						<text class="rc-card__meta-dot">·</text>
+						<text class="rc-card__meta-item">{{ item.question_count }} 题</text>
+						<text class="rc-card__meta-dot">·</text>
+						<text class="rc-card__meta-item">限时 {{ formatTimeLimit(item.time_limit) }}</text>
 					</view>
 
-					<!-- 底部信息与动作区 -->
-					<view class="record-card__foot">
-						<!-- 已参加态：左侧提交时间，右侧显赫得分与查看报告轻按钮 -->
+					<!-- 底部动作与信息区 -->
+					<view class="rc-card__foot">
+						<!-- 已参加态：左侧提交时间，右侧显赫得分与复盘按钮 -->
 						<template v-if="activeKey === 'completed'">
-							<view class="record-card__foot-left">
-								<text class="record-card__time">
+							<view class="rc-card__foot-left">
+								<text class="rc-card__time">
 									{{ item.submit_time ? `提交于 ${formatDateTime(item.submit_time)}` : "已交卷" }}
 								</text>
 							</view>
-							<view class="record-card__foot-right">
-								<view v-if="item.status === 'pending_verification'" class="record-card__audit-pill">
+							<view class="rc-card__foot-right">
+								<view v-if="item.status === 'pending_verification'" class="rc-card__audit-pill">
 									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
 										<circle cx="12" cy="12" r="10" stroke="#F59E0B" stroke-width="2"/>
 										<polyline points="12 6 12 12 16 14" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
 									</svg>
-									<text class="record-card__audit-text">批阅核验中</text>
+									<text class="rc-card__audit-text">批阅核验中</text>
 								</view>
-								<view v-else class="record-card__score-box">
-									<text class="record-card__score-num">{{ item.score ?? 0 }}</text>
-									<text class="record-card__score-unit">分</text>
+								<view v-else class="rc-card__score-box">
+									<text class="rc-card__score-num">{{ item.score ?? 0 }}</text>
+									<text class="rc-card__score-unit">分</text>
 								</view>
-								<view class="record-card__entry-btn">
-									<text class="record-card__entry-text">复盘</text>
+								<view class="rc-card__entry-btn">
+									<text class="rc-card__entry-text">复盘</text>
 									<svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-										<path d="M9 18l6-6-6-6" stroke="#1D63FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+										<path d="M9 18l6-6-6-6" stroke="#1852E0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
 									</svg>
 								</view>
 							</view>
 						</template>
 
-						<!-- 未开始态：展示预计开考时间与锁定胶囊 -->
+						<!-- 未开始态：预计开考时间与锁定标签 -->
 						<template v-else-if="activeKey === 'upcoming'">
-							<text class="record-card__time">
+							<text class="rc-card__time">
 								{{ item.start_time ? `预约开考：${formatDateTime(item.start_time)}` : "尚未开始" }}
 							</text>
-							<view class="record-card__lock-pill">
+							<view class="rc-card__lock-pill">
 								<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-									<rect x="5" y="11" width="14" height="10" rx="2" stroke="#94A3B8" stroke-width="2"/>
-									<path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#94A3B8" stroke-width="2"/>
+									<rect x="5" y="11" width="14" height="10" rx="2" stroke="#86868b" stroke-width="2"/>
+									<path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#86868b" stroke-width="2"/>
 								</svg>
-								<text class="record-card__lock-text">未到时间</text>
+								<text class="rc-card__lock-text">未到时间</text>
 							</view>
 						</template>
 
-						<!-- 进行中态：展示截止时间与进入考场按钮 -->
+						<!-- 进行中态：截止时间与进入作答按钮 -->
 						<template v-else>
-							<text class="record-card__time">
+							<text class="rc-card__time">
 								{{ item.deadline ? `截止：${formatDeadline(item.deadline)}` : "长期有效" }}
 							</text>
-							<view class="record-card__action-btn">
-								<text class="record-card__action-text">进入作答</text>
+							<view class="rc-card__action-btn">
+								<text class="rc-card__action-text">进入作答</text>
 								<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
 									<path d="M9 18l6-6-6-6" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
 								</svg>
@@ -120,8 +125,8 @@
 				</view>
 			</view>
 
-			<!-- 底部占位 -->
-			<view class="records__bottom-space" />
+			<!-- 底部占位安全区 -->
+			<view class="rc-bottom-space" />
 		</view>
 
 		<GlobalToast />
@@ -133,21 +138,18 @@
  * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Gemini 系列
- * 修改内容：[彻底恢复 v1.4 经典三态架构：进行中 / 未开始 / 已参加，严格按考情生命周期进行数据归类与状态流转]
+ * 修改内容：[1. 全面升级我的测试页面为 Apple 钛金微光风，采用拟物微胶囊 Tab 与大圆角卡片; 2. 真实对接后端 GET /api/v1/member/member-tasks，严格执行「进行中/未开始/已参加」三态归类]
  */
 import { computed, ref, reactive } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import CustomHeader from "@/components/CustomHeader.vue";
 import GlobalToast from "@/components/GlobalToast.vue";
 import PageState from "@/components/PageState.vue";
 import { fetchMemberTasks, type MemberTaskItem } from "@/api/exam";
-import { formatDateTime, formatDeadline, formatTimeLimit, formatRecordStatus } from "@/utils/format";
+import { formatDateTime, formatDeadline, formatTimeLimit } from "@/utils/format";
 
-type TagType = "default" | "primary" | "success" | "warning" | "danger";
 type RequestStatus = "loading" | "empty" | "error" | "ready";
 type TabKey = "ongoing" | "upcoming" | "completed";
 
-// 严格对齐 v1.4 经典三态
 const tabs: Array<{ key: TabKey; label: string }> = [
 	{ key: "ongoing", label: "进行中" },
 	{ key: "upcoming", label: "未开始" },
@@ -160,11 +162,18 @@ const requestStatus = ref<RequestStatus>("loading");
 const grouped = reactive<Record<TabKey, MemberTaskItem[]>>({
 	ongoing: [],
 	upcoming: [],
-	completed: []
+	completed: [],
 });
 
-const activeIndex = computed(() => tabs.findIndex((tab) => tab.key === activeKey.value));
 const currentList = computed(() => grouped[activeKey.value]);
+
+function badgeCount(key: TabKey): number {
+	return grouped[key].length;
+}
+
+function switchTab(key: TabKey): void {
+	activeKey.value = key;
+}
 
 const viewState = computed<RequestStatus>(() => {
 	if (requestStatus.value !== "ready") return requestStatus.value;
@@ -207,22 +216,22 @@ async function loadTasks(silent = false): Promise<void> {
 		const completedList: MemberTaskItem[] = [];
 
 		for (const item of items) {
-			// 1. 已参加：已交卷 / 审核中 / 已核验
+			// 1. 已参加
 			if (DONE_STATUSES.includes(item.status)) {
 				completedList.push(item);
 				continue;
 			}
 
-			// 2. 未开始：未作答且明确配置了尚未到达的 start_time
+			// 2. 未开始
 			if (item.start_time) {
-				const startTime = new Date(item.start_time);
-				if (now < startTime) {
+				const start = new Date(item.start_time);
+				if (!Number.isNaN(start.getTime()) && start > now) {
 					upcomingList.push(item);
 					continue;
 				}
 			}
 
-			// 3. 其余均为进行中（随时可考或作答中）
+			// 3. 进行中
 			ongoingList.push(item);
 		}
 
@@ -236,174 +245,221 @@ async function loadTasks(silent = false): Promise<void> {
 	}
 }
 
-function handleTabChange(key: TabKey): void {
-	activeKey.value = key;
-}
-
 function handleCardClick(item: MemberTaskItem): void {
-	// 未开始态置灰不可点
-	if (activeKey.value === "upcoming") return;
-
-	// 已参加态：直接跳往成绩复盘报告页（携带 record_id）
-	if (activeKey.value === "completed" || DONE_STATUSES.includes(item.status)) {
+	if (activeKey.value === "completed") {
 		if (item.record_id) {
 			uni.navigateTo({ url: `/pages/report/index?record_id=${item.record_id}` });
 		}
 		return;
 	}
 
-	// 进行中态：进入考场
+	if (activeKey.value === "upcoming") {
+		uni.showToast({ title: "该测评尚未开始", icon: "none" });
+		return;
+	}
+
 	uni.navigateTo({
-		url: `/pages/exam/index?task_id=${item.task_id}&title=${encodeURIComponent(item.title)}`
+		url: `/pages/exam/index?task_id=${item.task_id}&title=${encodeURIComponent(item.title)}`,
 	});
 }
 
 onShow(() => {
-	loadTasks(requestStatus.value === "ready");
+	loadTasks(true);
 });
 </script>
 
 <style lang="scss" scoped>
-.records {
+@import "@/styles/tokens-apple.scss";
+
+.records-apple {
+	position: relative;
 	min-height: 100vh;
-	background-color: #F8FAFC;
+	background: $bg;
+	overflow: hidden;
+}
 
-	&__sticky {
-		position: sticky;
-		top: 0;
-		z-index: 20;
-		background: #FFFFFF;
-		box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
-	}
+/* 漫反射微光晕 */
+.rc-aurora {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	overflow: hidden;
 
-	&__tabs {
-		position: relative;
-		display: flex;
-		height: 46px;
-		background: #FFFFFF;
-		border-bottom: 1px solid #F1F5F9;
-	}
-
-	&__tab {
-		flex: 1;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	&__tab-content {
-		display: flex;
-		align-items: center;
-		gap: 5px;
-	}
-
-	&__tab-text {
-		font-size: 14px;
-		font-weight: 500;
-		color: #64748B;
-		transition: all 0.2s ease;
-
-		&--active {
-			font-size: 15px;
-			font-weight: 700;
-			color: #1D63FF;
-		}
-	}
-
-	&__tab-badge {
-		font-size: 11px;
-		font-weight: 600;
-		color: #94A3B8;
-		background: #F1F5F9;
-		padding: 1px 6px;
-		border-radius: 999px;
-
-		&--active {
-			color: #1D63FF;
-			background: rgba(29, 99, 255, 0.1);
-		}
-	}
-
-	&__indicator {
+	&__blob {
 		position: absolute;
-		bottom: 0;
-		left: 0;
-		width: 33.3333%;
-		height: 2px;
-		background: #1D63FF;
-		transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-	}
+		border-radius: 50%;
+		filter: blur(80px);
+		opacity: 0.4;
 
-	&__body {
-		padding: 14px 16px;
-	}
+		&--1 {
+			width: 500rpx;
+			height: 500rpx;
+			top: -140rpx;
+			right: -100rpx;
+			background: radial-gradient(circle, rgba(24, 82, 224, 0.38), rgba(24, 82, 224, 0));
+		}
 
-	&__list {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
-
-	&__bottom-space {
-		height: 32px;
+		&--2 {
+			width: 440rpx;
+			height: 440rpx;
+			top: 360rpx;
+			left: -120rpx;
+			background: radial-gradient(circle, rgba(124, 92, 255, 0.28), rgba(124, 92, 255, 0));
+		}
 	}
 }
 
-.record-card {
-	background: #FFFFFF;
-	border-radius: 16px;
-	padding: 18px 20px;
-	border: 1px solid rgba(226, 232, 240, 0.7);
-	box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+/* 顶部标题区 */
+.rc-header {
+	position: relative;
+	z-index: 2;
+	padding: 44rpx 36rpx 16rpx;
+
+	&__title {
+		font-size: 40rpx;
+		font-weight: 800;
+		color: $ink;
+		letter-spacing: -0.3px;
+	}
+
+	&__sub {
+		display: block;
+		font-size: 22rpx;
+		color: $muted;
+		margin-top: 6rpx;
+	}
+}
+
+/* 钛金微胶囊 Tab */
+.rc-tabs-wrap {
+	position: relative;
+	z-index: 2;
+	padding: 10rpx 32rpx 20rpx;
+}
+
+.rc-tabs {
+	background: rgba(255, 255, 255, 0.75);
+	backdrop-filter: $glass-blur;
+	border: 1px solid $glass-border;
+	border-radius: $radius-pill;
+	padding: 6rpx;
+	display: flex;
+	box-shadow: $shadow-card;
+}
+
+.rc-tab {
+	flex: 1;
+	height: 68rpx;
+	border-radius: $radius-pill;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8rpx;
+	transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+	&--active {
+		background: #ffffff;
+		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+
+		.rc-tab__label {
+			color: $accent;
+			font-weight: 700;
+		}
+
+		.rc-tab__badge {
+			background: $accent-soft;
+			.rc-tab__badge-text {
+				color: $accent;
+			}
+		}
+	}
+
+	&__label {
+		font-size: 26rpx;
+		font-weight: 500;
+		color: $ink-2;
+	}
+
+	&__badge {
+		background: $surface-sunken;
+		padding: 2rpx 12rpx;
+		border-radius: 999rpx;
+	}
+
+	&__badge-text {
+		font-size: 20rpx;
+		font-weight: 700;
+		color: $muted;
+	}
+}
+
+.rc-body {
+	position: relative;
+	z-index: 2;
+	padding: 10rpx 32rpx 40rpx;
+}
+
+.rc-list {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 20rpx;
+}
+
+/* 钛金测试卡片 */
+.rc-card {
+	background: rgba(255, 255, 255, 0.92);
+	backdrop-filter: $glass-blur;
+	border: 1px solid $glass-border;
+	border-radius: $radius-card;
+	padding: 32rpx 36rpx;
+	box-shadow: $shadow-card;
+	display: flex;
+	flex-direction: column;
+	gap: 16rpx;
 	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
 	&--pressed {
-		transform: translateY(1px);
-		box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
-		background-color: #F8FAFC;
+		transform: scale(0.985);
+		background: #ffffff;
 	}
 
 	&--disabled {
-		opacity: 0.7;
+		opacity: 0.65;
 	}
 
 	&__head {
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: 12px;
+		gap: 16rpx;
 	}
 
 	&__title {
-		font-size: 15px;
+		font-size: 30rpx;
 		font-weight: 700;
-		color: #0F172A;
+		color: $ink;
 		line-height: 1.45;
 		flex: 1;
-		letter-spacing: -0.2px;
 	}
 
 	&__meta {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		font-size: 12px;
-		color: #64748B;
+		gap: 10rpx;
+		font-size: 24rpx;
+		color: $muted;
 	}
 
 	&__meta-dot {
-		color: #CBD5E1;
+		color: $line-strong;
 	}
 
 	&__foot {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding-top: 12px;
-		border-top: 1px solid #F1F5F9;
+		padding-top: 20rpx;
+		border-top: 1px solid $line;
 	}
 
 	&__foot-left {
@@ -414,138 +470,137 @@ onShow(() => {
 	&__foot-right {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 16rpx;
 	}
 
 	&__time {
-		font-size: 12px;
-		color: #94A3B8;
+		font-size: 22rpx;
+		color: $muted;
 	}
 
 	&__score-box {
 		display: flex;
 		align-items: baseline;
-		gap: 2px;
+		gap: 4rpx;
 	}
 
 	&__score-num {
-		font-size: 20px;
+		font-size: 36rpx;
 		font-weight: 800;
-		color: #059669;
+		color: $ok;
 		line-height: 1;
 		font-feature-settings: "tnum";
 	}
 
 	&__score-unit {
-		font-size: 12px;
+		font-size: 22rpx;
 		font-weight: 600;
-		color: #10B981;
+		color: $ok;
 	}
 
 	&__audit-pill {
 		display: flex;
 		align-items: center;
-		gap: 4px;
-		background: #FFFBEB;
-		padding: 4px 8px;
-		border-radius: 6px;
+		gap: 6rpx;
+		background: $warn-soft;
+		padding: 6rpx 14rpx;
+		border-radius: 10rpx;
 	}
 
 	&__audit-text {
-		font-size: 12px;
+		font-size: 22rpx;
 		font-weight: 600;
-		color: #D97706;
+		color: $warn;
 	}
 
 	&__entry-btn {
 		display: flex;
 		align-items: center;
-		gap: 2px;
-		background: #EFF6FF;
-		border-radius: 999px;
-		padding: 4px 10px;
-		transition: background 0.15s ease;
-
-		&:active {
-			background: #DBEAFE;
-		}
+		gap: 4rpx;
+		background: $accent-soft;
+		border-radius: $radius-pill;
+		padding: 8rpx 18rpx;
 	}
 
 	&__entry-text {
-		font-size: 12px;
+		font-size: 22rpx;
 		font-weight: 600;
-		color: #1D63FF;
+		color: $accent;
 	}
 
 	&__lock-pill {
 		display: flex;
 		align-items: center;
-		gap: 4px;
-		background: #F1F5F9;
-		padding: 4px 10px;
-		border-radius: 999px;
+		gap: 6rpx;
+		background: $surface-sunken;
+		padding: 8rpx 18rpx;
+		border-radius: $radius-pill;
 	}
 
 	&__lock-text {
-		font-size: 11px;
+		font-size: 22rpx;
 		font-weight: 600;
-		color: #64748B;
+		color: $muted;
 	}
 
 	&__action-btn {
-		background: linear-gradient(135deg, #1D63FF 0%, #0045D8 100%);
-		border-radius: 999px;
-		padding: 6px 14px;
+		background: $gradient;
+		border-radius: $radius-pill;
+		padding: 10rpx 24rpx;
 		display: flex;
 		align-items: center;
-		gap: 4px;
-		box-shadow: 0 4px 12px rgba(29, 99, 255, 0.25);
+		gap: 6rpx;
+		box-shadow: 0 6rpx 16rpx rgba(24, 82, 224, 0.25);
 	}
 
 	&__action-text {
-		font-size: 12px;
+		font-size: 22rpx;
 		font-weight: 600;
-		color: #FFFFFF;
+		color: #ffffff;
 	}
 }
 
-/* 状态徽章微系统 */
-.status-badge {
-	padding: 3px 8px;
-	border-radius: 6px;
+/* 状态徽章 */
+.rc-status-pill {
+	padding: 4rpx 14rpx;
+	border-radius: 10rpx;
 	flex-shrink: 0;
 
 	&__text {
-		font-size: 11px;
+		font-size: 20rpx;
 		font-weight: 600;
 	}
 
 	&--success {
-		background: #ECFDF5;
-		.status-badge__text {
-			color: #059669;
+		background: $ok-soft;
+		.rc-status-pill__text {
+			color: $ok;
 		}
 	}
 
 	&--warning {
-		background: #FFFBEB;
-		.status-badge__text {
-			color: #D97706;
+		background: $warn-soft;
+		.rc-status-pill__text {
+			color: $warn;
 		}
 	}
 
 	&--primary {
-		background: #EFF6FF;
-		.status-badge__text {
-			color: #1D63FF;
+		background: $accent-soft;
+		.rc-status-pill__text {
+			color: $accent;
 		}
 	}
 
 	&--default {
-		background: #F1F5F9;
-		.status-badge__text {
-			color: #64748B;
+		background: $surface-sunken;
+		.rc-status-pill__text {
+			color: $muted;
 		}
 	}
+}
+
+.rc-bottom-space {
+	height: calc(100rpx + env(safe-area-inset-bottom));
 }
 </style>

@@ -47,6 +47,19 @@ export function formatTimeLimit(minutes: number | null | undefined): string {
   return `${minutes} 分钟`;
 }
 
+/** 将剩余秒数格式化为 "mm:ss" 或 "hh:mm:ss" */
+export function formatDuration(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "00:00";
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (hours > 0) {
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  }
+  return `${pad(minutes)}:${pad(seconds)}`;
+}
+
 /** 手机号脱敏，便于在个人名片等公开区域展示 */
 export function maskPhone(phone: string | null | undefined): string {
   if (!phone) return "--";

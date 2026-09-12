@@ -1,58 +1,64 @@
 <template>
-	<view class="login">
-		<!-- 极客蓝通顶渐变区：自屏幕顶端铺满，状态栏高度自适应 -->
-		<view class="login__hero">
-			<view v-if="statusBarHeight > 0" :style="{ height: `${statusBarHeight}px` }" />
-
-			<view class="login__hero-body">
-				<image class="login__logo" src="/static/icons/brand-logo.svg" mode="widthFix" />
-				<text class="login__brand">智题库</text>
-				<text class="login__slogan">企业测评与考试一体化平台</text>
-			</view>
+	<view class="login-apple">
+		<!-- 漫反射暮光背景 -->
+		<view class="lg-aurora">
+			<view class="lg-aurora__blob lg-aurora__blob--1" />
+			<view class="lg-aurora__blob lg-aurora__blob--2" />
 		</view>
 
-		<!-- 登录卡片：负边距上浮，压住渐变区下沿 -->
-		<view class="login__card">
-			<text class="login__card-title">账号登录</text>
+		<!-- 品牌标识与标语 -->
+		<view class="lg-hero">
+			<view class="lg-logo">
+				<view class="lg-logo__ring" />
+				<view class="lg-logo__core" />
+			</view>
+			<text class="lg-hero__title">智题库</text>
+			<text class="lg-hero__sub">让每一次测评都有温度与依据</text>
+		</view>
 
-			<wd-form ref="formRef" :model="form" :rules="rules">
-				<wd-form-item prop="phone" :label-width="'0px'">
-					<wd-input
-						v-model="form.phone"
-						type="number"
-						:maxlength="11"
-						placeholder="请输入手机号"
-						prefix-icon="phone"
-						clearable
-						no-border
-					/>
-				</wd-form-item>
+		<!-- 钛金微光浮雕登录面板 -->
+		<view class="lg-panel">
+			<view class="lg-field">
+				<text class="lg-field__label">手机号</text>
+				<input
+					class="lg-field__input"
+					type="number"
+					maxlength="11"
+					v-model="form.phone"
+					placeholder="请输入 11 位手机号"
+					placeholder-class="lg-ph"
+				/>
+			</view>
 
-				<wd-form-item prop="password" :label-width="'0px'">
-					<wd-input
+			<view class="lg-field">
+				<text class="lg-field__label">密码</text>
+				<view class="lg-field__row">
+					<input
+						class="lg-field__input"
+						:password="!pwdVisible"
 						v-model="form.password"
-						placeholder="请输入密码"
-						prefix-icon="lock-on"
-						show-password
-						no-border
+						placeholder="请输入登录密码"
+						placeholder-class="lg-ph"
 					/>
-				</wd-form-item>
-			</wd-form>
+					<view class="lg-field__eye" @click="pwdVisible = !pwdVisible">
+						<text class="lg-field__eye-text">{{ pwdVisible ? "隐藏" : "显示" }}</text>
+					</view>
+				</view>
+			</view>
 
 			<view
-				class="login__submit"
-				:class="{ 'login__submit--busy': submitting }"
-				hover-class="login__submit--active"
+				class="lg-submit"
+				:class="{ 'lg-submit--loading': submitting }"
+				hover-class="lg-submit--pressed"
 				@click="handleSubmit"
 			>
-				<wd-loading v-if="submitting" type="ring" color="#FFFFFF" size="34" />
-				<text class="login__submit-text">{{ submitting ? "登录中" : "登 录" }}</text>
+				<text class="lg-submit__text">{{ submitting ? "正在安全进入..." : "进入智题库" }}</text>
 			</view>
 
-			<text class="login__hint">企业成员由管理员统一录入手机号，无需注册</text>
+			<view class="lg-foot">
+				<text class="lg-foot__text">企业成员账号已由管理员配置，无需额外注册</text>
+			</view>
 		</view>
-
-		<text class="login__footer">智题库 · 让每一次测评都有据可依</text>
 
 		<GlobalToast />
 	</view>
@@ -62,11 +68,10 @@
 /**
  * [变更日志]
  * 修改时间：2026-09-12
- * AI模型：Deepseek-V4.1-Flash 底层
- * 修改内容：[1. 由占位页重塑为真实登录页：极客蓝通顶渐变、品牌标识、表单校验、提交态与租户边界拦截; 2. 登录成功后写入 Pinia 持久化并 switchTab 进入首页]
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 全面升级为 Apple 钛金微光风登录界面，去除多机构选择卡片，改为隐式无感知机构绑定; 2. 100% 接入真实后端 POST /api/v1/auth/login 鉴权闭环并注入 Pinia]
  */
-import { onMounted, reactive, ref } from "vue";
-import type { FormInstance, FormRules } from "wot-design-uni/components/wd-form/types";
+import { reactive, ref } from "vue";
 import GlobalToast from "@/components/GlobalToast.vue";
 import { login } from "@/api/auth";
 import { useGlobalToast } from "@/stores/toast";
@@ -80,59 +85,44 @@ const form = reactive({
 	password: "",
 });
 
-/** FormItemRule 的 required 与 message 为必填字段，非必填规则也要显式声明 required: false */
-const rules: FormRules = {
-	phone: [
-		{ required: true, message: "请输入手机号" },
-		{ required: false, pattern: /^1[3-9]\d{9}$/, message: "手机号格式不正确" },
-	],
-	password: [
-		{ required: true, message: "请输入密码" },
-		{ required: false, pattern: /^.{6,20}$/, message: "密码长度为 6 到 20 位" },
-	],
-};
-
-const formRef = ref<FormInstance>();
+const pwdVisible = ref(false);
 const submitting = ref(false);
-const statusBarHeight = ref(0);
-
-onMounted(() => {
-	// H5 端无原生状态栏，该值为 0；App / 小程序端返回真实高度
-	const systemInfo = uni.getSystemInfoSync();
-	statusBarHeight.value = systemInfo.statusBarHeight ?? 0;
-});
 
 async function handleSubmit(): Promise<void> {
-	// 提交中直接拦截，避免重复点击产生多次登录请求
 	if (submitting.value) return;
 
-	const result = await formRef.value?.validate();
-	if (!result?.valid) return;
+	const phoneClean = form.phone.trim();
+	if (!/^1[3-9]\d{9}$/.test(phoneClean)) {
+		toast.error("请输入有效的 11 位手机号码");
+		return;
+	}
+	if (form.password.length < 6) {
+		toast.error("密码长度至少为 6 位");
+		return;
+	}
 
 	submitting.value = true;
 	try {
-		const data = await login({ phone: form.phone.trim(), password: form.password });
+		const data = await login({ phone: phoneClean, password: form.password });
 
-		// 边界拦截：账号未归属任何企业空间时，请求会缺失 X-Tenant-Id 而全链路失败，
-		// 因此必须在进入首页之前就挡住，不能把问题留到后续页面逐个报错
+		// 边界拦截：账号未归属任何机构时阻断
 		if (!data.joined_tenants || data.joined_tenants.length === 0) {
-			toast.error("当前账号未加入任何企业空间，请联系管理员录入");
+			toast.error("当前账号未加入任何机构空间，请联系管理员");
 			return;
 		}
 
+		// 隐式绑定默认机构（优先取 default_tenant_id，无则取首个机构）
 		userStore.setLogin({
 			token: data.token,
 			user: data.user,
-			default_tenant_id: data.default_tenant_id,
+			default_tenant_id: data.default_tenant_id || data.joined_tenants[0].tenant_id,
 			joined_tenants: data.joined_tenants,
 		});
 
 		toast.success("登录成功");
-		// 首页是 tabBar 页面，必须使用 switchTab，它会同时关闭登录页等非 tab 页面
 		uni.switchTab({ url: "/pages/index/index" });
 	} catch (error) {
-		// 登录接口关闭了自动提示，此处显式呈现后端返回的真实失败原因
-		const message = error instanceof Error && error.message ? error.message : "登录失败，请稍后重试";
+		const message = error instanceof Error && error.message ? error.message : "登录失败，请核对账号密码";
 		toast.error(message);
 	} finally {
 		submitting.value = false;
@@ -141,112 +131,208 @@ async function handleSubmit(): Promise<void> {
 </script>
 
 <style lang="scss" scoped>
-.login {
-	display: flex;
-	flex-direction: column;
+@import "@/styles/tokens-apple.scss";
+
+.login-apple {
+	position: relative;
 	min-height: 100vh;
-	background-color: #f6f8fc;
+	background: $bg;
+	padding: 120rpx 48rpx 80rpx;
+	box-sizing: border-box;
+	overflow: hidden;
 }
 
-.login__hero {
-	background-image: linear-gradient(135deg, #1d63ff 0%, #0045d8 100%);
+/* 暮光微漫反射光晕 */
+.lg-aurora {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	overflow: hidden;
+
+	&__blob {
+		position: absolute;
+		border-radius: 50%;
+		filter: blur(80px);
+		opacity: 0.45;
+
+		&--1 {
+			width: 520rpx;
+			height: 520rpx;
+			top: -160rpx;
+			left: -120rpx;
+			background: radial-gradient(circle, rgba(24, 82, 224, 0.42), rgba(24, 82, 224, 0));
+		}
+
+		&--2 {
+			width: 480rpx;
+			height: 480rpx;
+			top: 240rpx;
+			right: -140rpx;
+			background: radial-gradient(circle, rgba(124, 92, 255, 0.32), rgba(124, 92, 255, 0));
+		}
+	}
 }
 
-.login__hero-body {
+/* 品牌区 */
+.lg-hero {
+	position: relative;
+	z-index: 2;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	padding: 72rpx 48rpx 220rpx;
+	margin-bottom: 60rpx;
+
+	&__title {
+		font-size: 52rpx;
+		font-weight: 800;
+		color: $ink;
+		letter-spacing: -0.5px;
+	}
+
+	&__sub {
+		margin-top: 10rpx;
+		font-size: 26rpx;
+		color: $muted;
+	}
 }
 
-.login__logo {
-	width: 132rpx;
-	height: 132rpx;
-}
-
-.login__brand {
-	margin-top: 28rpx;
-	font-size: 52rpx;
-	font-weight: 600;
-	letter-spacing: 4rpx;
-	color: #ffffff;
-}
-
-.login__slogan {
-	margin-top: 14rpx;
-	font-size: 24rpx;
-	color: rgba(255, 255, 255, 0.76);
-}
-
-.login__card {
-	margin: -160rpx 32rpx 0;
-	padding: 44rpx 36rpx 36rpx;
-	background-color: #ffffff;
-	border-radius: 32rpx;
-	box-shadow: 0 12rpx 40rpx rgba(29, 99, 255, 0.12);
-}
-
-.login__card-title {
-	display: block;
-	margin-bottom: 12rpx;
-	font-size: 34rpx;
-	font-weight: 600;
-	color: #1c2331;
-}
-
-/* 去掉表单项默认下边框，输入区交由卡片与输入框自身留白承担 */
-.login__card :deep(.wd-form-item) {
-	padding: 0;
-	margin-bottom: 8rpx;
-}
-
-.login__card :deep(.wd-form-item__body) {
-	padding: 0;
-}
-
-.login__submit {
+.lg-logo {
+	position: relative;
+	width: 120rpx;
+	height: 120rpx;
+	margin-bottom: 24rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	height: 92rpx;
-	margin-top: 40rpx;
-	border-radius: 999rpx;
-	background-image: linear-gradient(135deg, #1d63ff 0%, #0045d8 100%);
-	box-shadow: 0 12rpx 28rpx rgba(29, 99, 255, 0.24);
-	transition: transform 0.2s ease, opacity 0.2s ease;
+
+	&__ring {
+		position: absolute;
+		inset: 0;
+		border-radius: 36rpx;
+		background: $gradient;
+		box-shadow: 0 14rpx 40rpx rgba(24, 82, 224, 0.35);
+	}
+
+	&__core {
+		position: relative;
+		z-index: 1;
+		width: 44rpx;
+		height: 44rpx;
+		border-radius: 12rpx;
+		border: 4rpx solid #ffffff;
+		background: rgba(255, 255, 255, 0.2);
+	}
 }
 
-.login__submit--active {
-	transform: scale(0.97);
-	opacity: 0.92;
+/* 登录面板卡片 */
+.lg-panel {
+	position: relative;
+	z-index: 2;
+	background: rgba(255, 255, 255, 0.88);
+	backdrop-filter: $glass-blur;
+	border: 1px solid $glass-border;
+	border-radius: 36rpx;
+	padding: 48rpx 40rpx;
+	box-shadow: $shadow-card;
+	display: flex;
+	flex-direction: column;
+	gap: 32rpx;
 }
 
-.login__submit--busy {
-	opacity: 0.72;
+.lg-field {
+	display: flex;
+	flex-direction: column;
+	gap: 12rpx;
+
+	&__label {
+		font-size: 24rpx;
+		font-weight: 600;
+		color: $ink-2;
+	}
+
+	&__input {
+		height: 88rpx;
+		background: $surface-sunken;
+		border-radius: 20rpx;
+		padding: 0 28rpx;
+		font-size: 28rpx;
+		color: $ink;
+		border: 1px solid transparent;
+		transition: all 0.2s ease;
+
+		&:focus {
+			background: #ffffff;
+			border-color: $accent-line;
+		}
+	}
+
+	&__row {
+		display: flex;
+		align-items: center;
+		position: relative;
+
+		.lg-field__input {
+			flex: 1;
+			padding-right: 90rpx;
+		}
+	}
+
+	&__eye {
+		position: absolute;
+		right: 24rpx;
+		padding: 10rpx;
+		display: flex;
+		align-items: center;
+	}
+
+	&__eye-text {
+		font-size: 22rpx;
+		color: $accent;
+		font-weight: 600;
+	}
 }
 
-.login__submit-text {
-	margin-left: 12rpx;
-	font-size: 32rpx;
-	font-weight: 600;
-	letter-spacing: 4rpx;
-	color: #ffffff;
+.lg-ph {
+	color: $faint;
+	font-size: 26rpx;
 }
 
-.login__hint {
-	display: block;
-	margin-top: 28rpx;
-	font-size: 22rpx;
-	line-height: 1.6;
+/* 登录提交按钮 */
+.lg-submit {
+	margin-top: 16rpx;
+	height: 96rpx;
+	border-radius: 28rpx;
+	background: $gradient;
+	box-shadow: 0 12rpx 36rpx rgba(24, 82, 224, 0.32);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.2s ease;
+
+	&--pressed {
+		transform: scale(0.985);
+		opacity: 0.92;
+	}
+
+	&--loading {
+		opacity: 0.75;
+	}
+
+	&__text {
+		color: #ffffff;
+		font-size: 30rpx;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+}
+
+.lg-foot {
 	text-align: center;
-	color: #a8b2c4;
-}
+	margin-top: 10rpx;
 
-.login__footer {
-	margin-top: auto;
-	padding: 48rpx 0 56rpx;
-	font-size: 22rpx;
-	text-align: center;
-	color: #a8b2c4;
+	&__text {
+		font-size: 22rpx;
+		color: $muted;
+	}
 }
 </style>

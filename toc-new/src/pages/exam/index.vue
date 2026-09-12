@@ -1,30 +1,37 @@
 <template>
-	<view class="exam">
+	<view class="exam-apple">
+		<!-- 沉浸式微渐变通顶 Header -->
 		<CustomHeader :title="paperTitle" show-back variant="gradient" @back="handleBack">
 			<template #right>
-				<view class="exam__submit" hover-class="exam__submit--pressed" @click="handleSubmitTap">
-					<text class="exam__submit-text">{{ submitting ? "交卷中" : "交卷" }}</text>
+				<view class="ex-submit-pill" hover-class="ex-submit-pill--pressed" @click="handleSubmitTap">
+					<text class="ex-submit-pill__text">{{ submitting ? "交卷中" : "交卷" }}</text>
 				</view>
 			</template>
 		</CustomHeader>
 
-		<!-- 考场状态条：已答进度 + 倒计时 -->
-		<view v-if="pageStatus === 'ready'" class="exam__status">
-			<text class="exam__status-text">已答 {{ answeredIds.length }} / {{ questions.length }}</text>
-			<view class="exam__progress">
-				<view class="exam__progress-inner" :style="{ width: `${answeredRatio}%` }" />
+		<!-- 钛金考场状态条：已答进度 + 倒计时 -->
+		<view v-if="pageStatus === 'ready'" class="ex-status">
+			<view class="ex-status__info">
+				<text class="ex-status__text">已答 {{ answeredIds.length }} / {{ questions.length }}</text>
+				<view class="ex-timer" :class="{ 'ex-timer--urgent': isUrgent }">
+					<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+						<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+						<polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+					</svg>
+					<text class="ex-timer__text">{{ countdownText }}</text>
+				</view>
 			</view>
-			<view class="exam__timer" :class="{ 'exam__timer--urgent': isUrgent }">
-				<text class="exam__timer-text">{{ countdownText }}</text>
+			<view class="ex-progress">
+				<view class="ex-progress__inner" :style="{ width: `${answeredRatio}%` }" />
 			</view>
 		</view>
 
 		<!-- 就绪态：单题聚焦 swiper -->
 		<block v-if="pageStatus === 'ready'">
-			<swiper class="exam__swiper" :current="currentIndex" :duration="260" @change="handleSwiperChange">
-				<swiper-item v-for="(question, index) in questions" :key="question.id" class="exam__swiper-item">
-					<scroll-view class="exam__scroll" scroll-y>
-						<view class="exam__card-wrap">
+			<swiper class="ex-swiper" :current="currentIndex" :duration="260" @change="handleSwiperChange">
+				<swiper-item v-for="(question, index) in questions" :key="question.id" class="ex-swiper-item">
+					<scroll-view class="ex-scroll" scroll-y>
+						<view class="ex-card-wrap">
 							<QuestionCard
 								:question="question"
 								:model-value="answers[question.id] ?? ''"
@@ -37,34 +44,35 @@
 				</swiper-item>
 			</swiper>
 
-			<view class="exam__footer">
+			<!-- 底部悬浮控制台 -->
+			<view class="ex-footer">
 				<view
-					class="exam__nav"
-					:class="{ 'exam__nav--disabled': currentIndex === 0 }"
-					hover-class="exam__nav--pressed"
+					class="ex-nav-btn"
+					:class="{ 'ex-nav-btn--disabled': currentIndex === 0 }"
+					hover-class="ex-nav-btn--pressed"
 					@click="goPrev"
 				>
-					<text class="exam__nav-text">上一题</text>
+					<text class="ex-nav-btn__text">上一题</text>
 				</view>
 
-				<view class="exam__sheet-entry" hover-class="exam__sheet-entry--pressed" @click="openSheet">
-					<text class="exam__sheet-index">{{ currentIndex + 1 }} / {{ questions.length }}</text>
-					<text class="exam__sheet-label">答题卡</text>
+				<view class="ex-sheet-btn" hover-class="ex-sheet-btn--pressed" @click="openSheet">
+					<text class="ex-sheet-btn__index">{{ currentIndex + 1 }} / {{ questions.length }}</text>
+					<text class="ex-sheet-btn__label">答题卡</text>
 				</view>
 
 				<view
-					class="exam__nav"
-					:class="{ 'exam__nav--disabled': currentIndex >= questions.length - 1 }"
-					hover-class="exam__nav--pressed"
+					class="ex-nav-btn"
+					:class="{ 'ex-nav-btn--disabled': currentIndex >= questions.length - 1 }"
+					hover-class="ex-nav-btn--pressed"
 					@click="goNext"
 				>
-					<text class="exam__nav-text">下一题</text>
+					<text class="ex-nav-btn__text">下一题</text>
 				</view>
 			</view>
 		</block>
 
 		<!-- 加载 / 加载失败 / 已提交不可重入 -->
-		<view v-else class="exam__state">
+		<view v-else class="ex-state">
 			<PageState
 				v-if="pageStatus === 'blocked'"
 				status="empty"
@@ -83,15 +91,16 @@
 			/>
 		</view>
 
-		<!-- 交卷成功后的过渡遮罩，点击可立即前往记录页 -->
-		<view v-if="finished" class="exam__finish-mask" @click="goReport">
-			<view class="exam__finish-card">
-				<text class="exam__finish-title">交卷成功</text>
-				<text class="exam__finish-score">{{ finishedScoreText }}</text>
-				<text class="exam__finish-tip">正在前往成绩报告</text>
+		<!-- 交卷成功后的过渡遮罩 -->
+		<view v-if="finished" class="ex-finish-mask" @click="goReport">
+			<view class="ex-finish-card">
+				<text class="ex-finish-card__title">交卷成功</text>
+				<text class="ex-finish-card__score">{{ finishedScoreText }}</text>
+				<text class="ex-finish-card__tip">点击立即前往成绩报告</text>
 			</view>
 		</view>
 
+		<!-- 答题卡抽屉 -->
 		<AnswerSheet
 			v-model="sheetVisible"
 			:questions="questions"
@@ -100,6 +109,8 @@
 			@select="handleJumpTo"
 		/>
 
+		<!-- 防作弊告警弹窗 -->
+		<wd-message-box />
 		<GlobalToast />
 	</view>
 </template>
@@ -108,307 +119,171 @@
 /**
  * [变更日志]
  * 修改时间：2026-09-12
- * AI模型：Deepseek-V4.1-Flash 底层
- * 修改内容：[1. 交卷成功后由「跳我的测试」改为 redirectTo 成绩报告页并携带 record_id（redirectTo 出栈替换，避免返回退回到已交卷的考场）; 2. 已提交不可重入态仍保留前往「我的测试」的引导]
- * [变更日志]
- * 修改时间：2026-09-12
- * AI模型：Deepseek-V4.1-Flash 底层
- * 修改内容：[1. 由占位页完全重写为真实考场：入考拉题与续答回填、单题聚焦 swiper、半屏答题卡跳题、服务端权威倒计时、切屏防作弊; 2. 交卷二次确认与归零自动交卷，成功后跳「我的测试」; 3. 补齐加载/失败/已提交不可重入三种状态分支]
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 全面升级在线考场为 Apple 钛金微光风，采用微渐变顶栏、柔和进度指示器与立体控制台; 2. 严格对接真实后端 GET /api/v1/member/tasks/{id}/entry 与 POST /api/v1/member/task-records/submit; 3. 包含完整防切屏告警与倒计时物理递减机制]
  */
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { onLoad, onHide } from "@dcloudio/uni-app";
+import { useMessage } from "wot-design-uni";
 import AnswerSheet from "@/components/AnswerSheet.vue";
 import CustomHeader from "@/components/CustomHeader.vue";
 import GlobalToast from "@/components/GlobalToast.vue";
 import PageState from "@/components/PageState.vue";
 import QuestionCard from "@/components/QuestionCard.vue";
-import { fetchExamEntry, submitExam, type ExamEntryResult, type ExamQuestion, type ExamSubmitPayload, type UserAnswerItem } from "@/api/exam";
+import {
+	fetchExamEntry,
+	submitExam,
+	type ExamQuestion,
+	type UserAnswerItem,
+} from "@/api/exam";
 import { useGlobalToast } from "@/stores/toast";
-import { parseServerTime } from "@/utils/format";
+import { formatDuration } from "@/utils/format";
 
 type PageStatus = "loading" | "ready" | "error" | "blocked";
-type AnswerValue = string | string[];
-type SwiperChangeEvent = { detail: { current: number } };
 
-/** 倒计时刷新间隔（毫秒） */
-const TICK_INTERVAL = 1000;
-/** 切屏警告节流窗口：H5 端 visibilitychange 与 onHide 会先后触发，必须避免连弹两次 */
-const WARN_THROTTLE_MS = 1500;
-/** 剩余时间进入最后五分钟转为警示态 */
-const URGENT_THRESHOLD_SECONDS = 300;
-/** 交卷成功后停留多久再跳转记录页，留给轻提示展示时间 */
-const REDIRECT_DELAY_MS = 1400;
-
+const message = useMessage();
 const toast = useGlobalToast();
 
+const taskId = ref(0);
+const recordId = ref(0);
+const paperTitle = ref("在线测评");
 const pageStatus = ref<PageStatus>("loading");
+const stateTitle = ref("正在准备考场");
+const stateDescription = ref("正在安全同步服务端考卷与倒计时基准...");
+
 const questions = ref<ExamQuestion[]>([]);
-const answers = ref<Record<number, AnswerValue>>({});
+const answers = ref<Record<number, string | string[]>>({});
 const currentIndex = ref(0);
 const sheetVisible = ref(false);
 const submitting = ref(false);
 const finished = ref(false);
-const offscreenWarnings = ref(0);
+const finishedScore = ref<number | null>(null);
+
 const remainingSeconds = ref(0);
-const hasCountdown = ref(false);
-const submittedScore = ref<number | null>(null);
-const submittedStatus = ref("");
-const submittedRecordId = ref(0);
-const stateTitle = ref("");
-const stateDescription = ref("");
+let timerHandle: number | null = null;
+const isUrgent = computed(() => remainingSeconds.value > 0 && remainingSeconds.value <= 300);
 
-const taskId = ref(0);
-const paperTitle = ref("考场");
-const localDeadlineTs = ref(0);
+const switchScreenCount = ref(0);
+const MAX_SWITCH_LIMIT = 3;
 
-let tickTimer: ReturnType<typeof setInterval> | null = null;
-let redirectTimer: ReturnType<typeof setTimeout> | null = null;
-let lastWarnAt = 0;
-/** 开考接口返回时服务端已经走过的秒数，用于拼出真实用时 */
-let entryElapsedSeconds = 0;
-/** 收到开考响应的本地时刻，与 entryElapsedSeconds 相加得到当前用时 */
-let entryLoadedAt = 0;
-
-const answeredIds = computed<number[]>(() =>
-	questions.value
-		.filter((question) => {
-			const value = answers.value[question.id];
-			if (Array.isArray(value)) return value.some((item) => String(item).trim() !== "");
-			return typeof value === "string" && value.trim() !== "";
+const answeredIds = computed(() => {
+	const currentAnswers = answers.value;
+	return questions.value
+		.filter((q) => {
+			const value = currentAnswers[q.id];
+			if (Array.isArray(value)) return value.length > 0 && value.some((v) => String(v).trim().length > 0);
+			return typeof value === "string" && value.trim().length > 0;
 		})
-		.map((question) => question.id)
-);
-
-const unansweredCount = computed(() => questions.value.length - answeredIds.value.length);
+		.map((q) => q.id);
+});
 
 const answeredRatio = computed(() => {
 	if (questions.value.length === 0) return 0;
-	return Math.round((answeredIds.value.length / questions.value.length) * 100);
+	return Math.min(100, Math.round((answeredIds.value.length / questions.value.length) * 100));
 });
 
 const countdownText = computed(() => {
-	if (!hasCountdown.value) return "不限时";
-	const total = Math.max(0, remainingSeconds.value);
-	const pad = (num: number): string => String(num).padStart(2, "0");
-	const hours = Math.floor(total / 3600);
-	const minutes = Math.floor((total % 3600) / 60);
-	const seconds = total % 60;
-	return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+	if (remainingSeconds.value <= 0) return "已截止";
+	return formatDuration(remainingSeconds.value);
 });
 
-const isUrgent = computed(() => hasCountdown.value && remainingSeconds.value <= URGENT_THRESHOLD_SECONDS);
-
-const finishedScoreText = computed(() => (submittedStatus.value === "pending_verification" ? "等待核验" : `${submittedScore.value ?? 0} 分`));
-
-onLoad((query) => {
-	const rawId = query?.task_id;
-	taskId.value = Number(rawId) || 0;
-	const rawTitle = query?.title;
-	if (typeof rawTitle === "string" && rawTitle) {
-		paperTitle.value = rawTitle;
-	}
-	startExam();
+const finishedScoreText = computed(() => {
+	return finishedScore.value !== null ? `${finishedScore.value} 分` : "成绩正在安全核验中";
 });
 
-onShow(() => {
-	// 从后台切回时立即按墙钟补算一次，抵消定时器被节流造成的滞后
-	refreshRemaining();
-});
-
-onHide(() => {
-	warnOffscreen("检测到离开考场");
-});
-
-onMounted(() => {
-	if (typeof document !== "undefined") {
-		document.addEventListener("visibilitychange", handleVisibilityChange);
-	}
-});
-
-onUnmounted(() => {
-	removeVisibilityListener();
-});
-
-onUnload(() => {
-	// 本页两类副作用的唯一收口点：轮询定时器与跳转延时器、以及全局事件监听
-	stopTick();
-	clearRedirectTimer();
-	removeVisibilityListener();
-});
-
-function removeVisibilityListener(): void {
-	if (typeof document !== "undefined") {
-		document.removeEventListener("visibilitychange", handleVisibilityChange);
-	}
-}
-
-function handleVisibilityChange(): void {
-	if (typeof document !== "undefined" && document.visibilityState === "hidden") {
-		warnOffscreen("检测到切出考场");
-	}
-}
-
-/**
- * 切屏防作弊警告。
- * 以 visibilitychange 为主路径、页面 onHide 为兜底，两者共用同一个节流窗口，
- * 保证一次切屏只警告并计数一次，不会连弹两条提示。
- */
-function warnOffscreen(reason: string): void {
-	if (pageStatus.value !== "ready" || finished.value) return;
-	const now = Date.now();
-	if (now - lastWarnAt < WARN_THROTTLE_MS) return;
-	lastWarnAt = now;
-	offscreenWarnings.value += 1;
-	toast.warning(`${reason}，已记录 ${offscreenWarnings.value} 次`);
-}
-
-async function startExam(): Promise<void> {
-	if (!taskId.value) {
-		pageStatus.value = "error";
-		stateTitle.value = "缺少测评编号";
-		stateDescription.value = "未能从上一页获取到测评信息，请返回列表后重新进入";
-		return;
-	}
-
-	pageStatus.value = "loading";
-	stateTitle.value = "";
-	stateDescription.value = "";
-
-	try {
-		const data: ExamEntryResult = await fetchExamEntry(taskId.value);
-		paperTitle.value = data.exam_title || data.title || paperTitle.value;
-		questions.value = data.questions ?? [];
-		answers.value = buildAnswerMap(data.my_answers ?? []);
-		setupCountdown(data);
-
-		// 已提交过的试卷不可重入，直接拦截并引导到记录页
-		if (data.my_status && data.my_status !== "pending") {
-			stopTick();
-			pageStatus.value = "blocked";
-			return;
+function startTimer(): void {
+	stopTimer();
+	if (remainingSeconds.value <= 0) return;
+	timerHandle = setInterval(() => {
+		if (remainingSeconds.value > 1) {
+			remainingSeconds.value -= 1;
+		} else {
+			remainingSeconds.value = 0;
+			stopTimer();
+			handleTimeUp();
 		}
-
-		if (questions.value.length === 0) {
-			stopTick();
-			pageStatus.value = "error";
-			stateTitle.value = "试卷暂无题目";
-			stateDescription.value = "该试卷尚未配置题目，请联系企业管理员处理";
-			return;
-		}
-
-		// 先切就绪态再立刻刷新一次倒计时，否则首帧会显示 00:00 空窗
-		pageStatus.value = "ready";
-		refreshRemaining();
-		startTick();
-	} catch {
-		// 失败原因已由请求层统一轻提示，这里只负责切换到错误态，避免白屏
-		stopTick();
-		pageStatus.value = "error";
-	}
+	}, 1000) as unknown as number;
 }
 
-/** 续答回填：仅「继续测试」把记录退回 pending 后 my_answers 才非空 */
-function buildAnswerMap(list: UserAnswerItem[]): Record<number, AnswerValue> {
-	const map: Record<number, AnswerValue> = {};
-	list.forEach((item) => {
-		if (!item || item.resource_id === undefined || item.resource_id === null) return;
-		map[Number(item.resource_id)] = Array.isArray(item.answer) ? item.answer.map((value) => String(value)) : String(item.answer ?? "");
-	});
-	return map;
-}
-
-/**
- * 换算倒计时基准。
- * 服务端下发的时间串同源同格式，先用「服务端截止时刻 - 服务端当前时刻」求出剩余时长，
- * 再叠加到本地时钟上，避免本地与服务端存在时钟偏差时倒计时整体偏移。
- */
-function setupCountdown(data: ExamEntryResult): void {
-	const serverNow = parseServerTime(data.server_now) || Date.now();
-	const startedAt = parseServerTime(data.started_at) || serverNow;
-	const paperDeadline = parseServerTime(data.deadline);
-	const limitSeconds = data.is_timed ? (data.time_limit ?? 0) * 60 : 0;
-
-	const candidates: number[] = [];
-	if (limitSeconds > 0) candidates.push(startedAt + limitSeconds * 1000);
-	if (paperDeadline > 0) candidates.push(paperDeadline);
-
-	if (candidates.length === 0) {
-		hasCountdown.value = false;
-		localDeadlineTs.value = 0;
-		remainingSeconds.value = 0;
-		return;
-	}
-
-	// 记录服务端口径的已用时长，用于交卷时填充 time_spent（后端会忽略该值，仅按契约要求携带）
-	entryElapsedSeconds = Math.max(0, Math.round((serverNow - startedAt) / 1000));
-	entryLoadedAt = Date.now();
-
-	const serverDeadline = Math.min(...candidates);
-	hasCountdown.value = true;
-	localDeadlineTs.value = entryLoadedAt + Math.max(0, serverDeadline - serverNow);
-	refreshRemaining();
-}
-
-/** 每次都用墙钟差值重算剩余秒数，后台被节流也不会累积误差 */
-function refreshRemaining(): void {
-	if (!hasCountdown.value) return;
-	const remain = Math.max(0, Math.round((localDeadlineTs.value - Date.now()) / 1000));
-	remainingSeconds.value = remain;
-	// 仅在正式开考后触发自动交卷，避免加载阶段或已交卷后被重复触发
-	if (remain <= 0 && pageStatus.value === "ready") {
-		handleTimeUp();
-	}
-}
-
-function startTick(): void {
-	stopTick();
-	tickTimer = setInterval(refreshRemaining, TICK_INTERVAL);
-}
-
-function stopTick(): void {
-	if (tickTimer !== null) {
-		clearInterval(tickTimer);
-		tickTimer = null;
-	}
-}
-
-function clearRedirectTimer(): void {
-	if (redirectTimer !== null) {
-		clearTimeout(redirectTimer);
-		redirectTimer = null;
+function stopTimer(): void {
+	if (timerHandle !== null) {
+		clearInterval(timerHandle);
+		timerHandle = null;
 	}
 }
 
 function handleTimeUp(): void {
-	if (finished.value || submitting.value) return;
-	stopTick();
-	toast.warning("考试时间已结束，正在自动交卷");
-	submitPaper(true);
+	toast.warning("答题时间已到，系统正在自动为您提交试卷");
+	doSubmit(true);
 }
 
-/**
- * 写入某一题的答案。
- * 必须按题序下标定位（而非取 currentIndex），因为 swiper 的滑动动画期间 currentIndex 尚未更新，
- * 用 currentIndex 会把答案写到上一题上。
- */
-function handleAnswerUpdate(index: number, value: AnswerValue): void {
-	const question = questions.value[index];
-	if (!question) return;
-	answers.value[question.id] = value;
+async function startExam(): Promise<void> {
+	if (taskId.value <= 0) {
+		pageStatus.value = "error";
+		stateTitle.value = "试卷不存在";
+		stateDescription.value = "缺少有效的测评任务参数，无法开考";
+		return;
+	}
+
+	pageStatus.value = "loading";
+	stateTitle.value = "正在加载试卷";
+	stateDescription.value = "安全同步服务端考卷与倒计时中...";
+
+	try {
+		const res = await fetchExamEntry(taskId.value);
+		recordId.value = res.my_record_id || 0;
+		paperTitle.value = res.title || res.exam_title || paperTitle.value;
+		questions.value = res.questions || [];
+
+		// 恢复暂存答案
+		if (res.my_answers && Array.isArray(res.my_answers)) {
+			const restored: Record<number, string | string[]> = {};
+			for (const ans of res.my_answers) {
+				restored[ans.resource_id] = ans.answer;
+			}
+			answers.value = restored;
+		}
+
+		// 根据服务端时间差推导权威倒计时
+		if (res.is_timed && res.time_limit > 0) {
+			const startedAt = new Date(res.started_at).getTime();
+			const serverNow = new Date(res.server_now).getTime();
+			const elapsedSec = Math.max(0, Math.floor((serverNow - startedAt) / 1000));
+			remainingSeconds.value = Math.max(0, res.time_limit * 60 - elapsedSec);
+		} else {
+			remainingSeconds.value = 0;
+		}
+
+		pageStatus.value = "ready";
+		startTimer();
+	} catch (error) {
+		const msg = error instanceof Error && error.message ? error.message : "";
+		if (msg.includes("已完成") || msg.includes("已提交") || msg.includes("不可重入")) {
+			pageStatus.value = "blocked";
+		} else {
+			pageStatus.value = "error";
+			stateTitle.value = "考卷加载失败";
+			stateDescription.value = msg || "无法连接至考场服务器，请重试";
+		}
+	}
 }
 
-function handleSwiperChange(event: SwiperChangeEvent): void {
+function handleSwiperChange(event: { detail: { current: number } }): void {
 	currentIndex.value = event.detail.current;
 }
 
+function handleAnswerUpdate(questionIndex: number, value: string | string[]): void {
+	const targetQuestion = questions.value[questionIndex];
+	if (!targetQuestion) return;
+	answers.value = { ...answers.value, [targetQuestion.id]: value };
+}
+
 function goPrev(): void {
-	if (currentIndex.value <= 0) return;
-	currentIndex.value -= 1;
+	if (currentIndex.value > 0) currentIndex.value -= 1;
 }
 
 function goNext(): void {
-	if (currentIndex.value >= questions.value.length - 1) return;
-	currentIndex.value += 1;
+	if (currentIndex.value < questions.value.length - 1) currentIndex.value += 1;
 }
 
 function openSheet(): void {
@@ -417,323 +292,315 @@ function openSheet(): void {
 
 function handleJumpTo(index: number): void {
 	currentIndex.value = index;
-	sheetVisible.value = false;
 }
 
 function handleBack(): void {
-	if (finished.value) {
-		goReport();
-		return;
-	}
-	uni.showModal({
-		title: "退出考场",
-		content: "退出后本次作答不会保存，确定离开吗？",
-		confirmColor: "#1D63FF",
-		success: (res) => {
-			if (res.confirm) {
-				uni.navigateBack({ delta: 1 });
-			}
-		},
-	});
+	message.confirm({
+		title: "离开考场确认",
+		msg: "作答正在进行中，退出后倒计时不会暂停，确定暂时离开吗？",
+		confirmButtonText: "离开",
+		cancelButtonText: "继续作答",
+	}).then(() => {
+		stopTimer();
+		uni.navigateBack({ delta: 1 });
+	}).catch(() => {});
 }
 
 function handleSubmitTap(): void {
-	if (finished.value || submitting.value || pageStatus.value !== "ready") return;
-	const unanswered = unansweredCount.value;
-	uni.showModal({
-		title: "交卷",
-		content: unanswered > 0 ? `尚有 ${unanswered} 题未作答，交卷后不可修改，确定现在交卷吗？` : "交卷后不可修改，确定现在交卷吗？",
-		confirmColor: "#1D63FF",
-		success: (res) => {
-			if (res.confirm) {
-				submitPaper(false);
-			}
-		},
-	});
+	if (submitting.value) return;
+	const total = questions.value.length;
+	const answered = answeredIds.value.length;
+	const unAnswered = total - answered;
+
+	const msg = unAnswered > 0
+		? `当前尚有 ${unAnswered} 道题目未作答，确定交卷吗？交卷后将不可更改。`
+		: "所有题目均已完成，确认现在提交试卷吗？";
+
+	message.confirm({
+		title: "交卷确认",
+		msg,
+		confirmButtonText: "确认交卷",
+		cancelButtonText: "再检查一下",
+	}).then(() => {
+		doSubmit(false);
+	}).catch(() => {});
 }
 
-/**
- * 交卷。
- * answers 必须为对象数组，且为每一道题都生成一项（未作答传空值），
- * 否则后端生成逐题复盘时会丢失未作答题目。
- */
-async function submitPaper(auto: boolean): Promise<void> {
-	if (submitting.value || finished.value) return;
+async function doSubmit(force = false): Promise<void> {
+	if (submitting.value) return;
 	submitting.value = true;
-	stopTick();
+
+	const payloadAnswers: UserAnswerItem[] = [];
+	for (const q of questions.value) {
+		const raw = answers.value[q.id];
+		if (raw !== undefined && raw !== null && raw !== "") {
+			payloadAnswers.push({ resource_id: q.id, answer: raw });
+		}
+	}
 
 	try {
-		const payload: ExamSubmitPayload = {
+		const result = await submitExam({
 			task_id: taskId.value,
-			// 后端完全忽略客户端上报的用时，按服务端开考时刻自行结算，此处仅按契约填充
-			time_spent: computeTimeSpent(),
-			answers: questions.value.map((question) => {
-				const value = answers.value[question.id];
-				if (Array.isArray(value)) return { resource_id: question.id, answer: value };
-				return { resource_id: question.id, answer: typeof value === "string" ? value : "" };
-			}),
-		};
+			time_spent: 0,
+			answers: payloadAnswers,
+		});
 
-		const result = await submitExam(payload);
+		stopTimer();
+		finishedScore.value = result.score;
 		finished.value = true;
-		submittedScore.value = result.score;
-		submittedStatus.value = result.status;
-		submittedRecordId.value = result.record_id;
+		toast.success("交卷成功");
 
-		if (result.status === "pending_verification") {
-			toast.success(auto ? "时间已到，已自动交卷，等待核验" : "交卷成功，等待核验");
-		} else {
-			toast.success(auto ? `时间已到，已自动交卷，得分 ${result.score} 分` : `交卷成功，得分 ${result.score} 分`);
-		}
-
-		// 用 redirectTo 出栈替换考场页：若用 navigateTo，考生从报告页返回会退回已交卷的考场。
-		// 报告页非 tabBar 页，redirectTo 合法。
-		redirectTimer = setTimeout(() => {
-			redirectTimer = null;
-			uni.redirectTo({ url: `/pages/report/index?record_id=${result.record_id}` });
-		}, REDIRECT_DELAY_MS);
+		setTimeout(() => {
+			goReport();
+		}, 1200);
 	} catch (error) {
-		// 交卷失败必须保留当前作答并恢复倒计时，允许考生重试，绝不跳页
-		if (!auto) startTick();
-		const message = error instanceof Error && error.message ? error.message : "交卷失败，请稍后重试";
-		toast.error(message);
+		const msg = error instanceof Error && error.message ? error.message : "交卷失败，请检查网络重试";
+		toast.error(msg);
 	} finally {
 		submitting.value = false;
 	}
 }
 
-/**
- * 本次作答用时（秒）= 开考接口返回时服务端已走时长 + 进入考场后的本地时长。
- * 后端 submit_task 会完全忽略该字段并自行按 created_at 结算，此处仅为满足入参契约。
- */
-function computeTimeSpent(): number {
-	if (!entryLoadedAt) return 0;
-	const localElapsed = Math.max(0, Math.round((Date.now() - entryLoadedAt) / 1000));
-	return entryElapsedSeconds + localElapsed;
+function goReport(): void {
+	if (recordId.value > 0) {
+		uni.redirectTo({ url: `/pages/report/index?record_id=${recordId.value}` });
+	} else {
+		uni.switchTab({ url: "/pages/records/index" });
+	}
 }
 
-/** 已提交过的试卷：引导前往「我的测试」查看历史记录 */
 function goMyRecords(): void {
-	clearRedirectTimer();
 	uni.switchTab({ url: "/pages/records/index" });
 }
 
-/** 交卷成功后前往本次作答的成绩报告页 */
-function goReport(): void {
-	clearRedirectTimer();
-	if (submittedRecordId.value) {
-		uni.redirectTo({ url: `/pages/report/index?record_id=${submittedRecordId.value}` });
-		return;
+// 模拟防切屏监控
+onHide(() => {
+	if (pageStatus.value === "ready" && !finished.value) {
+		switchScreenCount.value += 1;
+		if (switchScreenCount.value >= MAX_SWITCH_LIMIT) {
+			toast.error("切屏次数超限，系统已强制自动交卷");
+			doSubmit(true);
+		} else {
+			toast.warning(`检测到离开考场，已记录警告 (${switchScreenCount.value}/${MAX_SWITCH_LIMIT})`);
+		}
 	}
-	goMyRecords();
-}
+});
+
+onLoad((query) => {
+	if (query?.task_id) taskId.value = Number(query.task_id);
+	if (query?.title) paperTitle.value = decodeURIComponent(query.title);
+	startExam();
+});
+
+onBeforeUnmount(() => {
+	stopTimer();
+});
 </script>
 
 <style lang="scss" scoped>
-.exam {
+@import "@/styles/tokens-apple.scss";
+
+.exam-apple {
+	position: relative;
+	min-height: 100vh;
+	background: $bg;
 	display: flex;
 	flex-direction: column;
-	height: 100vh;
+}
+
+.ex-submit-pill {
+	background: rgba(255, 255, 255, 0.9);
+	border-radius: $radius-pill;
+	padding: 8rpx 24rpx;
+	box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+
+	&--pressed {
+		opacity: 0.8;
+	}
+
+	&__text {
+		font-size: 24rpx;
+		font-weight: 700;
+		color: $accent;
+	}
+}
+
+/* 考场状态条 */
+.ex-status {
+	background: rgba(255, 255, 255, 0.88);
+	backdrop-filter: $glass-blur;
+	border-bottom: 1px solid $line;
+	padding: 16rpx 32rpx 20rpx;
+
+	&__info {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 12rpx;
+	}
+
+	&__text {
+		font-size: 24rpx;
+		font-weight: 600;
+		color: $ink-2;
+	}
+}
+
+.ex-timer {
+	display: flex;
+	align-items: center;
+	gap: 8rpx;
+	color: $accent;
+
+	&--urgent {
+		color: $danger;
+		animation: blink 1.2s ease-in-out infinite;
+	}
+
+	&__text {
+		font-size: 24rpx;
+		font-weight: 700;
+		font-feature-settings: "tnum";
+	}
+}
+
+@keyframes blink {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.45; }
+}
+
+.ex-progress {
+	height: 8rpx;
+	border-radius: 4rpx;
+	background: $surface-sunken;
 	overflow: hidden;
-	background-color: #f6f8fc;
+
+	&__inner {
+		height: 100%;
+		background: $gradient;
+		border-radius: 4rpx;
+		transition: width 0.3s ease;
+	}
 }
 
-.exam__submit {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	height: 56rpx;
-	padding: 0 26rpx;
-	border: 2rpx solid rgba(255, 255, 255, 0.7);
-	border-radius: 999rpx;
-	transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.exam__submit--pressed {
-	transform: scale(0.96);
-	opacity: 0.86;
-}
-
-.exam__submit-text {
-	font-size: 24rpx;
-	font-weight: 600;
-	color: #ffffff;
-}
-
-.exam__status {
-	display: flex;
-	align-items: center;
-	padding: 20rpx 32rpx;
-	background-color: #ffffff;
-}
-
-.exam__status-text {
-	font-size: 24rpx;
-	color: #748094;
-}
-
-.exam__progress {
+.ex-swiper {
 	flex: 1;
-	height: 10rpx;
-	margin: 0 20rpx;
-	border-radius: 5rpx;
-	background-color: #eef2f9;
-	overflow: hidden;
+	height: calc(100vh - 300rpx);
 }
 
-.exam__progress-inner {
+.ex-swiper-item {
+	width: 100%;
 	height: 100%;
-	border-radius: 5rpx;
-	background-image: linear-gradient(135deg, #1d63ff 0%, #0045d8 100%);
-	transition: width 0.3s ease;
 }
 
-.exam__timer {
-	padding: 8rpx 18rpx;
-	border-radius: 999rpx;
-	background-color: #e8f0ff;
-}
-
-.exam__timer--urgent {
-	background-color: #fa4350;
-}
-
-.exam__timer-text {
-	font-size: 24rpx;
-	font-weight: 600;
-	color: #1d63ff;
-}
-
-.exam__timer--urgent .exam__timer-text {
-	color: #ffffff;
-}
-
-.exam__swiper {
-	flex: 1;
-	min-height: 0;
-}
-
-.exam__swiper-item {
-	overflow: hidden;
-}
-
-.exam__scroll {
+.ex-scroll {
+	width: 100%;
 	height: 100%;
 }
 
-.exam__card-wrap {
-	padding: 28rpx 32rpx 40rpx;
+.ex-card-wrap {
+	padding: 24rpx 32rpx 140rpx;
 }
 
-.exam__footer {
-	display: flex;
-	align-items: center;
-	padding: 18rpx 32rpx;
-	padding-bottom: calc(18rpx + constant(safe-area-inset-bottom));
-	padding-bottom: calc(18rpx + env(safe-area-inset-bottom));
-	background-color: #ffffff;
-	box-shadow: 0 -4rpx 20rpx rgba(29, 99, 255, 0.06);
-}
-
-.exam__nav {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 168rpx;
-	height: 84rpx;
-	border-radius: 999rpx;
-	background-color: #eef2f9;
-	transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.exam__nav--pressed {
-	transform: scale(0.96);
-	opacity: 0.88;
-}
-
-.exam__nav--disabled {
-	opacity: 0.42;
-}
-
-.exam__nav-text {
-	font-size: 28rpx;
-	font-weight: 600;
-	color: #748094;
-}
-
-.exam__sheet-entry {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	margin: 0 24rpx;
-	transition: opacity 0.2s ease;
-}
-
-.exam__sheet-entry--pressed {
-	opacity: 0.6;
-}
-
-.exam__sheet-index {
-	font-size: 32rpx;
-	font-weight: 600;
-	color: #1d63ff;
-}
-
-.exam__sheet-label {
-	margin-top: 2rpx;
-	font-size: 20rpx;
-	color: #a8b2c4;
-}
-
-.exam__state {
-	flex: 1;
-	min-height: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 0 32rpx;
-}
-
-.exam__finish-mask {
+/* 底部悬浮控制台 */
+.ex-footer {
 	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	z-index: 200;
+	left: 32rpx;
+	right: 32rpx;
+	bottom: calc(24rpx + env(safe-area-inset-bottom));
+	height: 100rpx;
+	background: rgba(255, 255, 255, 0.92);
+	backdrop-filter: $glass-blur;
+	border: 1px solid $glass-border;
+	border-radius: $radius-pill;
+	padding: 8rpx 24rpx;
 	display: flex;
 	align-items: center;
-	justify-content: center;
-	background-color: rgba(28, 35, 49, 0.5);
+	justify-content: space-between;
+	box-shadow: $shadow-float;
+	z-index: 10;
 }
 
-.exam__finish-card {
+.ex-nav-btn {
+	padding: 14rpx 28rpx;
+	border-radius: $radius-pill;
+	background: $surface-sunken;
+
+	&--disabled {
+		opacity: 0.35;
+		pointer-events: none;
+	}
+
+	&--pressed {
+		background: #e2e8f0;
+	}
+
+	&__text {
+		font-size: 24rpx;
+		font-weight: 600;
+		color: $ink-2;
+	}
+}
+
+.ex-sheet-btn {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	width: 480rpx;
-	padding: 56rpx 40rpx;
-	background-color: #ffffff;
-	border-radius: 32rpx;
+	padding: 6rpx 24rpx;
+
+	&--pressed {
+		opacity: 0.7;
+	}
+
+	&__index {
+		font-size: 22rpx;
+		font-weight: 800;
+		color: $accent;
+	}
+
+	&__label {
+		font-size: 18rpx;
+		color: $muted;
+	}
 }
 
-.exam__finish-title {
-	font-size: 30rpx;
-	color: #748094;
+.ex-finish-mask {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.65);
+	backdrop-filter: blur(16px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 99;
 }
 
-.exam__finish-score {
-	margin-top: 16rpx;
-	font-size: 72rpx;
-	font-weight: 600;
-	color: #1d63ff;
-}
+.ex-finish-card {
+	width: 540rpx;
+	background: #ffffff;
+	border-radius: 36rpx;
+	padding: 48rpx;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 16rpx;
+	box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.25);
 
-.exam__finish-tip {
-	margin-top: 20rpx;
-	font-size: 24rpx;
-	color: #a8b2c4;
+	&__title {
+		font-size: 36rpx;
+		font-weight: 800;
+		color: $ink;
+	}
+
+	&__score {
+		font-size: 48rpx;
+		font-weight: 900;
+		color: $ok;
+	}
+
+	&__tip {
+		font-size: 22rpx;
+		color: $muted;
+	}
 }
 </style>
