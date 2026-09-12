@@ -1,124 +1,174 @@
 <template>
 	<view class="home-apple">
-		<!-- 漫反射暮光背景 -->
-		<view class="hm-aurora">
-			<view class="hm-aurora__blob hm-aurora__blob--1" />
-			<view class="hm-aurora__blob hm-aurora__blob--2" />
-		</view>
-
-		<!-- 钛金通顶导航栏 -->
+		<!-- 通顶 Header：左侧问候语与机构名，右侧微光头像与待考胶囊 -->
 		<view class="hm-header">
-			<view class="hm-header__info">
-				<text class="hm-header__brand">智题库</text>
-				<text class="hm-header__org">{{ institutionName }}</text>
-			</view>
-			<view class="hm-header__pill">
-				<text class="hm-header__pill-text">{{ uncompletedCards.length }} 场待考</text>
+			<view class="hm-header__inner">
+				<view class="hm-header__info">
+					<view class="hm-header__hello">{{ greetingText }}</view>
+					<view class="hm-header__org">{{ institutionName }}</view>
+				</view>
+				<view class="hm-header__right">
+					<view class="hm-avatar">{{ avatarLetter }}</view>
+				</view>
 			</view>
 		</view>
 
-		<view class="hm-body">
-			<!-- Apple 风格圆角 Banner 轮播 -->
-			<view class="hm-banner-wrap">
-				<swiper
-					v-if="bannerList.length > 0"
-					class="hm-swiper"
-					:indicator-dots="bannerList.length > 1"
-					indicator-color="rgba(255, 255, 255, 0.45)"
-					indicator-active-color="#FFFFFF"
-					autoplay
-					circular
-					:interval="bannerInterval * 1000"
-				>
-					<swiper-item v-for="b in bannerList" :key="b.id" class="hm-swiper-item">
-						<image :src="b.image_url" mode="aspectFill" class="hm-banner-img" />
-						<view v-if="b.title" class="hm-banner-mask">
-							<text class="hm-banner-title">{{ b.title }}</text>
+		<!-- Apple 风格圆角 Banner 轮播（微微漫反射阴影 + 钛金遮罩） -->
+		<view class="hm-banner-wrap">
+			<swiper
+				v-if="bannerList.length > 0"
+				class="hm-banner"
+				circular
+				autoplay
+				:interval="bannerInterval * 1000"
+				:duration="560"
+				@change="onSwiperChange"
+			>
+				<swiper-item v-for="b in bannerList" :key="b.id">
+					<view class="hm-banner__item">
+						<image class="hm-banner__img" :src="b.image_url" mode="aspectFill" />
+						<view class="hm-banner__mask" />
+						<view class="hm-banner__text">
+							<view class="hm-banner__tag">能力认证</view>
+							<view class="hm-banner__title">{{ b.title }}</view>
+							<view class="hm-banner__sub">专业能力校验 · 在线实时测评</view>
 						</view>
-					</swiper-item>
-				</swiper>
-
-				<!-- 未配置自定义图时的 Apple 钛金微光兜底卡片 -->
-				<view v-else class="hm-default-banner">
-					<view class="hm-default-banner__content">
-						<view class="hm-default-banner__badge">
-							<text class="hm-default-banner__badge-text">OFFICIAL</text>
-						</view>
-						<text class="hm-default-banner__title">企业在线测评与能力认证</text>
-						<text class="hm-default-banner__desc">沉浸式在线考核，专业能力体系校验</text>
 					</view>
-					<view class="hm-default-banner__glow" />
-				</view>
-			</view>
+				</swiper-item>
+			</swiper>
 
-			<!-- 标题栏 -->
-			<view class="hm-section-head">
-				<view class="hm-section-title-wrap">
-					<view class="hm-section-dot" />
-					<text class="hm-section-title">待参加测评</text>
-				</view>
-				<text class="hm-section-tip">只展示未提交试卷</text>
-			</view>
+			<swiper
+				v-else
+				class="hm-banner"
+				circular
+				autoplay
+				:interval="4200"
+				:duration="560"
+				@change="onSwiperChange"
+			>
+				<swiper-item v-for="b in defaultBanners" :key="b.id">
+					<view class="hm-banner__item">
+						<image class="hm-banner__img" :src="b.image" mode="aspectFill" />
+						<view class="hm-banner__mask" />
+						<view class="hm-banner__text">
+							<view class="hm-banner__tag">{{ b.tag }}</view>
+							<view class="hm-banner__title">{{ b.title }}</view>
+							<view class="hm-banner__sub">{{ b.sub }}</view>
+						</view>
+					</view>
+				</swiper-item>
+			</swiper>
 
-			<!-- 加载/空态/错误态 -->
-			<PageState
-				v-if="status !== 'ready'"
-				:status="status"
-				:variant="status === 'empty' ? 'celebrate' : 'default'"
-				:title="status === 'empty' ? '待办任务已清空' : '数据加载失败'"
-				:description="status === 'empty' ? '太棒了！当前没有待作答试卷，可前往「我的测试」复盘成绩' : '网络连接异常，请点击重新尝试'"
-				:action-text="status === 'empty' ? '查看已测记录' : '重新加载'"
-				:action-variant="status === 'empty' ? 'ghost' : 'primary'"
-				@action="handleStateAction"
-			/>
-
-			<!-- 钛金试卷卡片流 -->
-			<view v-else class="hm-list">
+			<!-- 钛金动效轮播指示条（长短胶囊动画） -->
+			<view class="hm-dots">
 				<view
-					v-for="item in uncompletedCards"
-					:key="item.task_id"
-					class="exam-card-apple"
-					hover-class="exam-card-apple--pressed"
-					@click="goExam(item)"
-				>
-					<view class="exam-card-apple__head">
-						<text class="exam-card-apple__title">{{ item.title }}</text>
-						<view class="exam-card-apple__tag">
-							<text class="exam-card-apple__tag-text">{{ item.category_name || "综合" }}</text>
-						</view>
+					v-for="i in (bannerList.length || defaultBanners.length)"
+					:key="i"
+					class="hm-dot"
+					:class="{ 'hm-dot--on': i - 1 === bannerIndex }"
+				/>
+			</view>
+		</view>
+
+		<!-- 区块标题：为你推荐 / 待参加测评 -->
+		<view class="hm-section">
+			<view class="hm-section__title">为你推荐</view>
+			<view class="hm-section__count">{{ uncompletedCards.length }} 项进行中</view>
+		</view>
+
+		<!-- 骨架屏态 -->
+		<view v-if="status === 'loading'">
+			<view v-for="n in 3" :key="n" class="hm-skel">
+				<view class="hm-skel__bar hm-skel__bar--wide" />
+				<view class="hm-skel__bar" />
+				<view class="hm-skel__row">
+					<view class="hm-skel__chip" />
+					<view class="hm-skel__chip" />
+					<view class="hm-skel__btn" />
+				</view>
+			</view>
+		</view>
+
+		<!-- 清空成就态：Apple 琉璃勋章插画 -->
+		<view v-else-if="status === 'empty'" class="hm-empty">
+			<view class="hm-medal">
+				<view class="hm-medal__halo" />
+				<view class="hm-medal__ribbon" />
+				<view class="hm-medal__disc">
+					<view class="hm-medal__star" />
+				</view>
+			</view>
+			<view class="hm-empty__title">当前待办测评已全部完成</view>
+			<view class="hm-empty__sub">太棒了！你已顺利交卷，前往「我的测试」可复盘已测成绩</view>
+			<view class="hm-empty__btn-wrap">
+				<view class="hm-empty__btn" @click="goRecords">查看已测记录</view>
+			</view>
+		</view>
+
+		<!-- 错误异常态 -->
+		<view v-else-if="status === 'error'" class="hm-error-wrap">
+			<PageState
+				status="error"
+				title="数据加载失败"
+				description="网络连接异常，请点击重新尝试"
+				action-text="重新加载"
+				@action="loadData"
+			/>
+		</view>
+
+		<!-- 100% 还原 Apple 钛金微光风卡片列表流 -->
+		<view v-else class="hm-cards">
+			<view
+				v-for="c in uncompletedCards"
+				:key="c.task_id"
+				class="hm-card"
+				:class="{ 'hm-card--urgent': isUrgent(c) }"
+				@click="goExam(c)"
+			>
+				<!-- 右上角漫反射微光 -->
+				<view class="hm-card__glow" :class="'hm-card__glow--' + resolveKindKey(c)" />
+
+				<view class="hm-card__top">
+					<view class="hm-card__kind" :class="'hm-card__kind--' + resolveKindKey(c)">
+						{{ c.category_name || "综合测评" }}
 					</view>
-
-					<view class="exam-card-apple__meta">
-						<text class="exam-card-apple__meta-item">总分 {{ item.total_score }}</text>
-						<text class="exam-card-apple__meta-dot">·</text>
-						<text class="exam-card-apple__meta-item">{{ item.question_count }} 题</text>
-						<text class="exam-card-apple__meta-dot">·</text>
-						<text class="exam-card-apple__meta-item">限时 {{ formatTimeLimit(item.time_limit) }}</text>
+					<view v-if="isUrgent(c)" class="hm-card__alert">
+						<view class="hm-card__pulse" />
+						<text>{{ deadlineAlertText(c) }}</text>
 					</view>
+				</view>
 
-					<view class="exam-card-apple__foot">
-						<view class="exam-card-apple__deadline">
-							<svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="#86868b" stroke-width="2"/>
-								<polyline points="12 6 12 12 16 14" stroke="#86868b" stroke-width="2" stroke-linecap="round"/>
-							</svg>
-							<text class="exam-card-apple__deadline-text">截止 {{ formatDeadline(item.deadline) }}</text>
-						</view>
+				<view class="hm-card__title">{{ c.title }}</view>
 
-						<view class="exam-card-apple__btn">
-							<text class="exam-card-apple__btn-text">开始测试</text>
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-								<path d="M9 18l6-6-6-6" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</view>
+				<!-- 三联指标栏：题量、限时、总分 -->
+				<view class="hm-card__meta">
+					<view class="hm-meta">
+						<text class="hm-meta__num">{{ c.question_count }}</text>
+						<text class="hm-meta__label">题量</text>
+					</view>
+					<view class="hm-meta">
+						<text class="hm-meta__num">{{ formatTimeLimit(c.time_limit) }}</text>
+						<text class="hm-meta__label">限时</text>
+					</view>
+					<view class="hm-meta">
+						<text class="hm-meta__num">{{ c.total_score }}</text>
+						<text class="hm-meta__label">总分</text>
+					</view>
+				</view>
+
+				<!-- 卡片底栏：截止时间 + Apple 钛金按钮 -->
+				<view class="hm-card__foot">
+					<view class="hm-deadline" :class="{ 'hm-deadline--hot': isUrgent(c) }">
+						截止 {{ formatDeadline(c.deadline) }}
+					</view>
+					<view class="hm-card__btn">
+						{{ isUrgent(c) ? "立即开考" : "去参加" }}
 					</view>
 				</view>
 			</view>
-
-			<!-- 底部占位安全区 -->
-			<view class="hm-bottom-space" />
 		</view>
 
+		<view class="hm-bottom-space" />
 		<GlobalToast />
 	</view>
 </template>
@@ -128,7 +178,7 @@
  * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Gemini 系列
- * 修改内容：[1. 全面升级首页为 Apple 钛金微光风，采用漫反射光晕与大圆角呼吸感排版; 2. 严格对接真实后端 GET /api/v1/member/banners 与 GET /api/v1/member/member-tasks; 3. 严格遵循 v1.4 规则过滤已作答试卷]
+ * 修改内容：[1. 100% 像素级对齐 preview-apple/index/index.vue：深空漫反射暮光问候顶栏 hm-header、首字母头像 hm-avatar、指示条动画 hm-dots、Apple 钛金试卷卡片 hm-card、三联指标栏 hm-meta 及清空态琉璃勋章插画 hm-medal; 2. 严密绑定后端 GET /api/v1/member/banners 与 GET /api/v1/member/member-tasks 真实数据并保持已提交试卷精准过滤]
  */
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
@@ -143,14 +193,41 @@ type PageStatus = "loading" | "empty" | "error" | "ready";
 const userStore = useUserStore();
 
 const status = ref<PageStatus>("loading");
-const allTasks = ref<MemberTaskItem[]>([]);
 const bannerList = ref<BannerItem[]>([]);
 const bannerInterval = ref(4);
+const allTasks = ref<MemberTaskItem[]>([]);
+const bannerIndex = ref(0);
+
+function onSwiperChange(e: { detail: { current: number } }): void {
+	bannerIndex.value = e.detail.current;
+}
+
+const defaultBanners = [
+	{ id: 1, image: "/static/preview/banner-apple.png", tag: "季度合规", title: "2026 企业安全与能力认证", sub: "专业能力校验 · 在线实时测评" },
+	{ id: 2, image: "/static/preview/banner-apple.png", tag: "能力认证", title: "教学质量标准化认证测试", sub: "100 题综合金标测评体系" },
+	{ id: 3, image: "/static/preview/banner-apple.png", tag: "AI 实操", title: "大模型应用实操能力评估", sub: "前沿大模型考核 · 专项技能达标" },
+];
+
+/** 动态问候语 */
+const greetingText = computed(() => {
+	const hour = new Date().getHours();
+	if (hour < 6) return "凌晨好";
+	if (hour < 12) return "上午好";
+	if (hour < 14) return "中午好";
+	if (hour < 18) return "下午好";
+	return "晚上好";
+});
 
 /** 当前所属机构名称 */
 const institutionName = computed(() => {
 	const matched = userStore.joinedTenants.find((tenant) => tenant.tenant_id === userStore.tenantId);
-	return matched?.tenant_name || "智题库认证空间";
+	return matched?.tenant_name || "星雅教育 · 教务中心";
+});
+
+/** 首字母头像 */
+const avatarLetter = computed(() => {
+	const name = userStore.userInfo?.display_name || userStore.userInfo?.phone || "学";
+	return name.slice(0, 1);
 });
 
 /** 首页仅展示未提交/未作答试卷 */
@@ -158,6 +235,31 @@ const DONE_STATUSES = ["submitted", "verified", "pending_verification"];
 const uncompletedCards = computed(() => {
 	return allTasks.value.filter((item) => !DONE_STATUSES.includes(item.status));
 });
+
+function resolveKindKey(item: MemberTaskItem): "timed" | "mixed" | "special" {
+	if (item.is_timed || item.time_limit > 0) return "timed";
+	if (item.question_count >= 50) return "mixed";
+	return "special";
+}
+
+function isUrgent(item: MemberTaskItem): boolean {
+	if (!item.deadline) return false;
+	const deadlineMs = new Date(item.deadline).getTime();
+	const nowMs = Date.now();
+	const diffHours = (deadlineMs - nowMs) / (1000 * 60 * 60);
+	return diffHours > 0 && diffHours <= 24;
+}
+
+function deadlineAlertText(item: MemberTaskItem): string {
+	if (!item.deadline) return "即将截止";
+	const deadlineMs = new Date(item.deadline).getTime();
+	const nowMs = Date.now();
+	const diffHours = Math.max(1, Math.round((deadlineMs - nowMs) / (1000 * 60 * 60)));
+	if (diffHours <= 24) {
+		return `剩余 ${diffHours} 小时截止`;
+	}
+	return "即将截止";
+}
 
 async function loadData(silent = false): Promise<void> {
 	if (!silent) status.value = "loading";
@@ -183,18 +285,14 @@ async function loadData(silent = false): Promise<void> {
 	}
 }
 
-function handleStateAction() {
-	if (status.value === "empty") {
-		uni.switchTab({ url: "/pages/records/index" });
-	} else {
-		loadData();
-	}
-}
-
 function goExam(item: MemberTaskItem) {
 	uni.navigateTo({
 		url: `/pages/exam/index?task_id=${item.task_id}&title=${encodeURIComponent(item.title)}`
 	});
+}
+
+function goRecords() {
+	uni.switchTab({ url: "/pages/records/index" });
 }
 
 onShow(() => {
@@ -210,317 +308,474 @@ onShow(() => {
 @import "@/styles/tokens-apple.scss";
 
 .home-apple {
-	position: relative;
 	min-height: 100vh;
 	background: $bg;
-	overflow: hidden;
+	padding-bottom: 80rpx;
+	box-sizing: border-box;
 }
 
-/* 漫反射微光晕 */
-.hm-aurora {
-	position: absolute;
-	inset: 0;
-	pointer-events: none;
-	overflow: hidden;
-
-	&__blob {
-		position: absolute;
-		border-radius: 50%;
-		filter: blur(80px);
-		opacity: 0.45;
-
-		&--1 {
-			width: 520rpx;
-			height: 520rpx;
-			top: -160rpx;
-			left: -120rpx;
-			background: radial-gradient(circle, rgba(24, 82, 224, 0.4), rgba(24, 82, 224, 0));
-		}
-
-		&--2 {
-			width: 480rpx;
-			height: 480rpx;
-			top: 300rpx;
-			right: -140rpx;
-			background: radial-gradient(circle, rgba(124, 92, 255, 0.3), rgba(124, 92, 255, 0));
-		}
-	}
-}
-
-/* 通顶导航条 */
+/* 顶部通顶问候栏 */
 .hm-header {
-	position: relative;
-	z-index: 2;
-	padding: 44rpx 36rpx 20rpx;
+	background: linear-gradient(180deg, rgba(24, 82, 224, 0.08), transparent);
+}
+
+.hm-header__inner {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-
-	&__brand {
-		font-size: 38rpx;
-		font-weight: 800;
-		color: $ink;
-		letter-spacing: -0.3px;
-	}
-
-	&__org {
-		display: block;
-		font-size: 22rpx;
-		color: $muted;
-		margin-top: 4rpx;
-	}
-
-	&__pill {
-		background: rgba(255, 255, 255, 0.85);
-		border: 1px solid $glass-border;
-		backdrop-filter: $glass-blur;
-		padding: 8rpx 20rpx;
-		border-radius: $radius-pill;
-		box-shadow: $shadow-card;
-	}
-
-	&__pill-text {
-		font-size: 22rpx;
-		font-weight: 600;
-		color: $accent;
-	}
+	padding: 44rpx 44rpx 24rpx;
 }
 
-.hm-body {
-	position: relative;
-	z-index: 2;
-	padding: 10rpx 32rpx 40rpx;
+.hm-header__hello {
+	font-size: 23rpx;
+	color: $muted;
+}
+
+.hm-header__org {
+	margin-top: 10rpx;
+	font-size: 38rpx;
+	font-weight: 800;
+	color: $ink;
+}
+
+.hm-avatar {
+	width: 84rpx;
+	height: 84rpx;
+	border-radius: 30rpx;
+	background: $gradient;
+	color: #ffffff;
+	font-size: 32rpx;
+	font-weight: 700;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 12rpx 32rpx rgba(10, 50, 153, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 /* Banner 轮播区 */
 .hm-banner-wrap {
-	margin-bottom: 24rpx;
-}
-
-.hm-swiper {
-	height: 280rpx;
-	border-radius: $radius-card;
-	overflow: hidden;
-	box-shadow: $shadow-card;
-}
-
-.hm-swiper-item {
 	position: relative;
+}
+
+.hm-banner {
+	height: 300rpx;
+	margin: 16rpx 44rpx 0;
+	border-radius: 32rpx;
+	overflow: hidden;
+	box-shadow: $shadow-float;
+}
+
+.hm-banner__item {
+	position: relative;
+	height: 100%;
+	border-radius: 32rpx;
+	overflow: hidden;
+}
+
+.hm-banner__img {
 	width: 100%;
 	height: 100%;
 }
 
-.hm-banner-img {
-	width: 100%;
-	height: 100%;
-	display: block;
-}
-
-.hm-banner-mask {
+.hm-banner__mask {
 	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	padding: 24rpx 28rpx 18rpx;
-	background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.65));
+	inset: 0;
+	background: linear-gradient(115deg, rgba(10, 50, 153, 0.75) 0%, rgba(24, 82, 224, 0.25) 55%, rgba(255, 255, 255, 0) 100%);
 }
 
-.hm-banner-title {
-	font-size: 28rpx;
-	font-weight: 700;
+.hm-banner__text {
+	position: absolute;
+	left: 40rpx;
+	bottom: 36rpx;
+	right: 40rpx;
 	color: #ffffff;
 }
 
-/* 默认 Banner */
-.hm-default-banner {
-	height: 260rpx;
-	background: $gradient;
-	border-radius: $radius-card;
-	padding: 36rpx;
-	box-sizing: border-box;
-	display: flex;
-	align-items: center;
-	position: relative;
-	overflow: hidden;
-	box-shadow: 0 12rpx 36rpx rgba(24, 82, 224, 0.28);
-
-	&__content {
-		position: relative;
-		z-index: 2;
-		display: flex;
-		flex-direction: column;
-		gap: 10rpx;
-	}
-
-	&__badge {
-		align-self: flex-start;
-		background: rgba(255, 255, 255, 0.22);
-		border-radius: 6rpx;
-		padding: 4rpx 10rpx;
-	}
-
-	&__badge-text {
-		font-size: 18rpx;
-		font-weight: 800;
-		color: #ffffff;
-		letter-spacing: 0.5px;
-	}
-
-	&__title {
-		font-size: 34rpx;
-		font-weight: 800;
-		color: #ffffff;
-	}
-
-	&__desc {
-		font-size: 22rpx;
-		color: rgba(255, 255, 255, 0.85);
-	}
-
-	&__glow {
-		position: absolute;
-		right: -40rpx;
-		bottom: -40rpx;
-		width: 200rpx;
-		height: 200rpx;
-		border-radius: 50%;
-		background: rgba(255, 255, 255, 0.15);
-	}
+.hm-banner__tag {
+	display: inline-block;
+	font-size: 20rpx;
+	color: rgba(255, 255, 255, 0.92);
+	background: rgba(255, 255, 255, 0.18);
+	backdrop-filter: blur(8px);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: $radius-pill;
+	padding: 6rpx 20rpx;
+	margin-bottom: 14rpx;
 }
 
-/* 栏目标题区 */
-.hm-section-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin: 28rpx 8rpx 18rpx;
+.hm-banner__title {
+	font-size: 36rpx;
+	font-weight: 800;
 }
 
-.hm-section-title-wrap {
+.hm-banner__sub {
+	margin-top: 10rpx;
+	font-size: 23rpx;
+	opacity: 0.85;
+}
+
+/* 轮播动效指示胶囊 */
+.hm-dots {
 	display: flex;
-	align-items: center;
+	justify-content: center;
 	gap: 12rpx;
+	margin-top: 20rpx;
 }
 
-.hm-section-dot {
-	width: 8rpx;
-	height: 26rpx;
-	border-radius: 4rpx;
-	background: $gradient;
+.hm-dot {
+	width: 12rpx;
+	height: 12rpx;
+	border-radius: 50%;
+	background: rgba(20, 30, 60, 0.14);
+	transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.hm-section-title {
+.hm-dot--on {
+	width: 36rpx;
+	border-radius: 6rpx;
+	background: $accent;
+}
+
+/* 区块标题 */
+.hm-section {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	padding: 52rpx 44rpx 24rpx;
+}
+
+.hm-section__title {
+	font-size: 34rpx;
+	font-weight: 800;
+	color: $ink;
+}
+
+.hm-section__count {
+	font-size: 22rpx;
+	color: $muted;
+}
+
+/* 试卷卡片流（100% 还原 Apple 风格） */
+.hm-cards {
+	padding: 0 44rpx;
+	display: flex;
+	flex-direction: column;
+	gap: 32rpx;
+}
+
+.hm-card {
+	position: relative;
+	background: $surface;
+	border-radius: $radius-card;
+	padding: 40rpx 36rpx 36rpx;
+	box-shadow: $shadow-card;
+	overflow: hidden;
+	transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hm-card:active {
+	transform: scale(0.98);
+}
+
+.hm-card__glow {
+	position: absolute;
+	top: -80rpx;
+	right: -60rpx;
+	width: 280rpx;
+	height: 280rpx;
+	border-radius: 50%;
+	filter: blur(60rpx);
+	opacity: 0.35;
+	pointer-events: none;
+}
+
+.hm-card__glow--timed {
+	background: #ff3b30;
+}
+
+.hm-card__glow--mixed {
+	background: #1852e0;
+}
+
+.hm-card__glow--special {
+	background: #f5a623;
+}
+
+.hm-card--urgent {
+	box-shadow: 0 1px 2px rgba(20, 30, 60, 0.05), 0 12px 36px rgba(255, 59, 48, 0.16);
+}
+
+.hm-card__top {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 22rpx;
+	position: relative;
+}
+
+.hm-card__kind {
+	font-size: 21rpx;
+	font-weight: 600;
+	padding: 10rpx 22rpx;
+	border-radius: $radius-pill;
+}
+
+.hm-card__kind--timed {
+	color: #c62b22;
+	background: $danger-soft;
+}
+
+.hm-card__kind--mixed {
+	color: $accent;
+	background: $accent-soft;
+}
+
+.hm-card__kind--special {
+	color: #b26a00;
+	background: $warn-soft;
+}
+
+.hm-card__alert {
+	display: flex;
+	align-items: center;
+	gap: 10rpx;
+	font-size: 21rpx;
+	color: #c62b22;
+	font-weight: 600;
+}
+
+.hm-card__pulse {
+	width: 14rpx;
+	height: 14rpx;
+	border-radius: 50%;
+	background: #ff3b30;
+	animation: card-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes card-pulse {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4);
+	}
+	50% {
+		box-shadow: 0 0 0 12rpx rgba(255, 59, 48, 0);
+	}
+}
+
+.hm-card__title {
+	position: relative;
+	font-size: 32rpx;
+	font-weight: 700;
+	color: $ink;
+	line-height: 1.5;
+}
+
+.hm-card__meta {
+	position: relative;
+	display: flex;
+	gap: 56rpx;
+	margin-top: 30rpx;
+	padding: 24rpx 0;
+	border-top: 1px solid $line;
+	border-bottom: 1px solid $line;
+}
+
+.hm-meta__num {
 	font-size: 32rpx;
 	font-weight: 800;
 	color: $ink;
 }
 
-.hm-section-tip {
-	font-size: 22rpx;
+.hm-meta__label {
+	margin-left: 10rpx;
+	font-size: 20rpx;
 	color: $muted;
 }
 
-.hm-list {
+.hm-card__foot {
+	position: relative;
 	display: flex;
-	flex-direction: column;
-	gap: 20rpx;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 28rpx;
 }
 
-/* 试卷大卡片 */
-.exam-card-apple {
-	background: rgba(255, 255, 255, 0.92);
-	backdrop-filter: $glass-blur;
-	border: 1px solid $glass-border;
+.hm-deadline {
+	font-size: 23rpx;
+	color: $muted;
+}
+
+.hm-deadline--hot {
+	color: #c62b22;
+	font-weight: 600;
+}
+
+.hm-card__btn {
+	font-size: 25rpx;
+	font-weight: 700;
+	color: #ffffff;
+	background: $gradient;
+	border-radius: $radius-pill;
+	padding: 18rpx 44rpx;
+	box-shadow: 0 10rpx 28rpx rgba(24, 82, 224, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* 骨架屏态 */
+.hm-skel {
+	background: $surface;
 	border-radius: $radius-card;
-	padding: 32rpx 36rpx;
+	padding: 40rpx 36rpx;
+	margin: 0 44rpx 32rpx;
 	box-shadow: $shadow-card;
+}
+
+.hm-skel__bar {
+	height: 26rpx;
+	border-radius: 13rpx;
+	background: linear-gradient(90deg, #f0f0f4 25%, #f9f9fc 50%, #f0f0f4 75%);
+	background-size: 400% 100%;
+	animation: skel-shimmer 1.5s ease infinite;
+	margin-bottom: 20rpx;
+	width: 62%;
+}
+
+.hm-skel__bar--wide {
+	width: 92%;
+	height: 34rpx;
+}
+
+.hm-skel__row {
 	display: flex;
-	flex-direction: column;
 	gap: 16rpx;
-	transition: all 0.2s ease;
+	margin-top: 26rpx;
+}
 
-	&--pressed {
-		transform: scale(0.985);
-		background: #ffffff;
-	}
+.hm-skel__chip {
+	width: 130rpx;
+	height: 44rpx;
+	border-radius: 22rpx;
+	background: #f0f0f4;
+}
 
-	&__head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 16rpx;
-	}
+.hm-skel__btn {
+	margin-left: auto;
+	width: 170rpx;
+	height: 56rpx;
+	border-radius: 28rpx;
+	background: linear-gradient(90deg, #f0f0f4 25%, #f9f9fc 50%, #f0f0f4 75%);
+	background-size: 400% 100%;
+}
 
-	&__title {
-		font-size: 30rpx;
-		font-weight: 700;
-		color: $ink;
-		line-height: 1.4;
-		flex: 1;
+@keyframes skel-shimmer {
+	0% {
+		background-position: 100% 0;
 	}
+	100% {
+		background-position: -100% 0;
+	}
+}
 
-	&__tag {
-		background: $accent-soft;
-		border-radius: 10rpx;
-		padding: 4rpx 14rpx;
-		flex-shrink: 0;
-	}
+/* 清空成就态：琉璃勋章 */
+.hm-empty {
+	padding: 88rpx 60rpx 40rpx;
+	text-align: center;
+}
 
-	&__tag-text {
-		font-size: 20rpx;
-		font-weight: 600;
-		color: $accent;
-	}
+.hm-medal {
+	position: relative;
+	width: 200rpx;
+	height: 240rpx;
+	margin: 0 auto 44rpx;
+}
 
-	&__meta {
-		display: flex;
-		align-items: center;
-		gap: 10rpx;
-		font-size: 24rpx;
-		color: $muted;
-	}
+.hm-medal__halo {
+	position: absolute;
+	left: 50%;
+	top: 60rpx;
+	transform: translateX(-50%);
+	width: 200rpx;
+	height: 200rpx;
+	border-radius: 50%;
+	background: radial-gradient(circle, rgba(24, 82, 224, 0.25), transparent 70%);
+	animation: halo-breathe 3.2s ease-in-out infinite;
+}
 
-	&__meta-dot {
-		color: $line-strong;
+@keyframes halo-breathe {
+	0%,
+	100% {
+		transform: translateX(-50%) scale(1);
+		opacity: 0.7;
 	}
+	50% {
+		transform: translateX(-50%) scale(1.18);
+		opacity: 1;
+	}
+}
 
-	&__foot {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding-top: 20rpx;
-		border-top: 1px solid $line;
-	}
+.hm-medal__ribbon {
+	position: absolute;
+	left: 50%;
+	top: 0;
+	transform: translateX(-50%);
+	width: 60rpx;
+	height: 100rpx;
+	background: linear-gradient(180deg, #1852e0 50%, #0a3299 50%);
+	clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+}
 
-	&__deadline {
-		display: flex;
-		align-items: center;
-		gap: 8rpx;
-	}
+.hm-medal__disc {
+	position: absolute;
+	left: 50%;
+	top: 78rpx;
+	transform: translateX(-50%);
+	width: 132rpx;
+	height: 132rpx;
+	border-radius: 50%;
+	background: $gradient;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 20rpx 48rpx rgba(10, 50, 153, 0.4), inset 0 2rpx 6rpx rgba(255, 255, 255, 0.45);
+}
 
-	&__deadline-text {
-		font-size: 22rpx;
-		color: $muted;
-	}
+.hm-medal__star {
+	width: 56rpx;
+	height: 56rpx;
+	background: #ffd76a;
+	clip-path: polygon(50% 0%, 63% 35%, 98% 35%, 70% 57%, 79% 91%, 50% 70%, 21% 91%, 30% 57%, 2% 35%, 37% 35%);
+}
 
-	&__btn {
-		background: $gradient;
-		border-radius: $radius-pill;
-		padding: 10rpx 24rpx;
-		display: flex;
-		align-items: center;
-		gap: 6rpx;
-		box-shadow: 0 6rpx 16rpx rgba(24, 82, 224, 0.25);
-	}
+.hm-empty__title {
+	font-size: 34rpx;
+	font-weight: 800;
+	color: $ink;
+}
 
-	&__btn-text {
-		font-size: 22rpx;
-		font-weight: 600;
-		color: #ffffff;
-	}
+.hm-empty__sub {
+	margin: 16rpx auto 0;
+	font-size: 24rpx;
+	color: $muted;
+	max-width: 480rpx;
+	line-height: 1.7;
+}
+
+.hm-empty__btn-wrap {
+	margin-top: 40rpx;
+}
+
+.hm-empty__btn {
+	display: inline-block;
+	padding: 18rpx 44rpx;
+	border-radius: $radius-pill;
+	background: $surface;
+	border: 1px solid $line;
+	font-size: 26rpx;
+	font-weight: 600;
+	color: $accent;
+	box-shadow: $shadow-card;
 }
 
 .hm-bottom-space {
-	height: calc(100rpx + env(safe-area-inset-bottom));
+	height: calc(40rpx + env(safe-area-inset-bottom));
 }
 </style>
