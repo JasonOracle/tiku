@@ -119,18 +119,18 @@
 		<!-- 100% 还原 Apple 钛金微光风卡片列表流 -->
 		<view v-else class="hm-cards">
 			<view
-				v-for="c in uncompletedCards"
+				v-for="(c, idx) in uncompletedCards"
 				:key="c.task_id"
 				class="hm-card"
 				:class="{ 'hm-card--urgent': isUrgent(c) }"
 				@click="goExam(c)"
 			>
-				<!-- 右上角漫反射微光 -->
-				<view class="hm-card__glow" :class="'hm-card__glow--' + resolveKindKey(c)" />
+				<!-- 右上角漫反射微光（红 / 蓝 / 橙交替多姿态） -->
+				<view class="hm-card__glow" :class="'hm-card__glow--' + resolveKindKey(c, idx)" />
 
 				<view class="hm-card__top">
-					<view class="hm-card__kind" :class="'hm-card__kind--' + resolveKindKey(c)">
-						{{ c.category_name || "综合测评" }}
+					<view class="hm-card__kind" :class="'hm-card__kind--' + resolveKindKey(c, idx)">
+						{{ c.category_name || resolveCategoryFallback(idx) }}
 					</view>
 					<view v-if="isUrgent(c)" class="hm-card__alert">
 						<view class="hm-card__pulse" />
@@ -236,10 +236,21 @@ const uncompletedCards = computed(() => {
 	return allTasks.value.filter((item) => !DONE_STATUSES.includes(item.status));
 });
 
-function resolveKindKey(item: MemberTaskItem): "timed" | "mixed" | "special" {
-	if (item.is_timed || item.time_limit > 0) return "timed";
-	if (item.question_count >= 50) return "mixed";
-	return "special";
+function resolveKindKey(item: MemberTaskItem, index: number): "timed" | "mixed" | "special" {
+	// 如果分类名包含明确倾向，优先匹配
+	const cat = (item.category_name || "").toLowerCase();
+	if (cat.includes("模拟") || cat.includes("限时") || cat.includes("安全")) return "timed";
+	if (cat.includes("综合") || cat.includes("质量") || cat.includes("认证")) return "mixed";
+	if (cat.includes("专项") || cat.includes("技能") || cat.includes("趣味") || cat.includes("调查")) return "special";
+
+	// 否则根据卡片自然序号轮换调色盘（红、蓝、橙交替，与 preview-apple 完全一致）
+	const palette: ("timed" | "mixed" | "special")[] = ["timed", "mixed", "special"];
+	return palette[index % palette.length];
+}
+
+function resolveCategoryFallback(index: number): string {
+	const labels = ["严苛限时", "综合测评", "专项技能"];
+	return labels[index % labels.length];
 }
 
 function isUrgent(item: MemberTaskItem): boolean {
