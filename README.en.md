@@ -1,95 +1,117 @@
-# TiKu — Online Quiz Platform
+# TiKu — Enterprise Multi-Tenant Smart Quiz & Online Assessment System
 
-Lightweight assessment platform: mobile H5 for examinees (quiz/exam/report/favorites) + SaaS admin console (question bank, exam assembly, publish workflow, analytics) + FastAPI backend.
+A modern, lightweight AI-Native assessment and examination platform: **B-end SaaS Management Console** (Question Assets, Intelligent Exam Assembly, Grading Center, AI Question-Generation Assistant, Multi-tenant Isolation) + **C-end Mobile Examinee App** (Quiz, Timed Exams, Answer Sheet Drawer, Anti-leakage Reports, Favorites) + **FastAPI Core Backend**.
 
 - **GitHub**: [https://github.com/JasonOracle/tiku](https://github.com/JasonOracle/tiku)
 - **Gitee**: [https://gitee.com/jason-oracle/tiku](https://gitee.com/jason-oracle/tiku)
+- **Chinese Documentation**: [README.md](./README.md)
+- **v1.4 Feature Showcase & Snapshots**: [docs/v1.4_showcase.md](./docs/v1.4_showcase.md)
 
-- Backend: `backend/` — Python 3.12 + FastAPI + SQLAlchemy 2.0 + MySQL 8.0, JWT (7d, 5-min submit grace), pessimistic-lock submit, passive timeout settlement
-- Admin: `tob/` — Vue 3 + Element Plus + Pinia, built with `base: /admin/`
-- Client: `toc/` — Vue 3 H5, served at `/`
-- Deploy: `docker-compose.yml` in root (MySQL + backend + Nginx); `nginx.conf` proxies `/api/v1/` to backend
-- Import template: `sample_questions.xlsx` (data sheet first + “导入说明” guide sheet)
+---
 
-中文版：[README.md](./README.md)
+## 📈 Milestones & Progressive Evolution
 
-## 🤖 About This Project: A Journey in AI-Assisted Development
+This project strictly adheres to an **agile, progressive development** lifecycle, ensuring every iteration delivers verifiable software artifacts and frozen snapshots:
 
-This project is more than just a quiz platform; it serves as a **practical exploration of AI-Driven Development**. Through deep collaboration with AI, I completed the entire lifecycle from 0 to 1:
+```
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│     v1.0 MVP    │  ──>  │  v1.2 AI-Native │  ──>  │ v1.4 SaaS & Agent│ ──>  │   v1.5 Geek App │
+│ Objective Tests │       │Fill/Essay + AI  │       │ Multi-Tenant+LLM│       │ Uni-app Mobile  │
+└─────────────────┘       └─────────────────┘       └─────────────────┘       └─────────────────┘
+  Archived (v1.0)           Archived (v1.2)           Archived (v1.4-final)       In Progress...
+```
 
-1. **Requirement Analysis & Documentation**: Through continuous dialogues, I clarified my needs to the AI, step-by-step generating a comprehensive [Product Requirements Document (PRD)](./product.md), [Technical Specification](./tech-spec.md), and [API Contract](./api-contract.md).
-2. **Exploration & Validation**: Utilizing AI Agent skills, we quickly generated a simple product demo. During this process, the AI provided valuable optimization suggestions, which helped me deeply understand the true "boundaries of AI capabilities."
-3. **Continuity & Rule Setting**: To solve context loss caused by multiple sessions or exits, we established exclusive development rules:
-   - Created a [Progress Document](./progress.md) to record the experience and current progress of each development phase.
-   - Introduced a **"careful inspection and document anti-conflict"** logic to prevent the AI from generating conflicting documentation or code when updating existing files.
+- **v1.0 (MVP Closed Loop)**: Completed basic single/multiple choice and true/false questions, exam assembly, PC/H5 test-taking, and automated scoring.
+- **v1.2 (AI-Native Upgrade)**: Added fill-in-the-blank and essay questions; integrated SenseNova LLM for automated essay pre-grading; introduced instructor isolation and audit logs.
+- **v1.4 (SaaS Multi-Tenancy & Agent Interaction Revolution - Current Stable)**:
+  - **Strict Multi-Tenant Isolation**: Complete logical and data isolation between educational institutions (e.g., Xingya Education) and enterprise compliance training (e.g., Haoshi Group);
+  - **Deep AI Agent Integration**: Conversational batch question generation, dynamic drafting cards, anti-leakage guards, and full history persistence (`action_card_data`);
+  - **Automated Snapshot Engineering**: Built-in Playwright automated headless screenshot and Markdown generation engine (`scripts/snapshot_showcase.py`).
+- **v1.5 (Cross-Platform Geek Remodel - Currently Underway)**:
+  - Complete overhaul of C-end mobile client using `uni-app` (Vue 3.5 + TS + Vite) + `Wot Design Uni`;
+  - Immersive "Geek Blue" design, pure SVG icon system, single-question focus flow, and secure review-mode dynamic reports.
 
-Through this project, I hope to provide a reference for independent developers or teams looking to leverage AI for efficient development.
+---
 
-> **🚧 MVP Disclaimer**
-> 
-> This project is currently in its **MVP (Minimum Viable Product)** stage, designed specifically to **quickly validate the project logic** and the AI-assisted development workflow.
-> 
-> To keep the project lightweight and ensure rapid delivery, the current version only supports objective questions (single choice, multiple choice, true/false) with automatic grading. **The following advanced features are planned for the next iteration (V2):**
-> - **Short-answer and Fill-in-the-blank questions**
-> - **Manual grading** capabilities in the admin console
-> - **Multi-account Role-Based Access Control (RBAC)** and enterprise organizational structures
+## 📸 System Snapshots (v1.4 Showcase)
 
-## Layout
+> For the comprehensive snapshot guide, see 👉 **[v1.4 Showcase & System Architecture](./docs/v1.4_showcase.md)**
+
+### B-End SaaS Admin Console (Desktop PC)
+
+| Dashboard | Question Bank Assets |
+| :---: | :---: |
+| ![Dashboard](./docs/images/v1.4/01_tob_dashboard.png) | ![Questions](./docs/images/v1.4/02_tob_resources.png) |
+
+| AI Assistant & Drafting Cards | Exam Assembly & Management |
+| :---: | :---: |
+| ![AI Assistant](./docs/images/v1.4/04_tob_ai_assistant.png) | ![Exams](./docs/images/v1.4/03_tob_tasks.png) |
+
+### C-End Examinee Mobile Client (iPhone Viewport)
+
+| Enterprise Workspace | Assessment List | Personal Profile & Stats |
+| :---: | :---: | :---: |
+| ![C-End Home](./docs/images/v1.4/08_toc_home.png) | ![Assessments](./docs/images/v1.4/09_toc_my_tasks.png) | ![Profile](./docs/images/v1.4/10_toc_profile.png) |
+
+---
+
+## 🏗️ Project Structure
 
 ```
 tiku/
-├── backend/        # FastAPI (app/api/v1 client, app/api/admin console, tests/ — 18 pytest cases)
-├── tob/            # admin console (dev port 5173)
-├── toc/            # client H5 (dev port 5174)
-├── nginx.conf      # /api/v1/→backend, /admin/→tob, /→toc
-├── sample_questions.xlsx
-├── agent.md product.md tech-spec.md api-contract.md progress.md
+├── backend/                  # FastAPI core (SaaS multi-tenancy, JWT, AI engine)
+├── tob/                      # B-end admin console (Vue 3.5 + Element Plus + Pinia)
+├── toc/                      # C-end H5 client (Vue 3.5)
+├── toc-new/                  # [v1.5 in progress] C-end uni-app + Wot Design Uni project
+├── docs/                     # System snapshots and illustrated showcases
+│   ├── v1.4_showcase.md      # v1.4 full walkthrough report
+│   └── images/v1.4/          # 12 high-resolution real-world screenshots
+├── history/                  # Historical specification archives (v1.3 / v1.4)
+├── scripts/                  # Automation & headless screenshot engine
+│   ├── snapshot_showcase.py  # Playwright automated capture script
+│   └── ...
+├── nginx.conf                # Unified reverse proxy
+└── docker-compose.yml        # Docker container orchestration
 ```
 
-## Quick start (Docker)
+---
 
-```powershell
-docker compose up -d          # mysql :3306, backend :8000, nginx :80
-docker exec tiku_nginx nginx -s reload   # required after backend rebuild
+## 🚀 Quick Start
+
+### Docker Compose (Recommended)
+
+```bash
+# Start MySQL 8.0, FastAPI backend, and Nginx reverse proxy
+docker compose up -d
+
+# Reload Nginx after static build updates
+docker exec tiku_nginx nginx -s reload
 ```
 
-| Entry | URL |
-| :--- | :--- |
-| Client | http://localhost/ |
-| Admin | http://localhost/admin/login (hard-refresh **Ctrl+Shift+R** after deploys) |
-| API/Swagger | http://localhost/api/v1/, http://localhost/docs |
+| Portal | URL | Demo Account / Password | Role |
+| :--- | :--- | :--- | :--- |
+| **B-End Admin** | `http://localhost/admin` | `13800000012` / `123456` | Enterprise Admin (Haoshi Group) |
+| **B-End Super Admin**| `http://localhost/admin` | `13800000000` / `123456` | Platform Super Admin |
+| **C-End Examinee** | `http://localhost` | `13900000006` / `123456` | Employee / Student (Member) |
+| **Swagger API** | `http://localhost/docs` | — | Interactive OpenAPI Docs |
 
-Test account: admin `admreg / AdmReg123`; client users self-register. MySQL: `root/rootpassword@127.0.0.1:3306/tiku_db`.
+---
 
-## Local dev
+## 🤖 AI-Driven Development Paradigm
 
-```powershell
-cd backend; python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-cd tob; pnpm dev --port 5173
-cd toc; pnpm dev --port 5174
-```
+This repository is also a comprehensive case study in **human-AI collaborative software engineering**:
 
-Both frontends use a relative `baseURL` (same-origin via Nginx in prod; Vite dev proxy for `/api`, `/uploads`).
+1. **Constitutional Agent Governance**: Core guidelines laid out in [`agent.md`](./agent.md) enforce tenant isolation, change logging, and anti-context-loss workflows.
+2. **Snapshot-Driven Version Handoff**: Strict protocols govern version increments (`v1.4-final` tag, physical archiving of PRD/Tech specs to `history/`), ensuring zero drift across sprints.
+3. **Self-Documenting Architecture**: Integrated headless browser automations continuously capture and regenerate live visual proof of feature maturity.
 
-## Verify
+---
 
-```powershell
-cd backend; python -m pytest tests/ -v        # 18 passed
-cd ..\tob; pnpm build
-cd ..\toc; pnpm build
-```
+## 📚 Core Documentation Index
 
-## Governance rules (see progress.md §7)
-
-- Exam lifecycle `draft → published → archived`; **archived is terminal** (no edit/delete/re-publish); publishing requires a valid category and snapshots `category_name`
-- Delete guards: categories/questions blocked when referenced; exams deletable only as untouched drafts
-- No empty submits: zero-answer submit returns 400; client never auto-submits blank papers
-- Import: per-row “分类” column (auto-create missing, fallback to first); `short`/`fill` types reserved and skipped with counts; new questions default to the first category
-
-## Docs
-
-- **`agent.md`** — **HIGHEST PRIORITY!** Core rules and guidelines for AI agents and new models. Must be read before any other document.
-- `progress.md` — progress/pitfalls/§8 handoff checklist
-- `api-contract.md` — API contracts (incl. 400 guards)
-- `tech-spec.md` — technical design (§2.5 governance edition)
-- `product.md` — PRD
+- **[`agent.md`](./agent.md)** — **Highest Priority!** Must be read before any agent interaction.
+- **[`progress.md`](./progress.md)** — Current source of truth, roadmap, and handover checklist.
+- **[`product.md`](./product.md)** — Latest Product Requirements Document (PRD).
+- **[`tech-spec.md`](./tech-spec.md)** — System architecture and technical specifications.
+- **[`api-contract.md`](./api-contract.md)** — Backend API contracts and security rules.
+- **[`history/`](./history/)** — Historical version specifications.

@@ -1,124 +1,117 @@
-# 智题库 TiKu
+# 智题库 TiKu — 企业级多租户智能题库与在线考核闭环系统
 
-轻量在线测评平台（AI-Native）：C 端移动 H5（刷题/考试/我的测试/分析报告/收藏）+ B 端 SaaS 管理后台（题库/组卷/阅卷大厅/AI 员工/成员与额度/审计）+ FastAPI 后端。
+轻量、现代化的 AI-Native 测评与考试平台：**B 端 SaaS 管理大屏**（题库资产/智能组卷/阅卷大厅/AI智能出题助手/成员与机构多租户隔离）+ **C 端移动端轻测评**（支持刷题/考试/答题卡/防泄题报告/错题收藏）+ **FastAPI 核心后端**。
 
 - **GitHub**: [https://github.com/JasonOracle/tiku](https://github.com/JasonOracle/tiku)
 - **Gitee**: [https://gitee.com/jason-oracle/tiku](https://gitee.com/jason-oracle/tiku)
+- **English Docs**: [README.en.md](./README.en.md)
+- **v1.4 功能快照与全景展示**: [docs/v1.4_showcase.md](./docs/v1.4_showcase.md)
 
-- 后端：`backend/` — Python 3.12 + FastAPI + SQLAlchemy 2.0 + MySQL 8.0，JWT（7 天，交卷 5 分钟宽限），悲观锁防重复交卷，被动超时结算
-- **v1.2 AI-Native 能力**：填空/简答题引擎（填空一空多答强匹配、多选半对）、AI 全托管/预批改阅卷（商汤日日新 SenseNova，原子 Prompt + 失败降级人工）、✨AI 出题/智能组卷（人工二次确认/强制草稿）、RBAC（试卷按老师隔离、成员与 AI 额度管理）、阅卷大厅、消息中心、双域审计留痕、C 端"我的测试"三态流转与防泄题解析锁
-- B 端：`tob/` — Vue3 + Element Plus + Pinia，构建 `base: /admin/`
-- C 端：`toc/` — Vue3 H5，构建挂 `/`
-- 部署：使用根目录下的 `docker-compose.yml`（MySQL + backend + Nginx），Nginx 配置 `nginx.conf`，`/api/v1/` 反代 backend
-- 导入模板：`sample_questions.xlsx`（数据表第一顺位 + "导入说明"工作表，支持填空/简答）
-- C 端注册：昵称(必填)/性别(必选)/手机号(必填唯一)/职务·邮箱(选填)；全端展示口径"昵称优先回退用户名"
-- 全链路自测：`python scripts/e2e_selftest.py [BASE_URL]`（分类/题目/AI出题/AI组卷/批量账号/模拟考试/AI阅卷 35 项断言，可重复执行）
+---
 
-英文版：[README.en.md](./README.en.md)
+## 📈 版本演进之路 (Milestones & Evolution)
 
-## 🤖 关于本项目：一次探索 AI 辅助开发的实践
+本项目采用规范严谨的**敏捷递进开发**范式，每一个版本均具备可验证的工程交付物与版本快照：
 
-这个项目不仅是一个完整的测评平台，更是我**个人探索 AI 辅助开发 (AI-Driven Development) 的实战总结**。通过与 AI 的深度协作，我完成了从 0 到 1 的全过程：
+```
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│     v1.0 MVP    │  ──>  │  v1.2 AI-Native │  ──>  │ v1.4 SaaS & Agent│ ──>  │   v1.5 Geek App │
+│  基础客观题闭环 │       │ 简答填空/AI预阅卷│       │多租户/AI对话卡片 │       │Uni-app移动端重塑 │
+└─────────────────┘       └─────────────────┘       └─────────────────┘       └─────────────────┘
+  已归档 (v1.0-tag)         已归档 (v1.2-tag)         已归档 (v1.4-final)         当前正在推进中...
+```
 
-1. **需求梳理与文档生成**：通过多轮对话，告诉 AI 我需要什么，一步步拆解并生成了完善的 [产品文档 (PRD)](./product.md)、[技术方案](./tech-spec.md) 以及 [API 契约文档](./api-contract.md)。
-2. **探索与验证**：使用特定的 Agent Skill 快速生成了产品 Demo。在这个过程中，AI 提出了许多优化建议，也让我深刻体会到了"AI 的能力边界"到底在哪里。
-3. **沉淀与规则制定**：为了解决开发中断、历史上下文丢失等痛点，我们总结了一套开发协作规则：
-   - 建立了 [Progress 进度文档](./progress.md) 用于总结每一次开发的经验和当前进度，保证了退出的连贯性。
-   - 引入了**"仔细检查与文档防冲突"**逻辑，防止 AI 在反复修改代码或文档时发生互相覆盖（文档打架）的情况。
+- **v1.0 (MVP 闭环)**：打通基础单选/多选/判断客观题录入、组卷、PC/H5 考试与自动算分全链路。
+- **v1.2 (AI-Native 能力跃升)**：引入填空题与主观简答题引擎；集成大模型实现主观题 AI 全托管/预批改阅卷；引入试卷按老师隔离与审计日志。
+- **v1.4 (SaaS 架构与智能 Agent 交互革命 - 当前稳定版)**：
+  - **真正的多租户数据隔离**：支持教育培训机构（如星雅教育）与企业合规考核（如皓石集团）逻辑物理隔离与权限加固；
+  - **AI 智能助手深度落地**：支持自然语言批量出题、智能组卷、安全合规防泄题校验，会话卡片历史落库持久化（`action_card_data`）；
+  - **自动化快照工程**：内置 Playwright 自动化截屏与文档生成引擎，双击即可一键生成版本图文快照。
+- **v1.5 (跨端极客重构 - 正在开发)**：
+  - 采用 `uni-app` (Vue3 + TS + Vite) + `Wot Design Uni` 全面重塑 C 端移动端；
+  - 极客蓝 (Geek Blue) 沉浸式风格，纯 SVG 规范，单题聚焦作答流与安全防泄题动态报告。
 
-希望这个项目能为同样想利用 AI 提效的独立开发者提供一份有价值的参考范本。
+---
 
-> **🚧 版本说明**
->
-> v1.0 MVP 已完成客观题闭环；**v1.2 已落地"AI-Native"升级**：简答题/填空题、人工阅卷大厅与 AI 全托管阅卷、多账号权限管理 (RBAC)、AI 出题/组卷、消息中心与审计日志。当前 v1.2 的 AI 阅卷/出题使用商汤日日新 (SenseNova) 免费档（API Key 读宿主机环境变量 `SENSENOVA_API_KEY`，未配置时 AI 功能自动降级为人工）。
+## 📸 系统全景快照 (v1.4 Showcase)
 
-## 项目展示
+> 完整的高清快照指南请参阅 👉 **[v1.4 系统功能快照与架构指南](./docs/v1.4_showcase.md)**
 
-<!-- prettier-ignore-start -->
+### B 端管理后台 (PC 桌面端)
 
-### C端 - 移动轻测评
-<div style="display: flex; gap: 10px; margin-bottom: 20px;">
-  <img src="./assets/img/首页截图v1.0.png" width="300" alt="首页" />
-  <img src="./assets/img/答题页截图v1.0.png" width="300" alt="答题页" />
-  <img src="./assets/img/试卷解析截图v1.0.png" width="300" alt="解析页" />
-  <img src="./assets/img/个人中心截图v1.0.png" width="300" alt="个人中心" />
-</div>
+| 数据看板 (Dashboard) | 题目资产管理 (Questions) |
+| :---: | :---: |
+| ![数据看板](./docs/images/v1.4/01_tob_dashboard.png) | ![题目管理](./docs/images/v1.4/02_tob_resources.png) |
 
-### B端 - SaaS 管理后台
-<div style="display: flex; gap: 10px; margin-bottom: 20px;">
-  <img src="./assets/img/后台题海页截图v1.0.png" width="400" alt="题海管理" />
-  <img src="./assets/img/后台试卷页截图v1.0.png" width="400" alt="组卷页面" />
-</div>
+| AI 智能出题助手 (AI Assistant) | 试卷考核中心 (Exams) |
+| :---: | :---: |
+| ![AI 智能助手](./docs/images/v1.4/04_tob_ai_assistant.png) | ![试卷管理](./docs/images/v1.4/03_tob_tasks.png) |
 
-<details>
-<summary>点击查看更多页面截图</summary>
+### C 端考生端 (移动端 iPhone 视口)
 
-- [C端 - 历史答题页](./assets/img/历史答题页截图v1.0.png)
-- [C端 - 题目收藏页](./assets/img/题目收藏页截图v1.0.png)
+| 企业空间首页 | 测评任务列表 | 个人资产中心 |
+| :---: | :---: | :---: |
+| ![C端首页](./docs/images/v1.4/08_toc_home.png) | ![我的测评](./docs/images/v1.4/09_toc_my_tasks.png) | ![个人中心](./docs/images/v1.4/10_toc_profile.png) |
 
-</details>
+---
 
-<!-- prettier-ignore-end -->
-
-## 目录
+## 🏗️ 模块技术拓扑
 
 ```
 tiku/
-├── backend/        # FastAPI（app/api/v1 C端，app/api/admin B端，tests/ 39项pytest）
-├── tob/            # B端管理后台（Port 5173）
-├── toc/            # C端H5（Port 5174）
-├── nginx.conf      # /api/v1/→backend，/admin/→tob，/→toc
-├── sample_questions.xlsx
-├── agent.md product.md tech-spec.md api-contract.md progress.md
+├── backend/                  # FastAPI 核心（SaaS 多租户架构、JWT鉴权、AI出题与阅卷引擎）
+├── tob/                      # B端管理后台（Vue 3.5 + Element Plus + Pinia + Vite）
+├── toc/                      # C端轻量答题端（Vue 3.5 H5）
+├── toc-new/                  # [v1.5 演进中] C端跨端全新工程（uni-app + Wot Design Uni）
+├── docs/                     # 系统版本快照与图文产品介绍
+│   ├── v1.4_showcase.md      # v1.4 版本全景展示报告
+│   └── images/v1.4/          # 12 张高清页面实况截图
+├── history/                  # 历史版本核心技术文档存档（v1.3 / v1.4 归档）
+├── scripts/                  # 运维与自动化工具
+│   ├── snapshot_showcase.py  # 全自动无头浏览器截图与文档生成引擎
+│   └── ...
+├── nginx.conf                # 统一网关路由（反代后端、B端、C端）
+└── docker-compose.yml        # Docker 一键编排容器栈
 ```
 
-## 一键启动（Docker）
+---
 
-```powershell
-docker compose up -d          # mysql 3306，backend 8000，nginx 80
-docker exec tiku_nginx nginx -s reload   # backend重建后必执行
+## 🚀 快速启动
+
+### 方式一：Docker Compose 一键启动（生产与集成）
+
+```bash
+# 启动 MySQL 8.0、FastAPI 后端与 Nginx 网关
+docker compose up -d
+
+# 若更新了前端静态资源或后端配置，重载 Nginx
+docker exec tiku_nginx nginx -s reload
 ```
 
-| 入口 | 地址 |
-| :--- | :--- |
-| C 端 | http://localhost/ |
-| B 端 | http://localhost/admin/login（发版后 **Ctrl+Shift+R 硬刷**） |
-| API/Swagger | http://localhost/api/v1/、http://localhost/docs |
+| 服务入口 | 访问地址 | 默认体验账号 / 密码 | 角色说明 |
+| :--- | :--- | :--- | :--- |
+| **B 端管理后台** | `http://localhost/admin` | `13800000012` / `123456` | 皓石集团管理员 (Admin) |
+| **B 端超级管理** | `http://localhost/admin` | `13800000000` / `123456` | 平台超级管理员 (Super Admin) |
+| **C 端考生端** | `http://localhost` | `13900000006` / `123456` | 皓石集团员工 (Member) |
+| **Swagger API** | `http://localhost/docs` | — | FastAPI 交互式接口文档 |
 
-测试账号：B 端 `admreg / AdmReg123`；C 端自行注册。MySQL：`root/rootpassword@127.0.0.1:3306/tiku_db`。
+---
 
-## 本地开发
+## 🤖 关于本项目：AI-Native 研发范式实践
 
-```powershell
-# 后端
-cd backend; python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-# B端 / C端（/api 经 vite proxy 转 8000，不断代理链）
-cd tob; pnpm dev --port 5173
-cd toc; pnpm dev --port 5174
-```
+这个项目不仅是一套开箱即用的多租户智能题库系统，更是**人机协同与 AI 辅助软件工程 (AI-Driven Development) 的实战范式**：
 
-前后端 `baseURL` 均为相对路径（生产走 Nginx 同源，禁止写死 `127.0.0.1:8000`）。
+1. **严格的宪法与行为约束**：通过根目录 [`agent.md`](./agent.md) 确立工程最高行为准则，实现“沟通即文档”、“零上下文损耗”与严格的数据隔离铁律。
+2. **跨版本大更迭死生快照**：建立“第一阶段需求冻结 -> 第二阶段宪法重审 -> 第三阶段死生快照打 Tag 归档”的标准升版机制，确保每一代演进都有迹可循、随时可回滚。
+3. **自动化自解释工程**：不仅编写业务代码，还构建了全自动页面快照生成器（`scripts/snapshot_showcase.py` 与 `生成v1.4快照介绍文档.bat`），实现软件自举式文档化。
 
-## 验证
+---
 
-```powershell
-cd backend; python -m pytest tests/ -v        # 39 passed
-cd ..\tob; pnpm build
-cd ..\toc; pnpm build
-```
+## 📚 核心规范导航
 
-## 核心治理规则（详见 progress.md §7）
-
-- 试卷三态 `draft → published → archived`，**归档为彻底终态**（不可编辑/删除/重上架）；上架需有效分类并写 `category_name` 快照
-- 删除守卫：分类被引用拦；题目**软删除**（防牵连，已引用试卷仍可拉取原题）；被上架/归档卷引用的题目**锁定只读**（可复制新题）；试卷仅 draft 零作答可删（有作答只能下架）
-- 空卷不交卷：零作答提交 400，C 端离开/超时不提交
-- 导入：Excel”分类”列逐题归入（不存在自动新建）；填空答案 `北京,北京市|京` 格式，简答答案列为标准答案全文
-- **v1.2 新增**：试卷按创建老师 RBAC 隔离（超管全览）；考试时间窗 `time_limit ≤ end_time - start_time` 强校验，end_time 已过惰性强制收卷；含简答题交卷转 `pending_grading`，AI 全托管或人工确认后才发布成绩；考试 end_time 未到时解析锁定（防泄题）；AI 主动调用（出题/组卷/聊天）扣老师个人额度，被动阅卷记系统账单；全部写操作双域审计留痕
-
-## 文档
-
-- **`agent.md`** — **最高优先级！** AI 代理和新接手模型的必读核心规则，权重高于所有其他文档。
-- `progress.md` — 进度/踩坑/§8 接手清单
-- `api-contract.md` — 接口契约（含 400 守卫）
-- `tech-spec.md` — 技术方案（§2.5 治理版）
-- `product.md` — PRD
+- **[`agent.md`](./agent.md)** — **最高优先级！** AI Agent 进入本项目必须遵从的核心法律。
+- **[`progress.md`](./progress.md)** — 项目实时事实来源、当前任务清单与踩坑指南。
+- **[`product.md`](./product.md)** — 最新产品需求规格说明书 (PRD)。
+- **[`tech-spec.md`](./tech-spec.md)** — 架构设计与技术规范白皮书。
+- **[`api-contract.md`](./api-contract.md)** — 双端 API 契约与防泄题接口规范。
+- **[`history/`](./history/)** — 历代版本的核心技术文档归档区。
