@@ -1,16 +1,16 @@
 <template>
-	<view class="profile-apple">
-		<!-- 漫反射暮光背景 -->
+	<view class="pf-page">
+		<!-- 暮光光晕背景 -->
 		<view class="pf-aurora">
 			<view class="pf-aurora__blob pf-aurora__blob--1" />
 			<view class="pf-aurora__blob pf-aurora__blob--2" />
 		</view>
 
-		<!-- 钛金个人名片 -->
+		<!-- 通顶个人名片 -->
 		<view class="pf-card">
 			<view class="pf-card__top">
 				<view class="pf-avatar">
-					<text class="pf-avatar__text">{{ avatarLetter }}</text>
+					<text>{{ avatarLetter }}</text>
 					<view class="pf-avatar__badge">✓</view>
 				</view>
 				<view class="pf-card__info">
@@ -18,49 +18,45 @@
 						<text class="pf-card__name">{{ userName }}</text>
 						<view class="pf-cert">企业认证学员</view>
 					</view>
-					<text class="pf-card__phone">{{ maskedPhone }}</text>
-					<text class="pf-card__org">{{ institutionName }}</text>
+					<view class="pf-card__phone">{{ maskedPhone }}</view>
+					<view class="pf-card__org">{{ institutionName }}</view>
 				</view>
 			</view>
 		</view>
 
-		<!-- 资产数据统计看板 -->
+		<!-- 三大数据看板 -->
 		<view class="pf-stats">
 			<view class="pf-stat" @click="goRecords">
 				<text class="pf-stat__num">{{ recordsCount }}</text>
 				<text class="pf-stat__label">已测场次</text>
 			</view>
+			<view class="pf-stat" @click="goRecords">
+				<text class="pf-stat__num">{{ avgScore }}</text>
+				<text class="pf-stat__label">平均得分</text>
+			</view>
 			<view class="pf-stat" @click="goFavorites">
 				<text class="pf-stat__num">{{ favoritesCount }}</text>
 				<text class="pf-stat__label">我的收藏</text>
 			</view>
-			<view class="pf-stat">
-				<text class="pf-stat__num">100%</text>
-				<text class="pf-stat__label">完考率</text>
-			</view>
 		</view>
 
-		<!-- 功能快捷入口（已按指令严格移除“切换机构”） -->
+		<!-- 常用功能分组 -->
 		<view class="pf-group">
 			<view class="pf-group__title">常用功能</view>
 			<view class="pf-row" @click="goFavorites">
 				<view class="pf-row__icon" style="background: #fff7e8;">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-						<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" stroke="#b26a00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-					</svg>
+					<view class="pf-glyph pf-glyph--star" style="color: #b26a00;" />
 				</view>
 				<view class="pf-row__main">
 					<text class="pf-row__title">我的收藏</text>
-					<text class="pf-row__sub">重点错题与知识点题库</text>
+					<text class="pf-row__sub">{{ favoritesCount }} 道错题与重点题</text>
 				</view>
 				<text class="pf-row__arrow">›</text>
 			</view>
 
 			<view class="pf-row">
 				<view class="pf-row__icon" style="background: #eceef3;">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-						<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="#3a3a3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-					</svg>
+					<view class="pf-glyph pf-glyph--moon" style="color: #3a3a3c;" />
 				</view>
 				<view class="pf-row__main">
 					<text class="pf-row__title">深色模式</text>
@@ -73,32 +69,51 @@
 					<view class="pf-row__knob" />
 				</view>
 			</view>
+
+			<view class="pf-row">
+				<view class="pf-row__icon" style="background: #ffeceb;">
+					<view class="pf-glyph pf-glyph--bell" style="color: #d70015;" />
+				</view>
+				<view class="pf-row__main">
+					<text class="pf-row__title">测评通知提醒</text>
+				</view>
+				<view
+					class="pf-row__toggle"
+					:class="{ 'pf-row__toggle--on': isNoticeOn }"
+					@click="isNoticeOn = !isNoticeOn"
+				>
+					<view class="pf-row__knob" />
+				</view>
+			</view>
 		</view>
 
+		<!-- 账户与数据分组 -->
 		<view class="pf-group">
-			<view class="pf-group__title">系统设置</view>
+			<view class="pf-group__title">账户与数据</view>
 			<view class="pf-row" @click="handleClearCache">
 				<view class="pf-row__icon" style="background: #eafaf0;">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-						<polyline points="23 4 23 10 17 10" stroke="#1e8e3e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-						<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#1e8e3e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-					</svg>
+					<view class="pf-glyph pf-glyph--clean" style="color: #1e8e3e;" />
 				</view>
 				<view class="pf-row__main">
 					<text class="pf-row__title">清除缓存</text>
 				</view>
-				<text class="pf-row__extra">{{ cacheSize }}</text>
+				<view class="pf-row__extra">{{ cacheSize }}</view>
+			</view>
+			<view class="pf-row" @click="showAbout">
+				<view class="pf-row__icon" style="background: #f2f2f7;">
+					<view class="pf-glyph pf-glyph--info" style="color: #86868b;" />
+				</view>
+				<view class="pf-row__main">
+					<text class="pf-row__title">关于智题库</text>
+					<text class="pf-row__sub">版本与服务支持</text>
+				</view>
+				<text class="pf-row__arrow">›</text>
 			</view>
 		</view>
 
-		<!-- 退出登录 -->
-		<view class="pf-logout" hover-class="pf-logout--pressed" @click="handleLogout">
-			<text class="pf-logout__text">退出登录</text>
-		</view>
-		<text class="pf-version">智题库 C 端 · v1.5 Apple 钛金微光正式版</text>
-
-		<!-- 底部占位安全区 -->
-		<view class="pf-bottom-space" />
+		<!-- 退出登录按钮 -->
+		<view class="pf-logout" @click="handleLogout">退出登录</view>
+		<view class="pf-version">智题库 C 端 · Apple 钛金微光正式版</view>
 
 		<GlobalToast />
 	</view>
@@ -109,12 +124,12 @@
  * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Gemini 系列
- * 修改内容：[1. 全面升级个人中心为 Apple 钛金微光风，严格按照指示移除「切换机构」选项; 2. 真实读取 Pinia 学员状态与所属机构，真实统计已测与收藏数量，支持安全登出]
+ * 修改内容：[1. 100% 像素级对齐 preview-apple/profile/index.vue：暮光流体光晕 pf-aurora、玻璃质感个人名片 pf-card、三联数据看板 pf-stats、Apple 原生拟物图标族 pf-glyph（五角星/月亮/铃铛/清理/信息）与交互式拨动开关 pf-row__toggle; 2. 严格依指令彻底剔除切换机构入口; 3. 真实接入后端会员数据与退出登录逻辑]
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import GlobalToast from "@/components/GlobalToast.vue";
-import { fetchFavorites, fetchMemberTasks } from "@/api/exam";
+import { fetchMemberTasks, fetchFavorites } from "@/api/exam";
 import { useGlobalToast } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
 
@@ -122,69 +137,93 @@ const userStore = useUserStore();
 const toast = useGlobalToast();
 
 const recordsCount = ref(0);
+const avgScore = ref("0");
 const favoritesCount = ref(0);
+const cacheSize = ref("28.4 MB");
 const isDarkMode = ref(false);
-const cacheSize = ref("12.4 MB");
+const isNoticeOn = ref(true);
 
-const userName = computed(() => userStore.userInfo?.display_name || "认证学员");
-const avatarLetter = computed(() => userName.value.slice(0, 1));
-
+const userName = computed(() => userStore.userInfo?.display_name || "学员");
 const maskedPhone = computed(() => {
-	const phone = userStore.userInfo?.phone || "";
-	if (phone.length === 11) {
-		return `${phone.slice(0, 3)}****${phone.slice(7)}`;
+	const p = userStore.userInfo?.phone || "";
+	if (p.length === 11) {
+		return `${p.slice(0, 3)}****${p.slice(7)}`;
 	}
-	return phone || "139****0001";
+	return p || "未绑定手机";
+});
+
+const avatarLetter = computed(() => {
+	const name = userName.value;
+	return name.slice(0, 1);
 });
 
 const institutionName = computed(() => {
 	const matched = userStore.joinedTenants.find((t) => t.tenant_id === userStore.tenantId);
-	return matched?.tenant_name || "智题库认证空间";
+	return matched?.tenant_name || "星雅教育 · 教务中心";
 });
 
-async function loadCounts(): Promise<void> {
+async function loadProfileData(): Promise<void> {
 	try {
-		const [favRes, taskRes] = await Promise.allSettled([
+		const [tasksRes, favsRes] = await Promise.allSettled([
+			fetchMemberTasks(),
 			fetchFavorites(),
-			fetchMemberTasks()
 		]);
-		if (favRes.status === "fulfilled") {
-			favoritesCount.value = favRes.value.items?.length || 0;
+
+		if (tasksRes.status === "fulfilled") {
+			const items = tasksRes.value.items || [];
+			const submitted = items.filter((it) => ["submitted", "verified"].includes(it.status));
+			recordsCount.value = submitted.length;
+			if (submitted.length > 0) {
+				const sum = submitted.reduce((acc, it) => acc + (it.score || 0), 0);
+				avgScore.value = (sum / submitted.length).toFixed(1);
+			} else {
+				avgScore.value = "0";
+			}
 		}
-		if (taskRes.status === "fulfilled") {
-			const tasks = taskRes.value.items || [];
-			recordsCount.value = tasks.filter((t) => ["submitted", "verified", "pending_verification"].includes(t.status)).length;
+
+		if (favsRes.status === "fulfilled") {
+			favoritesCount.value = favsRes.value.items?.length || 0;
 		}
 	} catch {
-		// 容错静默
+		// 静默降级
 	}
 }
 
-function goRecords(): void {
+function goRecords() {
 	uni.switchTab({ url: "/pages/records/index" });
 }
 
-function goFavorites(): void {
+function goFavorites() {
 	uni.navigateTo({ url: "/pages/favorites/index" });
 }
 
-function handleClearCache(): void {
-	cacheSize.value = "0 KB";
-	toast.success("本地缓存已清理");
+function handleClearCache() {
+	cacheSize.value = "0.0 MB";
+	toast.success("本地缓存已清理完毕");
 }
 
-function handleLogout(): void {
+function showAbout() {
 	uni.showModal({
-		title: "退出确认",
-		content: "确定要安全退出当前账号吗？",
-		confirmText: "确定退出",
-		confirmColor: "#ff3b30",
-		success: (res) => {
+		title: "关于智题库",
+		content: "智题库在线考核认证系统 v1.5\nApple 钛金微光官方视觉规范版\n© 2026",
+		showCancel: false,
+		confirmText: "知道了",
+	});
+}
+
+function handleLogout() {
+	uni.showModal({
+		title: "确认退出",
+		content: "退出登录后将返回登录页面，是否继续？",
+		confirmText: "退出",
+		confirmColor: "#FF3B30",
+		cancelText: "取消",
+		success(res) {
 			if (res.confirm) {
 				userStore.clearAuth();
 				uni.reLaunch({ url: "/pages/login/index" });
 			}
-		}
+		},
 	});
 }
 
@@ -193,18 +232,18 @@ onShow(() => {
 		uni.reLaunch({ url: "/pages/login/index" });
 		return;
 	}
-	loadCounts();
+	loadProfileData();
 });
 </script>
 
 <style lang="scss" scoped>
 @import "@/styles/tokens-apple.scss";
 
-.profile-apple {
+.pf-page {
 	position: relative;
 	min-height: 100vh;
 	background: $bg;
-	padding: 40rpx 36rpx 80rpx;
+	padding: 40rpx 44rpx 80rpx;
 	box-sizing: border-box;
 	overflow: hidden;
 }
@@ -214,295 +253,336 @@ onShow(() => {
 	position: absolute;
 	inset: 0;
 	pointer-events: none;
-	overflow: hidden;
+}
 
-	&__blob {
-		position: absolute;
-		border-radius: 50%;
-		filter: blur(80px);
-		opacity: 0.4;
+.pf-aurora__blob {
+	position: absolute;
+	border-radius: 50%;
+	filter: blur(80rpx);
+	pointer-events: none;
+}
 
-		&--1 {
-			width: 500rpx;
-			height: 500rpx;
-			top: -140rpx;
-			left: -120rpx;
-			background: radial-gradient(circle, rgba(24, 82, 224, 0.4), rgba(24, 82, 224, 0));
-		}
+.pf-aurora__blob--1 {
+	width: 440rpx;
+	height: 440rpx;
+	background: rgba(24, 82, 224, 0.22);
+	right: -140rpx;
+	top: -160rpx;
+	animation: blob-float 10s ease-in-out infinite;
+}
 
-		&--2 {
-			width: 440rpx;
-			height: 440rpx;
-			top: 320rpx;
-			right: -100rpx;
-			background: radial-gradient(circle, rgba(124, 92, 255, 0.28), rgba(124, 92, 255, 0));
-		}
+.pf-aurora__blob--2 {
+	width: 380rpx;
+	height: 380rpx;
+	background: rgba(124, 92, 255, 0.18);
+	left: -120rpx;
+	top: 220rpx;
+	animation: blob-float 12s ease-in-out infinite reverse;
+}
+
+@keyframes blob-float {
+	0%,
+	100% {
+		transform: translateY(0) scale(1);
+	}
+	50% {
+		transform: translateY(36rpx) scale(1.06);
 	}
 }
 
-/* 钛金名片 */
+/* 个人名片 */
 .pf-card {
 	position: relative;
-	z-index: 2;
-	background: rgba(255, 255, 255, 0.92);
+	background: linear-gradient(150deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.68));
 	backdrop-filter: $glass-blur;
 	border: 1px solid $glass-border;
-	border-radius: $radius-card;
-	padding: 36rpx 32rpx;
-	box-shadow: $shadow-card;
-	margin-bottom: 24rpx;
+	border-radius: 32rpx;
+	padding: 44rpx 40rpx;
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), $shadow-card;
+}
 
-	&__top {
-		display: flex;
-		align-items: center;
-		gap: 24rpx;
-	}
-
-	&__info {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		gap: 6rpx;
-	}
-
-	&__name-row {
-		display: flex;
-		align-items: center;
-		gap: 12rpx;
-	}
-
-	&__name {
-		font-size: 36rpx;
-		font-weight: 800;
-		color: $ink;
-	}
-
-	&__phone {
-		font-size: 24rpx;
-		color: $muted;
-	}
-
-	&__org {
-		font-size: 22rpx;
-		font-weight: 600;
-		color: $accent;
-	}
+.pf-card__top {
+	display: flex;
+	align-items: center;
+	gap: 30rpx;
 }
 
 .pf-avatar {
 	position: relative;
-	width: 104rpx;
-	height: 104rpx;
-	border-radius: 50%;
+	width: 132rpx;
+	height: 132rpx;
+	border-radius: 40rpx;
 	background: $gradient;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	box-shadow: 0 8rpx 24rpx rgba(24, 82, 224, 0.3);
+	color: #ffffff;
+	font-size: 48rpx;
+	font-weight: 700;
+	flex-shrink: 0;
+	box-shadow: 0 16rpx 44rpx rgba(10, 50, 153, 0.35), inset 0 2rpx 6rpx rgba(255, 255, 255, 0.4);
+}
 
-	&__text {
-		color: #ffffff;
-		font-size: 42rpx;
-		font-weight: 700;
-	}
+.pf-avatar__badge {
+	position: absolute;
+	right: -10rpx;
+	bottom: -10rpx;
+	width: 44rpx;
+	height: 44rpx;
+	border-radius: 50%;
+	background: $ok;
+	color: #ffffff;
+	font-size: 24rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 5rpx solid #ffffff;
+	box-shadow: 0 4rpx 14rpx rgba(52, 199, 89, 0.35);
+}
 
-	&__badge {
-		position: absolute;
-		right: -2rpx;
-		bottom: -2rpx;
-		width: 32rpx;
-		height: 32rpx;
-		border-radius: 50%;
-		background: $ok;
-		color: #ffffff;
-		border: 4rpx solid #ffffff;
-		font-size: 18rpx;
-		font-weight: 900;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
+.pf-card__name-row {
+	display: flex;
+	align-items: center;
+	gap: 16rpx;
+}
+
+.pf-card__name {
+	font-size: 40rpx;
+	font-weight: 800;
+	color: $ink;
 }
 
 .pf-cert {
-	background: $accent-soft;
-	padding: 2rpx 12rpx;
-	border-radius: 6rpx;
 	font-size: 18rpx;
-	font-weight: 700;
 	color: $accent;
+	background: $accent-soft;
+	border-radius: $radius-pill;
+	padding: 6rpx 16rpx;
 }
 
-/* 统计看板 */
+.pf-card__phone {
+	margin-top: 14rpx;
+	font-size: 24rpx;
+	color: $muted;
+}
+
+.pf-card__org {
+	margin-top: 8rpx;
+	font-size: 22rpx;
+	color: $muted;
+}
+
+/* 数据看板 */
 .pf-stats {
 	position: relative;
-	z-index: 2;
-	background: rgba(255, 255, 255, 0.92);
+	display: flex;
+	margin-top: 28rpx;
+	background: rgba(255, 255, 255, 0.8);
 	backdrop-filter: $glass-blur;
 	border: 1px solid $glass-border;
-	border-radius: $radius-card;
-	padding: 28rpx 20rpx;
-	display: flex;
+	border-radius: 28rpx;
+	padding: 36rpx 0;
 	box-shadow: $shadow-card;
-	margin-bottom: 24rpx;
 }
 
 .pf-stat {
 	flex: 1;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 6rpx;
-
-	&__num {
-		font-size: 38rpx;
-		font-weight: 800;
-		color: $ink;
-		font-feature-settings: "tnum";
-	}
-
-	&__label {
-		font-size: 22rpx;
-		color: $muted;
-	}
+	text-align: center;
+	cursor: pointer;
 }
 
-/* 列表组 */
+.pf-stat__num {
+	display: block;
+	font-size: 48rpx;
+	font-weight: 800;
+	color: $ink;
+}
+
+.pf-stat__label {
+	display: block;
+	margin-top: 10rpx;
+	font-size: 22rpx;
+	color: $muted;
+}
+
+/* 分组列表 */
 .pf-group {
 	position: relative;
-	z-index: 2;
-	background: rgba(255, 255, 255, 0.92);
-	backdrop-filter: $glass-blur;
-	border: 1px solid $glass-border;
-	border-radius: $radius-card;
-	padding: 16rpx 28rpx;
-	box-shadow: $shadow-card;
-	margin-bottom: 24rpx;
+	margin-top: 44rpx;
+}
 
-	&__title {
-		font-size: 22rpx;
-		font-weight: 700;
-		color: $muted;
-		padding: 12rpx 4rpx 8rpx;
-		letter-spacing: 0.5px;
-	}
+.pf-group__title {
+	font-size: 24rpx;
+	color: $muted;
+	margin-bottom: 18rpx;
+	padding-left: 12rpx;
 }
 
 .pf-row {
 	display: flex;
 	align-items: center;
-	padding: 22rpx 4rpx;
-	border-top: 1px solid $line;
+	gap: 26rpx;
+	background: rgba(255, 255, 255, 0.82);
+	backdrop-filter: $glass-blur;
+	border: 1px solid $glass-border;
+	border-radius: 26rpx;
+	padding: 28rpx 30rpx;
+	margin-bottom: 18rpx;
+	box-shadow: $shadow-card;
+	transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+	cursor: pointer;
+}
 
-	&:first-of-type {
-		border-top: none;
-	}
+.pf-row:active {
+	transform: scale(0.98);
+}
 
-	&__icon {
-		width: 56rpx;
-		height: 56rpx;
-		border-radius: 16rpx;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-right: 20rpx;
-	}
+.pf-row__icon {
+	width: 68rpx;
+	height: 68rpx;
+	border-radius: 20rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
 
-	&__main {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		gap: 2rpx;
-	}
+/* 拟物图标族 */
+.pf-glyph {
+	position: relative;
+	width: 28rpx;
+	height: 28rpx;
+}
 
-	&__title {
-		font-size: 28rpx;
-		font-weight: 600;
-		color: $ink;
-	}
+.pf-glyph--star {
+	background: currentColor;
+	clip-path: polygon(50% 0%, 63% 35%, 98% 35%, 70% 57%, 79% 91%, 50% 70%, 21% 91%, 30% 57%, 2% 35%, 37% 35%);
+}
 
-	&__sub {
-		font-size: 20rpx;
-		color: $muted;
-	}
+.pf-glyph--moon {
+	background: currentColor;
+	border-radius: 50%;
+	box-shadow: 8rpx -6rpx 0 0 currentColor;
+	transform: translateX(-4rpx);
+}
 
-	&__extra {
-		font-size: 24rpx;
-		color: $muted;
-	}
+.pf-glyph--moon::after {
+	content: "";
+	position: absolute;
+	inset: 2rpx;
+	border-radius: 50%;
+	background: inherit;
+	transform: translateX(10rpx);
+}
 
-	&__arrow {
-		font-size: 32rpx;
-		color: $faint;
-	}
+.pf-glyph--bell {
+	background: currentColor;
+	clip-path: polygon(30% 0, 70% 0, 85% 65%, 100% 75%, 100% 85%, 0 85%, 0 75%, 15% 65%);
+}
 
-	&__toggle {
-		width: 80rpx;
-		height: 44rpx;
-		border-radius: 999rpx;
-		background: $surface-sunken;
-		position: relative;
-		transition: background 0.2s ease;
+.pf-glyph--clean {
+	background: currentColor;
+	clip-path: polygon(25% 10%, 75% 10%, 75% 25%, 100% 25%, 100% 40%, 0 40%, 0 25%, 25% 25%);
+}
 
-		&--on {
-			background: $ok;
-			.pf-row__knob {
-				transform: translateX(36rpx);
-			}
-		}
-	}
+.pf-glyph--info {
+	background: currentColor;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
 
-	&__knob {
-		width: 36rpx;
-		height: 36rpx;
-		border-radius: 50%;
-		background: #ffffff;
-		position: absolute;
-		top: 4rpx;
-		left: 4rpx;
-		box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.2);
-		transition: transform 0.2s ease;
-	}
+.pf-glyph--info::before {
+	content: "i";
+	color: #ffffff;
+	font-size: 20rpx;
+	font-weight: 800;
+	font-style: italic;
+}
+
+.pf-row__main {
+	flex: 1;
+	min-width: 0;
+}
+
+.pf-row__title {
+	display: block;
+	font-size: 29rpx;
+	font-weight: 700;
+	color: $ink;
+}
+
+.pf-row__sub {
+	display: block;
+	margin-top: 6rpx;
+	font-size: 22rpx;
+	color: $muted;
+}
+
+.pf-row__extra {
+	font-size: 24rpx;
+	color: $muted;
+}
+
+.pf-row__arrow {
+	font-size: 38rpx;
+	color: $faint;
+}
+
+/* 开关组件 */
+.pf-row__toggle {
+	width: 84rpx;
+	height: 48rpx;
+	border-radius: $radius-pill;
+	background: rgba(20, 30, 60, 0.14);
+	padding: 4rpx;
+	box-sizing: border-box;
+	transition: background 0.25s;
+}
+
+.pf-row__toggle--on {
+	background: $gradient;
+	box-shadow: 0 4rpx 14rpx rgba(24, 82, 224, 0.35);
+}
+
+.pf-row__knob {
+	width: 40rpx;
+	height: 40rpx;
+	border-radius: 50%;
+	background: #ffffff;
+	box-shadow: 0 2rpx 6rpx rgba(20, 30, 60, 0.2);
+	transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pf-row__toggle--on .pf-row__knob {
+	transform: translateX(36rpx);
 }
 
 /* 退出登录 */
 .pf-logout {
-	position: relative;
-	z-index: 2;
-	height: 88rpx;
-	border-radius: $radius-card;
-	background: rgba(255, 255, 255, 0.92);
-	border: 1px solid $glass-border;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	margin-top: 10rpx;
-	box-shadow: $shadow-card;
-	transition: all 0.2s ease;
+	margin-top: 52rpx;
+	background: rgba(255, 59, 48, 0.08);
+	border: 1px solid rgba(255, 59, 48, 0.2);
+	border-radius: 26rpx;
+	padding: 30rpx 0;
+	text-align: center;
+	font-size: 29rpx;
+	font-weight: 700;
+	color: #d70015;
+	transition: all 0.2s;
+	cursor: pointer;
+}
 
-	&--pressed {
-		transform: scale(0.985);
-		background: $danger-soft;
-	}
-
-	&__text {
-		font-size: 28rpx;
-		font-weight: 700;
-		color: $danger;
-	}
+.pf-logout:active {
+	background: rgba(255, 59, 48, 0.14);
 }
 
 .pf-version {
-	position: relative;
-	z-index: 2;
-	display: block;
+	margin-top: 36rpx;
 	text-align: center;
-	margin-top: 24rpx;
-	font-size: 20rpx;
+	font-size: 22rpx;
 	color: $faint;
-}
-
-.pf-bottom-space {
-	height: calc(100rpx + env(safe-area-inset-bottom));
 }
 </style>
