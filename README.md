@@ -38,17 +38,34 @@
   - **真正多租户隔离**：实现教育培训机构（如星雅教育）与企业合规考核（如皓石集团）的数据逻辑隔离与权限加固；
   - **AI 智能出题助手深度落地**：对话式批量出题卡片、智能组卷、安全合规防泄题拦截，消息与卡片执行状态数据库持久化（`action_card_data`）；
   - **自动化快照工程**：内置 Playwright 自动化截屏与文档生成引擎，双击批处理脚本即可一键生成系统最新图文快照。
-- **v1.5 (跨端极客重构 - 正在开发)**：
-  - 采用 `uni-app` (Vue 3.5 + TS + Vite) + `Wot Design Uni` 全面重构 C 端移动端；
-  - 极客蓝 (Geek Blue) 沉浸式风格，纯正 SVG 图标规范，单题聚焦作答流与安全防泄题动态报告。
+- **v1.5 (C 端跨端原生重塑 · Apple 钛金微光风 - 最新已交付)**：
+  - 采用 `uni-app` (Vue 3.5 + TS + Vite) 全面重塑 C 端移动端，奠定 **Apple 钛金微光风 (Light-Titanium Glassmorphism)** 视觉规范；
+  - 彻底去除外部抽象卡片与多层黑盒嵌套，单选、多选、双大胶囊判断、填空与高对比度文本域原生内联，杜绝移动端白屏；
+  - 强化考场简答题与填空题输入可视度（纯白微阴影背景 + 实体冷灰边框 + 深空蓝微光聚焦光晕）；
+  - 统一成绩报告页内置标准白色微质感 Navbar（`solid` 模式），与出分看板及保密盾牌浑然天成；
+  - 新增全自动无头快照脚本 `scripts/snapshot_v1.5_c.py` 与双击即跑的 `生成v1.5快照介绍文档.bat`。
 
 ---
 
-## 📸 系统全景快照 (v1.4 Showcase)
+## 📸 系统全景快照 (Showcase)
+
+### 一、v1.5 C 端移动端全景展示 (Apple 钛金微光风)
+
+> 完整的高清快照指南请参阅 👉 **[v1.5 C端全景功能快照与视觉规范指南](./docs/v1.5_c_showcase.md)**
+
+| 暮光微光登录 (Login) | 任务大厅首页 (Home) | 在线沉浸考场 (Exam) |
+| :---: | :---: | :---: |
+| ![C端登录](./docs/images/v1.5/01_toc_login.png) | ![C端首页](./docs/images/v1.5/02_toc_home.png) | ![C端考场](./docs/images/v1.5/03_toc_exam.png) |
+
+| 我的测评进度 (Records) | 成绩复盘报告 (Report) | 个人中心 (Profile) |
+| :---: | :---: | :---: |
+| ![我的测试](./docs/images/v1.5/04_toc_records.png) | ![成绩报告](./docs/images/v1.5/05_toc_report_done.png) | ![个人中心](./docs/images/v1.5/06_toc_profile.png) |
+
+---
+
+### 二、B 端管理后台全景展示 (v1.4 PC 桌面端)
 
 > 完整的高清快照指南请参阅 👉 **[v1.4 系统功能快照与架构指南](./docs/v1.4_showcase.md)**
-
-### B 端管理后台 (PC 桌面端)
 
 | 数据看板 (Dashboard) | 题目资产管理 (Questions) |
 | :---: | :---: |
@@ -57,12 +74,6 @@
 | AI 智能出题助手 (AI Assistant) | 试卷考核中心 (Exams) |
 | :---: | :---: |
 | ![AI 智能助手](./docs/images/v1.4/04_tob_ai_assistant.png) | ![试卷管理](./docs/images/v1.4/03_tob_tasks.png) |
-
-### C 端考生端 (移动端 iPhone 视口)
-
-| 企业空间首页 | 测评任务列表 | 个人资产中心 |
-| :---: | :---: | :---: |
-| ![C端首页](./docs/images/v1.4/08_toc_home.png) | ![我的测评](./docs/images/v1.4/09_toc_my_tasks.png) | ![个人中心](./docs/images/v1.4/10_toc_profile.png) |
 
 ---
 

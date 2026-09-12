@@ -1,8 +1,8 @@
 # 智题库 (TiKu) v1.5 系统架构与技术白皮书 (Tech Spec)
 
-> **版本标识**：v1.5 (跨端重构基线·实库校准版)  
-> **更新时间**：2026-09-12  
-> **设计美学**：极客蓝 (Geek Blue) 沉浸式极简 / 纯正 SVG 图标规范
+> **版本标识**：v1.5 (C端 Apple 钛金微光重塑版·实库校准)  
+> **更新时间**：2026-09-13  
+> **设计美学**：Apple 钛金微光风 (Light-Titanium Glassmorphism) / 原生内联题型 / 纯正 SVG 规范
 
 ---
 
@@ -15,7 +15,7 @@
 │      B 端管理后台 (PC)       │     C 端考生端 (H5/小程序)    │
 │  - 框架: Vue 3.5 + Vite 8    │  - 框架: uni-app + Vue 3.5   │
 │  - 语言: TypeScript 5.8      │  - 语言: TypeScript 4.9.5    │
-│  - UI: Element Plus          │  - UI: Wot Design Uni        │
+│  - UI: Element Plus          │  - 风格: Apple 钛金微光风    │
 │  - 目录: /tob (Dev 端口 5173)│  - 目录: /toc-new (Dev 5174) │
 ├──────────────────────────────┴──────────────────────────────┤
 │                   Nginx 反向代理层 (Port 80)                │
@@ -36,31 +36,34 @@
 
 ---
 
-## 二、C 端极客架构规范 (toc-new)
+## 二、C 端架构规范 (toc-new)
 
 ### 2.1 技术栈选型与目录设计
 - **运行时环境**：`uni-app` (Vite + TypeScript 模板，由 `pnpm` 驱动)
-- **核心组件库**：`wot-design-uni`（适配 uni-app 的现代化极简移动组件库）
+- **渲染策略**：卡帕西务实范式，题目与选项原生展开内联渲染（零多层嵌套黑盒依赖，规避高度塌陷与白屏）
 - **状态管理**：`pinia` + `pinia-plugin-persistedstate`
-- **样式方案**：Sass/SCSS，定义极客蓝全局主题变量
+- **样式方案**：Sass/SCSS，由全局 `src/styles/tokens-apple.scss` 接管 Apple 钛金微光设计令牌
 
 **工程目录树**：
 ```
 /toc-new
 ├── src/
 │   ├── api/                 # 统一 API 模块（auth.ts, exam.ts, user.ts）
-│   ├── components/          # 通用业务组件（CustomHeader, SvgIcon, QuestionCard）
+│   ├── components/          # 通用业务组件（CustomHeader, PageState, GlobalToast）
+│   ├── styles/              # 设计令牌规范（tokens-apple.scss）
 │   ├── static/              # 静态资源与纯正 SVG 图标集
-│   ├── stores/              # Pinia 状态树（user.ts, examSession.ts）
+│   ├── stores/              # Pinia 状态树（user.ts, toast.ts）
 │   ├── utils/
+│   │   ├── format.ts        # 日期、时长、数字归一化工具
 │   │   └── request.ts       # 统一请求拦截、Token 与 Tenant-Id 注入、401 拦截
 │   ├── pages/
-│   │   ├── index/index.vue  # Tab 1: 首页（大卡片流、开始考试直达）
-│   │   ├── records/index.vue# Tab 2: 我的测试（历史回顾、成绩报告）
-│   │   ├── profile/index.vue# Tab 3: 个人中心（通顶卡片、收藏、退出）
-│   │   ├── exam/index.vue   # 子页面: 沉浸作答流（单题聚焦、左右滑动手势）
-│   │   ├── report/index.vue # 子页面: 动态成绩报告（防泄题审查态）
-│   │   └── login/index.vue  # 子页面: 极简登录页（极客蓝通顶微渐变）
+│   │   ├── index/index.vue  # Tab 1: 首页大厅（多色温漫反射卡片、动态胶囊 Banner）
+│   │   ├── records/index.vue# Tab 2: 我的测试（果冻吸顶滑块、脉冲进行中绿点）
+│   │   ├── profile/index.vue# Tab 3: 个人中心（钛金玻璃卡片、错题收藏、退出）
+│   │   ├── exam/index.vue   # 子页面: 沉浸考场（高对比度纯白文本域、双大胶囊、60vh抽屉）
+│   │   ├── report/index.vue # 子页面: 成绩报告（标准白底毛玻璃 Navbar、双模态防泄题看板）
+│   │   ├── favorites/index.vue # 子页面: 我的收藏（错题卡片流、一键温故知新）
+│   │   └── login/index.vue  # 子页面: 极简登录页（暮光光晕、隐式租户绑定）
 │   ├── App.vue
 │   ├── main.ts
 │   ├── manifest.json
@@ -69,13 +72,14 @@
 └── vite.config.ts
 ```
 
-### 2.2 视觉与主题体系 (Geek Blue)
-- 主色调：`--geek-blue: #1D63FF;`
-- 背景底色：`--bg-light: #F6F8FC;`
-- 卡片背景：`--bg-card: #FFFFFF;`
-- 主文字色：`--text-main: #1C2331;`
-- 次级文字色：`--text-secondary: #748094;`
-- 渐变色：`linear-gradient(135deg, #1D63FF 0%, #0045D8 100%);`
+### 2.2 Apple 钛金微光设计令牌 (`tokens-apple.scss`)
+- 钛金冷白底盘：`$bg: #fbfbfd; $surface: #ffffff;`
+- 墨色梯队：`$ink: #1d1d1f; $ink-2: #3a3a3c; $muted: #86868b;`
+- 暮光微渐变主色：`$accent: #1852e0; $gradient: linear-gradient(135deg, #1852e0 0%, #0a3299 100%);`
+- 漫反射多层微弥散阴影：`$shadow-card: 0 1px 2px rgba(20, 30, 60, 0.04), 0 8px 28px rgba(20, 30, 60, 0.08);`
+- 琉璃毛玻璃材质：`$glass-blur: blur(24px) saturate(180%);`
+- 高清晰输入规范：`border: 2rpx solid #cbd5e1; background: #ffffff; color: #0f172a;`
+
 
 ### 2.3 `pages.json` 规范定义
 ```json

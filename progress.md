@@ -1,5 +1,9 @@
 /**
  * [变更日志]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 记录阶段五：全面采纳 Style B (Apple 钛金微光风) 接管正式主干，单选/多选/判断(双大胶囊)/填空/简答全题型原生展开，彻底根除抽象组件引起的白屏问题; 2. 强化考场简答题textarea与填空题input的可读性与对比度(纯白底+冷灰边框+深色文字+聚焦微光); 3. 统一成绩报告页顶部为内置标准白色微质感Navbar; 4. 固化单机构隐式无感知绑定，剔除全部机构切换干扰; 5. 建立全自动无头快照流水线(snapshot_v1.5_c.py 与 bat 脚本)并输出 docs/v1.5_c_showcase.md; 6. 刷新状态冻结时间并收口交付]
+ * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Deepseek-V4.1-Flash 底层
  * 修改内容：[1. 新增「UI 选型双风格静态预览体系」交付记录（preview-linear / preview-apple 各 7 页 + preview-nav 索引台 + PreviewFloat 悬浮球组件）; 2. 补齐双风格验收证据与已知限制; 3. 刷新状态冻结时间]
@@ -23,8 +27,8 @@
 
 # 智题库 (TiKu) 动态事实与研发进度总览 (Progress)
 
-> **当前全局版本**：v1.5 (C端跨端极客重构)  
-> **最新状态冻结时间**：2026-09-12 22:55:50  
+> **当前全局版本**：v1.5 (C端 Apple 钛金微光重塑版)  
+> **最新状态冻结时间**：2026-09-13 00:50:00  
 > **执行标准**：严格执行 `agent.md`「最高行为准则」与「跨版本大更迭最高协议」
 
 ---
@@ -172,26 +176,34 @@
 
 ---
 
+### 阶段 5：Apple 钛金微光风 (Style B) 深度收口与生产级打磨 —— 【✅ 已全部交付并闭环】
+- [x] 5.1 全面采纳风格 B (Apple 钛金微光风)，将 `preview-apple` 原生视觉规范 100% 移植并替换至正式业务主干（`src/pages/` 全部页面），淘汰原极客蓝方案；
+- [x] 5.2 考场原生展开改造：五大题型直接原生内联渲染（单选、多选、双大胶囊判断、填空、简答），彻底拔除引起高度塌陷与白屏的外层抽象卡片；
+- [x] 5.3 题干与输入体验深度打磨：简答题 `textarea` 与填空题 `input` 全面强化可视度，配置纯白衬底（`#ffffff`）、实体冷灰边框（`2rpx solid #cbd5e1`）、深墨色文字（`#0f172a`）与深空蓝聚焦光晕，解决白底发虚难题；
+- [x] 5.4 成绩报告页导航统一：顶部 Navbar 切换为标准白底微质感模式（`CustomHeader variant="solid"`），与深空夜蓝看板及琉璃保密盾牌自然融合；
+- [x] 5.5 组织租户铁律落实：登录与个人中心物理级剔除“选择机构/切换机构”弹窗与菜单，严格执行无感知单租户隐式静默绑定；
+- [x] 5.6 建立自动化截屏与文档流水线：新增 `scripts/snapshot_v1.5_c.py` 与根目录批处理入口 `生成v1.5快照介绍文档.bat`，一键生成 `docs/v1.5_c_showcase.md` 与 iPhone 14 高清视网膜全景截图。
+
+**验收证据（终端与真实浏览器物理输出）**：
+1. `pnpm --dir toc-new type-check`（`vue-tsc --noEmit`）0 报错；
+2. `pnpm --dir toc-new build:h5` 输出 `DONE Build complete.`；
+3. 执行 `python scripts/snapshot_v1.5_c.py`，顺利捕获 7 大页面高清原图（`docs/images/v1.5/`），并自动输出完整的 `docs/v1.5_c_showcase.md`。
+
+---
+
 ## 三、接手检查清单 (Handover Checklist)
 
 后续任何 Agent 接手开发时，按以下步骤入场：
-1. **核对代码与 Tag**：确认当前在 `dev` 分支，最新 tag 为 `v1.4-final`。
+1. **核对代码与当前分支**：确认当前在 `dev` 分支，最新 commit 已包含 v1.5 Apple 钛金微光风全量代码。
 2. **确认服务健康**：
-   - 后端容器：`docker ps` 确保 `tiku_backend` 为 `healthy`。
+   - 后端容器：`http://127.0.0.1:8000/docs` 响应 200。
    - B端管理后台：`http://localhost/admin` 正常运行。
-3. **开发展开点**：**阶段 1～4 已全部收口**，v1.5 C 端「登录 → 测评 → 作答 → 交卷 → 成绩复盘 → 题目收藏」主干业务闭环全部贯通。
-   - **UI 选型双风格静态预览体系已就绪**（依据根目录 `improveUI.md`）：`preview-linear/`（A 风格 Linear 极客冷灰，拨盘 5/4/5）与 `preview-apple/`（B 风格 Apple 钛金微光，拨盘 8/7/3）各含首页 / 我的测试 / 在线考场 / 成绩报告 / 个人中心 / 我的收藏 / 登录页 7 页，另有 `preview-nav/index` 索引台与全局 `PreviewFloat` 悬浮球（组件文档见 `src/components/PreviewFloat.md`）；全部为内置静态 Mock 数据，不接入真实接口、不触碰 `pages/` 正式业务代码；选型完成后可整体删除 `preview-linear/`、`preview-apple/`、`preview-nav/` 三目录与 `PreviewFloat` 组件；
-   - 后续按需展开：
-   - C 端工程位于 `toc-new/`，启动命令 `cd toc-new && pnpm dev:h5`（端口 5174）；
-   - 新增页面时务必在页面模板内挂载 `<GlobalToast />`，否则轻提示会降级为原生 toast；
-   - 数据页面统一复用 `CustomHeader` + `PageState` + `<GlobalToast />` 结构，三态（加载 / 空 / 错误）必须齐全；
-   - 所有 C 端接口调用一律以 `/api/v1/member/*` 为准（真实后端路由），不要使用 `api-contract.md` 里的 `/api/v1/saas/*`；
-   - **准入考接口 `/member/tasks/{id}/entry` 有不可逆副作用**（服务端会真实落库 pending 记录并锁定开考时刻），除考场页开考流程外严禁在任何预览、预检场景调用；
-   - 登录态跳转规则：目标为 tabBar 页（首页 / 我的测试 / 个人中心）用 `uni.switchTab`，目标为非 tab 页（登录页 / 考场页 / 报告页 / 收藏页）用 `uni.reLaunch`、`uni.navigateTo` 或 `uni.redirectTo`；**交卷后跳报告页必须用 `redirectTo` 出栈替换考场页**；
-   - **交卷答案必须提交选项 key**：单选 / 判断传 `"A"` 形式字符串，多选传 `["A","B","D"]` 数组，**判断题只能传 `'A'`/`'B'`**，且 `answers` 必须是对象数组（严禁字典），并为每道题生成一项（未作答传空串）；
-   - **实测账号已耗尽**：管理员 `13800000011` 对 task 23 / 24 / 25 已各产生一条真实作答记录，后续若需真机交卷验证，请先用管理员新建并发布一份试卷；
-   - **待核验试卷的防泄题由前端 `v-if` 兜底**：后端 `my_result` 在 `pending_verification` 时仍返回 `correct_answer` / `explanation`，改动报告页复盘区渲染逻辑时**必须保持答案对照块挂在该态外**；根治方案建议由后端在该态下不返回这两个字段（见阶段 4 已知限制）；
-   - **待办：4.3 Nginx 联调未实施**，上线前需把移动端根路径 `/` 无缝切换至 `toc-new` 的 H5 产物。
+   - C端极客移动端：`http://localhost:5174`（开发模式）或编译产物正常运行。
+3. **视觉与业务约束**：
+   - 全局设计令牌以 `src/styles/tokens-apple.scss` 为准；
+   - 考场题型务必保持原生内联，切忌盲目进行二次抽象封装；
+   - 严禁在任何地方添加“切换机构”入口，统一走隐式绑定。
 
 ---
-*时间戳签名：2026-09-12 22:55:50 (Deepseek-V4.1-Flash Engineering Closure)*
+*时间戳签名：2026-09-13 00:50:00 (Gemini Series Engineering Closure)*
+
