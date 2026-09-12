@@ -1,15 +1,25 @@
 /**
  * [变更日志]
- * 修改时间：2026-09-12
- * AI模型：Deepseek-V4.1-Flash 底层
- * 修改内容：[1. 业务成功码判定由固定 200 放宽为 2xx 区间，兼容新增类接口返回的 201（如添加题目收藏）]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 增加环境自适应 baseURL 判定：在 Cloudflare Pages (pages.dev) 线上环境下自动直连 https://tiku-api.vercel.app 后端，本地或自建网关保持相对路径; 2. 彻底打通云端直连 Vercel 真实接口与鉴权]
+ */
+/**
  * [变更日志]
  * 修改时间：2026-09-12
  * AI模型：Deepseek-V4.1-Flash 底层
- * 修改内容：[1. 失败响应兼容解析后端 FastAPI 的 { detail } 结构，避免登录等失败原因被吞成通用文案]
+ * 修改内容：[1. 业务成功码判定由固定 200 放宽为 2xx 区间，兼容新增类接口返回的 201（如添加题目收藏）]
  */
 import { useUserStore } from "@/stores/user";
 import { useGlobalToast } from "@/stores/toast";
+
+/** 自动解析后端 baseURL：线上 pages.dev 域名直接连 Vercel 后端 */
+function getApiBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location.hostname.endsWith("pages.dev")) {
+    return "https://tiku-api.vercel.app";
+  }
+  return "";
+}
 
 /** 后端统一响应包裹结构，参见 backend/app/api/saas/tasks.py 的返回约定 */
 export interface ApiEnvelope<T> {
@@ -21,7 +31,7 @@ export interface ApiEnvelope<T> {
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export interface RequestOptions {
-  /** 完整路径，必须以 /api/v1 开头，中途不再拼 baseURL，避免路径重复 */
+  /** 相对路径或绝对路径，必须以 /api/v1 开头 */
   url: string;
   method?: HttpMethod;
   /** GET 走查询串，POST/PUT 走 JSON 体 */
@@ -78,9 +88,11 @@ export function request<T>(options: RequestOptions): Promise<T> {
     finalHeader["X-Tenant-Id"] = String(userStore.tenantId);
   }
 
+  const fullUrl = url.startsWith("http") ? url : `${getApiBaseUrl()}${url}`;
+
   return new Promise<T>((resolve, reject) => {
     uni.request({
-      url,
+      url: fullUrl,
       method,
       data,
       header: finalHeader,
