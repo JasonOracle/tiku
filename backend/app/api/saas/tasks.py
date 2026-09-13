@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-13
+AI模型：Gemini 系列
+修改内容：[1. APP-05 缺考治理：task_stats 在考试截止后自动补齐未作答成员为 absent 缺考记录，并输出 absent_count 与缺考名单；2. member_tasks 在截止后对未参加的试卷状态映射为 absent 已缺考；3. APP-02 考试时间守卫：submit_task 增加 start_time 拦截（未开考不可提交）并拦截 absent 记录重复提交]
 修改时间：2026-09-12
 AI模型：OpenCode / DeepSeek
 修改内容：[权限隔离重构：GET /resources 依赖由 require_member 收紧为 require_admin，/admin/resources 与 /member/resources 双前缀同步锁定，杜绝接口层考前泄题（经核实 C 端未调用该接口，零影响）]
@@ -373,11 +376,30 @@ def task_detail(task_id: int, ctx: dict = Depends(require_member), db: Session =
 #  */
 @router.get("/tasks/{task_id}/stats")
 def task_stats(task_id: int, ctx: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    t = db.query(Task).filter(Task.id == task_id, Task.tenant_id == ctx["tenant_id"]).first()
+    tid = ctx["tenant_id"]
+    now = datetime.now()
+    t = db.query(Task).filter(Task.id == task_id, Task.tenant_id == tid).first()
     if not t:
         raise HTTPException(status_code=404, detail="任务不存在")
+
+    # APP-05 缺考治理：如果试卷已截止（deadline 已过），惰性为未参加考试的成员落库 'absent' 记录
+    if t.deadline and now > t.deadline:
+        from sqlalchemy import text
+        db.execute(text("""
+            INSERT INTO task_records (tenant_id, task_id, user_id, status, score, time_spent, created_at)
+            SELECT :tenant_id, :task_id, tu.user_id, 'absent', NULL, 0, :now
+            FROM sys_tenant_user tu
+            WHERE tu.tenant_id = :tenant_id
+              AND tu.role = 'member'
+              AND tu.status = 'active'
+              AND NOT EXISTS (
+                  SELECT 1 FROM task_records tr WHERE tr.task_id = :task_id AND tr.user_id = tu.user_id
+              )
+        """), {"tenant_id": tid, "task_id": t.id, "now": now})
+        db.commit()
+
     recs = db.query(TaskRecord).filter(TaskRecord.task_id == task_id,
-                                        TaskRecord.tenant_id == ctx["tenant_id"]).all()
+                                        TaskRecord.tenant_id == tid).all()
     
     # 计算当前试卷总分与及格线（避免写死 60 分导致判定偏差）
     t_resources = db.query(TaskResource).filter(TaskResource.task_id == task_id).all()
@@ -388,8 +410,11 @@ def task_stats(task_id: int, ctx: dict = Depends(require_admin), db: Session = D
     total_participants = len(recs)
     verify_pending_recs = [r for r in recs if r.status == "pending_verification"]
     verified_recs = [r for r in recs if r.status == "verified"]
+    absent_recs = [r for r in recs if r.status == "absent"]
 
-    scores = [r.score for r in recs if r.score is not None]
+    # 计算平均分与通过率：仅针对有实际得分的记录（排除 absent 缺考）
+    scored_recs = [r for r in recs if r.score is not None and r.status != "absent"]
+    scores = [r.score for r in scored_recs]
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0
     passed_count = len([s for s in scores if s >= pass_score])
     pass_rate = round((passed_count / len(scores)) * 100, 1) if scores else 0
@@ -406,15 +431,16 @@ def task_stats(task_id: int, ctx: dict = Depends(require_admin), db: Session = D
     for r in recs:
         u = user_map.get(r.user_id)
         p = profile_map.get(r.user_id)
-        cur_score = r.score or 0
+        cur_score = r.score if r.score is not None else 0
+        is_absent = (r.status == "absent")
         user_records.append({
             "record_id": r.id,
             "user_id": r.user_id,
             "username": u.username if u else f"用户#{r.user_id}",
             "nickname": p.nickname if p and p.nickname else (u.display_name if u else None),
-            "score": cur_score,
+            "score": None if is_absent else cur_score,
             "status": r.status or "submitted",
-            "is_passed": cur_score >= pass_score,
+            "is_passed": False if is_absent else (cur_score >= pass_score),
             "time_spent": r.time_spent or 0,
             "submit_time": r.submit_time.strftime("%Y-%m-%d %H:%M:%S") if r.submit_time else (r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "")
         })
@@ -429,6 +455,7 @@ def task_stats(task_id: int, ctx: dict = Depends(require_admin), db: Session = D
         "submit_count": len([r for r in recs if r.status in ("submitted", "verified", "pending_verification")]),
         "verify_pending": len(verify_pending_recs),
         "verified": len(verified_recs),
+        "absent_count": len(absent_recs),
         "total": len(recs)}}
 
 
@@ -554,6 +581,14 @@ def member_tasks(ctx: dict = Depends(require_member), db: Session = Depends(get_
         p_percent = getattr(t, "pass_percent", None) or 60
         p_score = int(round(t_total * p_percent / 100.0))
         r = recs.get(t.id)
+        # 状态判定：若已存在记录以记录为准；若无记录且考试已截止，则判定为 absent 缺考态
+        if r:
+            task_status = r.status
+        elif t.deadline and now > t.deadline:
+            task_status = "absent"
+        else:
+            task_status = "pending"
+
         # 「继续测试」资格由后端统一判定，前端只做渲染，四个条件缺一不可：
         #   1) 人工审核模式 manual（AI 全托管卷走 AI 核验，无需回考场）
         #   2) 记录处于 pending_verification（成绩未终审 = 没出成绩）
@@ -568,7 +603,7 @@ def member_tasks(ctx: dict = Depends(require_member), db: Session = Depends(get_
             "task_id": t.id,
             "record_id": r.id if r else None,
             "title": t.title,
-            "status": (r.status if r else "pending"),
+            "status": task_status,
             "category_id": t.category_id,
             "category_name": cat_map.get(t.category_id) or "",
             "question_count": q_count,
@@ -599,12 +634,14 @@ def submit_task(payload: SubmitAnswers, ctx: dict = Depends(require_member),
         raise HTTPException(status_code=404, detail="任务不存在")
     if task.status != "published":
         raise HTTPException(status_code=400, detail="任务未发布，不可提交")
+    if task.start_time and now < task.start_time:
+        raise HTTPException(status_code=400, detail="考试尚未开始，不可提交")
     if task.deadline and now > task.deadline:
         raise HTTPException(status_code=400, detail="任务已截止，不可提交")
     rec = db.query(TaskRecord).filter(TaskRecord.task_id == task.id,
                                        TaskRecord.user_id == uid).with_for_update().first()
-    if rec and rec.status in ("submitted", "verified", "pending_verification"):
-        raise HTTPException(status_code=400, detail="不可重复提交")
+    if rec and rec.status in ("submitted", "verified", "pending_verification", "absent"):
+        raise HTTPException(status_code=400, detail="不可重复提交或已缺考")
     # 服务端结算用时：now - 开考时刻（入口行创建时间），客户端上报值仅参考取最小？
     # 防作弊：完全忽略客户端 time_spent；限时任务按上限截断
     started = (rec.created_at if rec and rec.created_at else now)

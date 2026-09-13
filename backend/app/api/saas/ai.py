@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-13
+AI模型：Gemini 系列
+修改内容：[1. ai_exams_generate_compat 增加幂等去重防护：若短时间（60s）内同一用户重复提交相同题目的组卷请求，直接短路返回已创建的试卷草稿与题目，杜绝重放攻击与重复生成冗余试卷；2. execute_tool_endpoint 保持悲观锁与 executed 卡片幂等短路]
 修改时间：2026-09-12
 AI模型：OpenCode / DeepSeek
 修改内容：[AI 助管全面加固：1. 新增 _get_tenant_resources_snapshot 题目资产快照（题型含 single_choice/multiple_choice 等历史别名兼容）；2. _build_system_prompt 注入服务器真实时间、题目资产全景与「三不原则」安全边界（拒答无关话题/拒删人员账号/拒批量清空试卷）及意图路由准则；3. _stream_chat 在 done 前完成工具卡片 action_card_data 构筑与落库，修复刷新或二次进入后确认卡片丢失；4. session_messages 透传 action_card_data]
@@ -350,6 +353,51 @@ def ai_exams_generate_compat(payload: Dict[str, Any], ctx: dict = Depends(requir
     total = sum(int(s.get("count") or 0) for s in specs) or 10
     spec_desc = "，".join(f"{s.get('count', 1)}道{s.get('q_type', 'single')}题" for s in specs)
     tid = ctx["tenant_id"]
+    uid = ctx["user"].id
+
+    # 幂等去重防护：若 60s 内同一管理人员针对相同标题/描述发起重复请求（防止网络重放或连击双击），直接短路返回已有试卷
+    from datetime import datetime, timedelta
+    recent_threshold = datetime.now() - timedelta(seconds=60)
+    existing_task = db.query(Task).filter(
+        Task.tenant_id == tid,
+        Task.creator_id == uid,
+        Task.title == title,
+        Task.description == description,
+        Task.status == "draft",
+        Task.created_at >= recent_threshold
+    ).order_by(Task.id.desc()).first()
+
+    if existing_task:
+        # 查询已关联的题目并封装返回，保证幂等一致性
+        existing_links = db.query(TaskResource, ResourceItem).join(
+            ResourceItem, ResourceItem.id == TaskResource.resource_id
+        ).filter(TaskResource.task_id == existing_task.id).order_by(TaskResource.sort_order).all()
+        ret_qs = []
+        for link, r in existing_links:
+            ret_qs.append({
+                "id": r.id,
+                "resource_id": r.id,
+                "type": r.type,
+                "title": r.content,
+                "content": r.content,
+                "options": r.options or [],
+                "answer": r.correct_answer or [],
+                "correct_answer": r.correct_answer or [],
+                "explanation": r.explanation or "",
+                "score": link.score if link.score is not None else (r.score or 10)
+            })
+        return {
+            "code": 200,
+            "message": f"检测到重放/重复请求，已幂等返回试卷草稿（ID #{existing_task.id}）",
+            "data": {
+                "exam_id": existing_task.id,
+                "task_id": existing_task.id,
+                "question_count": len(ret_qs),
+                "new_questions": 0,
+                "questions": ret_qs,
+                "ai_rag_sources": existing_task.ai_rag_sources or []
+            }
+        }
     sources = _rag_hits(db, tid, description or title)
     context = "\n".join(s["chunk_content"] for s in sources) or "(暂无知识库命中)"
     made: List[Dict[str, Any]] = []
@@ -1308,7 +1356,7 @@ def execute_tool_endpoint(
     tid = ctx["tenant_id"]
     uid = ctx["user"].id
     
-    # 校验消息归属并标记已执行
+    # 校验消息归属并标记已执行（悲观锁防并发双击/双花）
     if message_id:
         try:
             mid = int(message_id)
@@ -1317,12 +1365,14 @@ def execute_tool_endpoint(
         if mid:
             am = db.query(AiMessage).filter(
                 AiMessage.id == mid, AiMessage.tenant_id == tid, AiMessage.role == "assistant"
-            ).first()
+            ).with_for_update().first()
             if not am:
                 raise HTTPException(status_code=404, detail="消息不存在")
-            # 必须赋新 dict：SQLAlchemy 默认不追踪 JSON 列的原地修改，
-            # 原地改同一对象会导致新旧值相等而不生成 UPDATE，卡片状态永远停在 pending
             card = dict(am.action_card_data or {})
+            # 幂等拦截：若该卡片已成功执行，直接短路返回第一次执行结果，杜绝并发双花生成冗余数据
+            if card.get("status") == "executed":
+                prev_result = card.get("result") or {"status": "ok"}
+                return {"code": 200, "message": "工具已执行过（幂等拦截）", "data": prev_result}
             card["status"] = "executed"
             am.action_card_data = card
             db.flush()
@@ -1507,4 +1557,15 @@ def execute_tool_endpoint(
         raise HTTPException(status_code=400, detail=f"未知工具: {tool_name}")
     
     latency_ms = int((_time.time() - t0) * 1000)
-    return {"code": 200, "message": "工具执行成功", "data": {**result, "latency_ms": latency_ms}}
+    final_data = {**result, "latency_ms": latency_ms}
+    if message_id and mid:
+        try:
+            am_rec = db.query(AiMessage).filter(AiMessage.id == mid).first()
+            if am_rec and am_rec.action_card_data:
+                c = dict(am_rec.action_card_data)
+                c["result"] = final_data
+                am_rec.action_card_data = c
+                db.commit()
+        except Exception:
+            pass
+    return {"code": 200, "message": "工具执行成功", "data": final_data}

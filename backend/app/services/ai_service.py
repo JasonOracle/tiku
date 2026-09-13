@@ -1,4 +1,10 @@
 """
+/**
+ * [变更日志]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[1. get_embedding 解耦向量模型与对话模型参数，支持通过 EMBEDDING_MODEL 环境变量指定专属向量模型]
+ */
 [变更日志]
 修改时间：2026-09-10
 AI模型：OpenCode / Gemini 底层
@@ -147,7 +153,8 @@ def ai_available() -> bool:
 def get_embedding(text: str, provider: Optional[Dict[str, str]] = None,
                   timeout: float = 30.0) -> Optional[List[float]]:
     """OpenAI 兼容 embeddings（尽力而为）：取 {api_url 基址}/embeddings。
-    失败返回 None（调用方回退关键词检索），绝不抛异常。"""
+    优先取独立的 EMBEDDING_MODEL 环境变量或 provider embed_model，避免传聊天模型名称导致 400。
+    失败返回 None（调用方回退关键词分词检索），绝不抛异常。"""
     try:
         providers = [provider] if provider and provider.get("api_key") else get_ai_providers()
         if not providers:
@@ -157,9 +164,15 @@ def get_embedding(text: str, provider: Optional[Dict[str, str]] = None,
         if base.endswith("/chat/completions"):
             base = base[: -len("/chat/completions")]
         url = base + "/embeddings"
+        embed_model = (
+            p.get("embed_model")
+            or os.getenv("EMBEDDING_MODEL")
+            or os.getenv("EMBED_MODEL")
+            or p.get("model")
+        )
         resp = _get_shared_client().post(
             url,
-            json={"model": p.get("model"), "input": text[:2000]},
+            json={"model": embed_model, "input": text[:2000]},
             headers={"Authorization": f"Bearer {p['api_key']}", "Content-Type": "application/json"},
             timeout=timeout,
         )

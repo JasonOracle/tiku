@@ -1,5 +1,8 @@
 """
 [变更日志]
+修改时间：2026-09-13
+AI模型：Gemini 系列
+修改内容：[1. task_entry 强化 C 端入场三重门校验：未到 start_time 返回 403「考试尚未开始」，超过 deadline 返回 403「考试已截止」；2. task_entry 对已提交/已核验/已缺考记录实施不可再次调起作答拦截，杜绝越权绕过]
 修改时间：2026-09-12
 AI模型：Gemini 系列
 修改内容：[彻底下沉防泄题安全逻辑：my_result 接口在 pending_verification 核验态下强制将 correct_answer 置为 None，explanation 置为空串，消除网络层数据泄题隐患]
@@ -47,12 +50,18 @@ def task_entry(task_id: int, ctx: dict = Depends(require_member), db: Session = 
     t = db.query(Task).filter(Task.id == task_id, Task.tenant_id == ctx["tenant_id"]).first()
     if not t or t.status != "published":
         raise HTTPException(status_code=404, detail="任务不存在或未发布")
+    if t.start_time and now < t.start_time:
+        raise HTTPException(status_code=403, detail="考试尚未开始")
+    if t.deadline and now > t.deadline:
+        raise HTTPException(status_code=403, detail="考试已截止")
     links = db.query(TaskResource, ResourceItem).join(
         ResourceItem, ResourceItem.id == TaskResource.resource_id
     ).filter(TaskResource.task_id == t.id,
              ResourceItem.is_deleted == False).order_by(TaskResource.sort_order).all()  # noqa
     rec = db.query(TaskRecord).filter(TaskRecord.task_id == t.id,
                                        TaskRecord.user_id == ctx["user"].id).with_for_update().first()
+    if rec and rec.status in ("submitted", "verified", "absent"):
+        raise HTTPException(status_code=403, detail="考试已结束或已交卷，不可重复调起答题")
     if not rec:
         # 开考时刻 = 行创建时间（服务端时间），后续进入复用，杜绝客户端改表作弊
         rec = TaskRecord(tenant_id=ctx["tenant_id"], task_id=t.id, user_id=ctx["user"].id,

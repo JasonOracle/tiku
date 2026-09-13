@@ -1,5 +1,8 @@
 /**
  * [变更日志]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[formatRecordStatus 增加 absent: '已缺考' 状态映射，支撑 C 端试卷缺考状态展示]
  * 修改时间：2026-09-12
  * AI模型：Deepseek-V4.1-Flash 底层
  * 修改内容：[1. 新增 parseServerTime：兼容后端带 6 位微秒的 ISO 时间串，统一截断到毫秒后再解析; 2. formatDateTime 改为复用该函数，消除重复的兼容逻辑]
@@ -74,6 +77,7 @@ export function formatRecordStatus(status: string): string {
     submitted: "已定稿",
     pending_verification: "核验中",
     verified: "已核验",
+    absent: "已缺考",
   };
   return statusMap[status] ?? "状态未知";
 }

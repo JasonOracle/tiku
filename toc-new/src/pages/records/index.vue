@@ -122,6 +122,9 @@
 <script setup lang="ts">
 /**
  * [变更日志]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[1. doneList 补充 absent 已缺考记录归类；2. resolveScoreText/resolveBadgeText 增加已缺考文案与红色告警标签，解决缺考学员记录空白问题]
  * 修改时间：2026-09-12
  * AI模型：Gemini 系列
  * 修改内容：[1. 100% 像素级对齐 preview-apple/records/index.vue 架构与设计：通顶大字标题 rc-header__title、毛玻璃吸顶三态滑块切换器 rc-seg、Apple 钛金质感做题卡片 rc-card、绿色大号得分 rc-score--ok、预约小锁 rc-lock、闪烁呼吸绿点 rc-card__dot--live; 2. 严密对接真实后端 GET /api/v1/member/member-tasks 并精准分类三大状态]
@@ -146,10 +149,12 @@ const pageStatus = ref<"loading" | "ready" | "error">("loading");
 const allTasks = ref<MemberTaskItem[]>([]);
 
 /** 数据分类映射 */
+const FINISHED_STATUSES = ["submitted", "verified", "pending_verification", "absent"];
+
 const doingList = computed(() => {
 	const now = Date.now();
 	return allTasks.value.filter((t) => {
-		const isNotDone = !["submitted", "verified", "pending_verification"].includes(t.status);
+		const isNotDone = !FINISHED_STATUSES.includes(t.status);
 		const started = !t.start_time || new Date(t.start_time).getTime() <= now;
 		return isNotDone && started;
 	});
@@ -158,7 +163,7 @@ const doingList = computed(() => {
 const todoList = computed(() => {
 	const now = Date.now();
 	return allTasks.value.filter((t) => {
-		const isNotDone = !["submitted", "verified", "pending_verification"].includes(t.status);
+		const isNotDone = !FINISHED_STATUSES.includes(t.status);
 		const notStarted = t.start_time && new Date(t.start_time).getTime() > now;
 		return isNotDone && notStarted;
 	});
@@ -166,7 +171,7 @@ const todoList = computed(() => {
 
 const doneList = computed(() => {
 	return allTasks.value.filter((t) => {
-		return ["submitted", "verified", "pending_verification"].includes(t.status);
+		return FINISHED_STATUSES.includes(t.status);
 	});
 });
 
@@ -177,17 +182,20 @@ const totalRecordsCount = computed(() => {
 });
 
 function resolveDoneTone(item: MemberTaskItem): "ok" | "warn" | "danger" {
+	if (item.status === "absent") return "danger";
 	if (item.status === "pending_verification") return "warn";
 	const score = item.score ?? 0;
 	return score >= (item.pass_score || 60) ? "ok" : "danger";
 }
 
 function resolveScoreText(item: MemberTaskItem): string {
+	if (item.status === "absent") return "缺考";
 	if (item.status === "pending_verification") return "核验中";
 	return String(item.score ?? 0);
 }
 
 function resolveBadgeText(item: MemberTaskItem): string {
+	if (item.status === "absent") return "未参加 · 已缺考";
 	if (item.status === "pending_verification") return "主观题批阅中";
 	const score = item.score ?? 0;
 	if (score >= 90) return "优秀 · 已核验";

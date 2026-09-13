@@ -176,6 +176,9 @@
 <script setup lang="ts">
 /**
  * [变更日志]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[DONE_STATUSES 补充 absent 缺考态过滤，已截止缺考的试卷自动从待考待办卡片中移出]
  * 修改时间：2026-09-12
  * AI模型：Gemini 系列
  * 修改内容：[1. 100% 像素级对齐 preview-apple/index/index.vue：深空漫反射暮光问候顶栏 hm-header、首字母头像 hm-avatar、指示条动画 hm-dots、Apple 钛金试卷卡片 hm-card、三联指标栏 hm-meta 及清空态琉璃勋章插画 hm-medal; 2. 严密绑定后端 GET /api/v1/member/banners 与 GET /api/v1/member/member-tasks 真实数据并保持已提交试卷精准过滤]
@@ -230,8 +233,8 @@ const avatarLetter = computed(() => {
 	return name.slice(0, 1);
 });
 
-/** 首页仅展示未提交/未作答试卷 */
-const DONE_STATUSES = ["submitted", "verified", "pending_verification"];
+/** 首页仅展示未提交/未作答试卷（过滤已交卷、已核验、核验中及已缺考） */
+const DONE_STATUSES = ["submitted", "verified", "pending_verification", "absent"];
 const uncompletedCards = computed(() => {
 	return allTasks.value.filter((item) => !DONE_STATUSES.includes(item.status));
 });

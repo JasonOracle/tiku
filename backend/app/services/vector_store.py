@@ -1,4 +1,10 @@
 """
+/**
+ * [变更日志]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 重构 _local_search 兜底检索：采用中文 2 字滑窗 Bigram OR 模糊检索 + 文件名联查，解决自然语言查询 0 命中的 RAG 溯源缺陷；2. 放宽文档 scope 过滤：同时支持租户内的 public 与 private 文档，彻底杜绝因上传文档默认 private 导致的检索落空]
+ */
 [变更日志]
 修改时间：2026-09-10
 AI模型：Gemini 系列
@@ -49,10 +55,11 @@ def _parse_vec(raw: Any) -> Optional[List[float]]:
 
 def _local_search(db: Session, tenant_id: int, query: str,
                   query_vec: Optional[List[float]], limit: int) -> List[Dict[str, Any]]:
-    """本地分支：向量余弦（有向量时）+ 关键词 LIKE 兜底，合并去重。"""
+    """本地分支：向量余弦（有向量时）+ 中文 Bigram OR 模糊检索兜底，合并去重。"""
+    from sqlalchemy import or_
     base = db.query(KbChunk, KbDocument).join(
         KbDocument, KbDocument.id == KbChunk.document_id
-    ).filter(KbChunk.tenant_id == tenant_id, KbDocument.scope == "public")
+    ).filter(KbChunk.tenant_id == tenant_id)
     scored: List[tuple] = []
     if query_vec:
         for c, d in base.all():
@@ -66,10 +73,18 @@ def _local_search(db: Session, tenant_id: int, query: str,
                for s, c, d in scored[:limit] if s >= 0.68]
         if out:
             return out
-    # 关键词 LIKE 兜底（仅在关键词非空且内容真实命中时返回，绝不强行取首个文档）
-    kw = (query or "").strip()[:12]
-    if kw and len(kw) >= 2:
-        hits = base.filter(KbChunk.content.like(f"%{kw}%")).limit(limit).all()
+    # 关键词/词组 Bigram OR 兜底（替代原前12字前缀匹配，大幅提升无向量/自然语言命中率）
+    q_clean = (query or "").strip()
+    if q_clean and len(q_clean) >= 2:
+        # 构造两字滑窗切词 (Bigram)，过滤纯标点
+        tokens = [q_clean[i:i+2] for i in range(len(q_clean) - 1)] if len(q_clean) > 2 else [q_clean]
+        # 去重并截取前 8 个代表性 token，避免 SQL 条件过多
+        tokens = list(dict.fromkeys(tokens))[:8]
+        conditions = []
+        for t in tokens:
+            conditions.append(KbChunk.content.ilike(f"%{t}%"))
+            conditions.append(KbDocument.file_name.ilike(f"%{t}%"))
+        hits = base.filter(or_(*conditions)).limit(limit).all()
         if hits:
             return [{"document_id": d.id, "file_name": d.file_name,
                      "chunk_content": c.content[:300], "similarity_score": 0.85}
@@ -88,7 +103,7 @@ def _tidb_search(db: Session, tenant_id: int, query_vec: List[float],
         "SELECT c.id, c.document_id, c.content, d.file_name, "
         "VEC_COSINE_DISTANCE(c.embedding_vec, :vec) AS dist "
         "FROM kb_chunks c JOIN kb_documents d ON d.id = c.document_id "
-        "WHERE c.tenant_id = :tid AND d.scope = 'public' "
+        "WHERE c.tenant_id = :tid "
         "ORDER BY dist LIMIT :lim"),
         {"vec": vec_lit, "tid": tenant_id, "lim": limit}).fetchall()
     return [{"document_id": r[1], "file_name": r[3],
