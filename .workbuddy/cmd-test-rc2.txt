@@ -1,0 +1,11 @@
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-admin-wb6.json
+sleep|500
+reload
+sleep|3500
+goto|http://127.0.0.1/admin/members
+sleep|3500
+run-code|--filename=.workbuddy/rc-dialog.js
+sleep|2000
+snapshot|--filename=rc2-result.yaml

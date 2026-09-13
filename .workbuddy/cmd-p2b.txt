@@ -1,0 +1,10 @@
+# 阶段二 · 步骤B：管理员会话下采样「成员管理」页 ref 基线
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-admin-wb6.json
+sleep|500
+reload
+sleep|3000
+goto|http://127.0.0.1/admin/members
+sleep|3000
+snapshot|--filename=p2b-members.yaml

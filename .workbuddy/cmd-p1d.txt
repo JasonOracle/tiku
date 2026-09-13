@@ -1,0 +1,22 @@
+# 阶段一 · 步骤D：创建租户「WB测试机构」
+open|http://127.0.0.1/admin/login
+sleep|2500
+fill|e19|13800000000
+fill|e30|GodPass123
+sleep|400
+click|e32
+sleep|3500
+click|e145
+sleep|1500
+fill|e281|WB测试机构
+fill|e287|WB测试
+fill|e293|教育
+fill|e311|WB测试管理员
+fill|e317|13811111111
+fill|e322|WorkBuddy 自动化测试专用租户（auto-test.md 第九部分第一阶段）
+sleep|600
+snapshot|--filename=p1-dialog-filled.yaml
+click|e327
+sleep|3500
+snapshot|--filename=p1-tenant-created.yaml
+screenshot|--filename=p1-tenant-created.png

@@ -1,0 +1,104 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e34]:
+    - complementary [ref=e35]:
+      - menubar [ref=e36]:
+        - menuitem "数据看板" [ref=e37] [cursor=pointer]
+        - menuitem "分类配置" [ref=e42] [cursor=pointer]
+        - menuitem "题目管理" [ref=e47] [cursor=pointer]
+        - menuitem "试卷管理" [ref=e52] [cursor=pointer]
+        - menuitem "阅卷管理" [ref=e58] [cursor=pointer]
+        - menuitem "AI知识库" [ref=e63] [cursor=pointer]
+        - menuitem "成员管理" [ref=e69] [cursor=pointer]
+        - menuitem "✨ AI 助理" [ref=e74] [cursor=pointer]
+    - generic [ref=e79]:
+      - generic [ref=e80]:
+        - heading "数据看板" [level=3] [ref=e82]
+        - generic [ref=e83]:
+          - generic "WB测试机构" [ref=e84]
+          - button "AI 助理" [ref=e92] [cursor=pointer]
+          - generic "消息中心" [ref=e97] [cursor=pointer]:
+            - button [ref=e99]
+          - button "W WB测试管理员 管理员" [ref=e107] [cursor=pointer]:
+            - generic [ref=e108]: W
+            - generic [ref=e109]: WB测试管理员
+            - generic [ref=e110]: 管理员
+      - main [ref=e112]:
+        - generic [ref=e113]:
+          - generic [ref=e114]:
+            - generic [ref=e115]:
+              - heading "试卷数据看板 · 助力组织成长" [level=1] [ref=e116]
+              - paragraph [ref=e117]: 用数据让每一份试卷更有价值
+            - img "数据看板插画" [ref=e118]
+          - generic [ref=e119]:
+            - generic [ref=e120]:
+              - generic [ref=e126]:
+                - generic [ref=e127]: 试卷总数
+                - generic [ref=e128]: "0"
+              - generic [ref=e132]: ↑ — 较上周
+            - generic [ref=e137]:
+              - generic [ref=e143]:
+                - generic [ref=e144]: 提交人次
+                - generic [ref=e145]: "0"
+              - generic [ref=e149]: ↑ — 较上周
+            - generic [ref=e154]:
+              - generic [ref=e161]:
+                - generic [ref=e162]: AI 调用次数
+                - generic [ref=e163]: "0"
+              - generic [ref=e167]: ↑ — 较上周
+            - generic [ref=e172]:
+              - generic [ref=e180]:
+                - generic [ref=e181]: 待核验
+                - generic [ref=e182]: "0"
+              - generic [ref=e186]: ↑ — 较上周
+          - generic [ref=e191]:
+            - generic [ref=e193]:
+              - generic [ref=e194]:
+                - generic [ref=e195]: 成员试卷趋势分析
+                - generic [ref=e199]: 近 7 天提交人次与平均分变化趋势
+              - generic [ref=e200]:
+                - generic [ref=e201] [cursor=pointer]: 近7天
+                - generic [ref=e202] [cursor=pointer]: 近30天
+                - generic [ref=e203] [cursor=pointer]: 近90天
+            - generic [ref=e207]:
+              - generic [ref=e208]:
+                - generic [ref=e209]:
+                  - generic [ref=e210]: 试卷分类占比
+                  - generic [ref=e215]: 各分类试卷在总数中的占比
+                - generic [ref=e217] [cursor=pointer]:
+                  - generic:
+                    - combobox [ref=e219]
+                    - generic [ref=e220]: 全部类型
+              - generic [ref=e230]:
+                - generic [ref=e232]: 暂无任务
+                - generic [ref=e233]: "0"
+                - generic [ref=e234]: 0%
+          - generic [ref=e235]:
+            - generic [ref=e236]:
+              - generic [ref=e237]:
+                - generic [ref=e238]: 最近提交动态
+                - generic [ref=e240] [cursor=pointer]: 更多 >
+              - paragraph [ref=e260]: 暂无动态
+            - generic [ref=e261]:
+              - generic [ref=e262]:
+                - generic [ref=e263]: ◇ AI 调用情况
+                - generic [ref=e264] [cursor=pointer]: ↗ >
+              - generic [ref=e269]:
+                - generic [ref=e270]: 今日调用
+                - generic [ref=e271]: 0 / 0
+                - progressbar [ref=e272]
+                - generic [ref=e275]: 累计调用
+                - generic [ref=e276]: "0"
+            - generic [ref=e277]:
+              - generic [ref=e278]:
+                - generic [ref=e279]:
+                  - generic [ref=e280]: ▤
+                  - text: 热门试卷排行
+                - generic [ref=e281] [cursor=pointer]: 更多 >
+              - paragraph [ref=e301]: 暂无排行数据
+            - generic [ref=e302]:
+              - generic [ref=e303]:
+                - generic [ref=e304]: 🛰 系统公告
+                - generic [ref=e305] [cursor=pointer]: 更多 >
+              - paragraph [ref=e325]: 暂无公告
+  - alert [ref=e326]:
+    - paragraph [ref=e330]: 登录成功

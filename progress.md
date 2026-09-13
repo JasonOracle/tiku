@@ -1,6 +1,10 @@
 /**
  * [变更日志]
  * 修改时间：2026-09-13
+ * AI模型：Deepseek-V4.1-Flash 底层
+ * 修改内容：[1. 修复网关路由缺陷：访问 /admin（缺少结尾斜杠）时未命中 /admin/ 前缀路由，掉入 location / 被 C 端 SPA 兜底接管而错误渲染 C 端页面；已在 nginx.conf 新增 location = /admin 精确匹配并 301 重定向至 /admin/；2. 修复 C 端根路径 403：运行中的 tiku_nginx 容器由旧版 compose 配置创建，挂载源仍为空目录 toc/dist，已用 docker compose up -d --no-deps nginx 重建为 toc-new/dist/build/h5；3. 补记网关启动自检与 /admin 斜杠访问约定至接手检查清单]
+ * [变更日志]
+ * 修改时间：2026-09-13
  * AI模型：Gemini 系列
  * 修改内容：[1. 记录阶段五：全面采纳 Style B (Apple 钛金微光风) 接管正式主干，单选/多选/判断(双大胶囊)/填空/简答全题型原生展开，彻底根除抽象组件引起的白屏问题; 2. 强化考场简答题textarea与填空题input的可读性与对比度(纯白底+冷灰边框+深色文字+聚焦微光); 3. 统一成绩报告页顶部为内置标准白色微质感Navbar; 4. 固化单机构隐式无感知绑定，剔除全部机构切换干扰; 5. 建立全自动无头快照流水线(snapshot_v1.5_c.py 与 bat 脚本)并输出 docs/v1.5_c_showcase.md; 6. 刷新状态冻结时间并收口交付]
  * [变更日志]
@@ -28,7 +32,7 @@
 # 智题库 (TiKu) 动态事实与研发进度总览 (Progress)
 
 > **当前全局版本**：v1.5 (C端 Apple 钛金微光重塑版)  
-> **最新状态冻结时间**：2026-09-13 00:50:00  
+> **最新状态冻结时间**：2026-09-13 15:58:00  
 > **执行标准**：严格执行 `agent.md`「最高行为准则」与「跨版本大更迭最高协议」
 
 ---
@@ -203,7 +207,12 @@
    - 全局设计令牌以 `src/styles/tokens-apple.scss` 为准；
    - 考场题型务必保持原生内联，切忌盲目进行二次抽象封装；
    - 严禁在任何地方添加“切换机构”入口，统一走隐式绑定。
+4. **网关访问约定（nginx 路由）**：
+   - B 端入口**必须带结尾斜杠**：使用 `http://localhost/admin/`；`nginx.conf` 已为 `location = /admin` 增加 301 跳转，访问 `http://localhost/admin` 会自动补斜杠，不再误落 C 端；
+   - C 端根路径 `/` 由 `toc-new/dist/build/h5` 产出接管（**非**已废弃的空目录 `toc/dist`）；
+   - 若改动 `nginx.conf` 或重编前端产物，优先执行 `docker exec tiku_nginx nginx -t && docker exec tiku_nginx nginx -s reload`（仅改配置时热重载即可）；
+   - 若改动 `docker-compose.yml` 的挂载路径，**必须重建容器**（`docker compose up -d --no-deps nginx`），Windows 挂载卷下旧容器不会感知新路径。
 
 ---
-*时间戳签名：2026-09-13 00:50:00 (Gemini Series Engineering Closure)*
+*时间戳签名：2026-09-13 15:58:00 (Deepseek-V4.1-Flash 底层 / 网关路由缺陷修复与启动自检)*
 

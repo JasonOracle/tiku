@@ -1,0 +1,13 @@
+# 阶段一 · 步骤A：平台超管登录（真实口令 GodPass123）+ 登录态落盘
+open|http://127.0.0.1/admin/login
+sleep|2500
+snapshot|p1-login.yaml
+fill|e19|13800000000
+fill|e30|GodPass123
+sleep|500
+snapshot|p1-filled.yaml
+click|e32
+sleep|3000
+snapshot|p1-after-login.yaml
+screenshot|--filename=p1-after-login.png
+state-save|.workbuddy/auth-god.json

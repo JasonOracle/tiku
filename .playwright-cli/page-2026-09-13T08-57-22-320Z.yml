@@ -1,0 +1,15 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]: TiKu
+    - heading "智题库 SaaS 管理后台" [level=2] [ref=e7]
+    - paragraph [ref=e8]: Aero Glass Modern Admin Panel
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: "*手机号"
+      - textbox "*手机号" [ref=e19]:
+        - /placeholder: 请输入手机号
+    - generic [ref=e20]:
+      - generic [ref=e21]: "*密码"
+      - textbox "*密码" [ref=e30]:
+        - /placeholder: 请输入密码
+    - button "立即登录" [ref=e32] [cursor=pointer]

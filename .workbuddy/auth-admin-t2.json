@@ -1,0 +1,26 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://127.0.0.1",
+      "localStorage": [
+        {
+          "name": "tiku_tob_token",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3ODk4OTcwNzUsInN1YiI6IjMiLCJ0eXBlIjoic3lzIiwiaWF0IjoxNzg5MjkyMjc1LCJpc19zdXBlcl9hZG1pbiI6ZmFsc2UsImRlZmF1bHRfdGVuYW50X2lkIjoyfQ.hQOcxaySlww1p1MjFGyrT1jFh3pJJkcqhFSQ6WnoP-k"
+        },
+        {
+          "name": "tiku_tob_username",
+          "value": "林敏"
+        },
+        {
+          "name": "tiku_tob_role",
+          "value": "admin"
+        },
+        {
+          "name": "tiku_tob_tenant",
+          "value": "2"
+        }
+      ]
+    }
+  ]
+}

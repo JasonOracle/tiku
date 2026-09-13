@@ -1,0 +1,12 @@
+# 阶段一 · 步骤H：新会话中恢复登录态，验证租户上下文是否持久 + 进入成员管理
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-god-wb6.json
+sleep|500
+reload
+sleep|3000
+snapshot|--filename=p1h-after-load.yaml
+goto|http://127.0.0.1/admin/members
+sleep|3000
+snapshot|--filename=p1h-members.yaml
+screenshot|--filename=p1h-members.png

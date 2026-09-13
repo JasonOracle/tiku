@@ -1,0 +1,15 @@
+# 阶段二 · 步骤X：探针（与执行态严格镜像的序列），取录入弹窗 ref
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-admin-wb6.json
+sleep|500
+reload
+sleep|3000
+goto|http://127.0.0.1/admin/members
+sleep|3000
+fill|f2e87|zzz-nomatch-member
+sleep|1500
+snapshot|--filename=p2x-pre.yaml
+click|f2e90
+sleep|2000
+snapshot|--filename=p2x-dialog.yaml

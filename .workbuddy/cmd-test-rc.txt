@@ -1,0 +1,17 @@
+# 验证 run-code 可否用角色定位器驱动弹窗（规避 ref 漂移）
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-admin-wb6.json
+sleep|500
+reload
+sleep|3000
+goto|http://127.0.0.1/admin/members
+sleep|3500
+click|f2e90
+sleep|4500
+run-code|await page.getByRole('textbox', { name: '* 手机号' }).fill('13911111109');
+run-code|await page.getByRole('textbox', { name: '姓名' }).fill('RCTEST');
+sleep|800
+run-code|await page.getByRole('button', { name: '保存' }).click();
+sleep|4500
+snapshot|--filename=rc-result.yaml

@@ -1,0 +1,14 @@
+# 探测 CLI 的 find / snapshot --json 输出格式（用于动态解析 ref）
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-admin-wb6.json
+sleep|500
+reload
+sleep|3000
+goto|http://127.0.0.1/admin/members
+sleep|3500
+click|f2e90
+sleep|4000
+find|手机号
+find|保存
+snapshot|--json

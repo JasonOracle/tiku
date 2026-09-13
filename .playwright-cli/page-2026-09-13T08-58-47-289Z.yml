@@ -1,0 +1,72 @@
+- generic [ref=f2e3]:
+  - complementary [ref=f2e4]:
+    - menubar [ref=f2e5]:
+      - menuitem "数据看板" [ref=f2e6] [cursor=pointer]
+      - menuitem "分类配置" [ref=f2e11] [cursor=pointer]
+      - menuitem "题目管理" [ref=f2e16] [cursor=pointer]
+      - menuitem "试卷管理" [ref=f2e21] [cursor=pointer]
+      - menuitem "阅卷管理" [ref=f2e27] [cursor=pointer]
+      - menuitem "AI知识库" [ref=f2e32] [cursor=pointer]
+      - menuitem "成员管理" [ref=f2e38] [cursor=pointer]
+      - menuitem "企业管理" [ref=f2e43] [cursor=pointer]
+      - menuitem "审计日志" [ref=f2e50] [cursor=pointer]
+      - menuitem "模型中心" [ref=f2e55] [cursor=pointer]
+      - menuitem "✨ AI 助理" [ref=f2e61] [cursor=pointer]
+  - generic [ref=f2e66]:
+    - generic [ref=f2e67]:
+      - heading "成员管理" [level=3] [ref=f2e69]
+      - generic [ref=f2e70]:
+        - generic [ref=f2e72] [cursor=pointer]:
+          - generic:
+            - combobox [ref=f2e74]
+            - generic [ref=f2e75]: WB测试机构
+        - generic "视察：WB测试机构" [ref=f2e80]
+        - button "AI 助理" [ref=f2e88] [cursor=pointer]
+        - generic "消息中心" [ref=f2e93] [cursor=pointer]:
+          - button [ref=f2e95]
+        - button "超 超级管理员 超级管理员" [ref=f2e103] [cursor=pointer]:
+          - generic [ref=f2e104]: 超
+          - generic [ref=f2e105]: 超级管理员
+          - generic: 超级管理员
+    - main [ref=f2e106]:
+      - generic [ref=f2e107]:
+        - generic [ref=f2e108]:
+          - generic [ref=f2e111]:
+            - generic [ref=f2e113]:
+              - search
+            - textbox "搜索手机号 / 姓名 / 昵称..." [ref=f2e114]
+          - button "录入成员" [ref=f2e117] [cursor=pointer]
+        - generic [ref=f2e123]:
+          - table [ref=f2e125]:
+            - rowgroup [ref=f2e137]:
+              - row [ref=f2e138]:
+                - columnheader "ID" [ref=f2e139]
+                - columnheader "手机号" [ref=f2e141]
+                - columnheader "姓名" [ref=f2e143]
+                - columnheader "昵称" [ref=f2e145]
+                - columnheader "性别" [ref=f2e147]
+                - columnheader "年龄" [ref=f2e149]
+                - columnheader "职业" [ref=f2e151]
+                - columnheader "角色" [ref=f2e153]
+                - columnheader "状态" [ref=f2e155]
+                - columnheader "操作" [ref=f2e157]
+          - table [ref=f2e163]:
+            - rowgroup [ref=f2e175]:
+              - row [ref=f2e176]:
+                - cell "14" [ref=f2e177]
+                - cell "13811111111" [ref=f2e179]
+                - cell "WB测试管理员" [ref=f2e181]
+                - cell "WB管理员" [ref=f2e183]
+                - cell "—" [ref=f2e185]
+                - cell "—" [ref=f2e187]
+                - cell "—" [ref=f2e189]
+                - cell "成员" [ref=f2e192]
+                - cell "正常" [ref=f2e195]
+                - cell [ref=f2e200]:
+                  - button "编辑" [ref=f2e203] [cursor=pointer]
+        - generic [ref=f2e210]:
+          - generic [ref=f2e211]: 共 1 条
+          - button "上一页" [disabled] [ref=f2e212]
+          - list [ref=f2e213]:
+            - listitem "第 1 页" [ref=f2e214]: "1"
+          - button "下一页" [disabled] [ref=f2e215]

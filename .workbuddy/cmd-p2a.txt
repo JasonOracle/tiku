@@ -1,0 +1,11 @@
+# 阶段二 · 步骤A：以新机构管理员身份登录，落盘其登录态
+open|http://127.0.0.1/admin/login
+sleep|2500
+fill|e19|13811111111
+fill|e30|123456
+sleep|400
+click|e32
+sleep|4000
+snapshot|--filename=p2a-admin-login.yaml
+screenshot|--filename=p2a-admin-login.png
+state-save|.workbuddy/auth-admin-wb6.json

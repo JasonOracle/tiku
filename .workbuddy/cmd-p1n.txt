@@ -1,0 +1,20 @@
+# 阶段一 · 步骤N：将 13811111111 角色改为「管理员」并保存
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-god-wb6.json
+sleep|500
+reload
+sleep|3000
+goto|http://127.0.0.1/admin/members
+sleep|3000
+click|f2e203
+sleep|2200
+click|f2e245
+sleep|1500
+click|f2e329
+sleep|1200
+snapshot|--filename=p1n-role-picked.yaml
+click|f2e321
+sleep|3000
+snapshot|--filename=p1n-saved.yaml
+screenshot|--filename=p1n-saved.png

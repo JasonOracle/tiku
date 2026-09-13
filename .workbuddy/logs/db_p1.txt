@@ -1,0 +1,22 @@
+=== 租户列表 ===
+1	浙江省星雅教育有限公司	星雅教育	教育	中型	王女士	active
+2	香港皓石集团教育有限公司	皓石集团	教育	集团	张显示	active
+6	WB测试机构	NULL	NULL	NULL	NULL	active
+
+=== WB测试机构(id=6) 成员 ===
+
+(空表示暂无成员)
+
+=== sys_tenant_user 全表 ===
+1	1	2	admin
+2	2	3	admin
+3	1	4	member
+4	2	5	member
+5	1	6	member
+6	2	7	member
+7	1	8	member
+8	2	9	member
+9	1	10	member
+10	2	11	member
+11	2	12	member
+12	1	13	member

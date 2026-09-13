@@ -1,0 +1,21 @@
+# 阶段一 · 步骤J：在 WB测试机构 下录入管理员 13811111111
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-god-wb6.json
+sleep|500
+reload
+sleep|3000
+goto|http://127.0.0.1/admin/members
+sleep|3000
+click|f2e117
+sleep|1800
+fill|f2e194|13811111111
+fill|f2e200|WB测试管理员
+fill|f2e218|WB管理员
+select|f2e207|管理员
+sleep|800
+snapshot|--filename=p1j-admin-form.yaml
+click|f2e281
+sleep|3000
+snapshot|--filename=p1j-admin-created.yaml
+screenshot|--filename=p1j-admin-created.png

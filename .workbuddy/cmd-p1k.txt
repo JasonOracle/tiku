@@ -1,0 +1,12 @@
+# 阶段一 · 步骤K：打开成员「编辑」弹窗，采集表单结构
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-god-wb6.json
+sleep|500
+reload
+sleep|3000
+goto|http://127.0.0.1/admin/members
+sleep|3000
+click|f2e323
+sleep|2000
+snapshot|--filename=p1k-edit.yaml

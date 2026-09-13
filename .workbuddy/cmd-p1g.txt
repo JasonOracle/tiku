@@ -1,0 +1,12 @@
+# 阶段一 · 步骤G：视察 WB测试机构 并落盘登录态
+open|http://127.0.0.1/admin/login
+sleep|2500
+fill|e19|13800000000
+fill|e30|GodPass123
+sleep|400
+click|e32
+sleep|3500
+click|e222
+sleep|2500
+state-save|.workbuddy/auth-god-wb6.json
+snapshot|--filename=p1g-inspecting.yaml

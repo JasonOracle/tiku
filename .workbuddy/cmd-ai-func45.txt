@@ -1,0 +1,10 @@
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-admin-wb6.json
+sleep|500
+reload
+sleep|3500
+goto|http://127.0.0.1/admin/ai-assistant
+sleep|4000
+run-code|--filename=.workbuddy/rc-ai-func45.js
+screenshot|--filename=ai-func45.png

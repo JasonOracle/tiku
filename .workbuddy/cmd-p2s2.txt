@@ -1,0 +1,22 @@
+# 录入 13911111102
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-admin-wb6.json
+sleep|500
+reload
+sleep|3000
+goto|http://127.0.0.1/admin/members
+sleep|3500
+fill|f2e87|zzz-nomatch-member
+sleep|2500
+snapshot|--filename=p2x-pre.yaml
+click|f2e90
+sleep|4500
+snapshot|--filename=p2x-dialog.yaml
+fill|f2e213|13911111102
+fill|f2e219|WB学员02
+sleep|1200
+click|f2e300
+sleep|4500
+snapshot|--filename=p2s2-result.yaml
+screenshot|--filename=p2s2-result.png

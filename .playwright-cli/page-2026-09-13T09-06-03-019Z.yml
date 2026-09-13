@@ -1,0 +1,115 @@
+- generic [ref=f2e3]:
+  - complementary [ref=f2e4]:
+    - menubar [ref=f2e5]:
+      - menuitem "数据看板" [ref=f2e6] [cursor=pointer]
+      - menuitem "分类配置" [ref=f2e11] [cursor=pointer]
+      - menuitem "题目管理" [ref=f2e16] [cursor=pointer]
+      - menuitem "试卷管理" [ref=f2e21] [cursor=pointer]
+      - menuitem "阅卷管理" [ref=f2e27] [cursor=pointer]
+      - menuitem "AI知识库" [ref=f2e32] [cursor=pointer]
+      - menuitem "成员管理" [ref=f2e38] [cursor=pointer]
+      - menuitem "✨ AI 助理" [ref=f2e43] [cursor=pointer]
+  - generic [ref=f2e48]:
+    - generic [ref=f2e49]:
+      - heading "成员管理" [level=3] [ref=f2e51]
+      - generic [ref=f2e52]:
+        - generic "WB测试机构" [ref=f2e53]
+        - button "AI 助理" [ref=f2e61] [cursor=pointer]
+        - generic "消息中心" [ref=f2e66] [cursor=pointer]:
+          - button [ref=f2e68]
+        - button "W WB测试管理员 管理员" [ref=f2e76] [cursor=pointer]:
+          - generic [ref=f2e77]: W
+          - generic [ref=f2e78]: WB测试管理员
+          - generic [ref=f2e189]: 管理员
+    - main [ref=f2e79]:
+      - generic [ref=f2e80]:
+        - generic [ref=f2e81]:
+          - generic [ref=f2e84]:
+            - generic [ref=f2e86]:
+              - search
+            - textbox "搜索手机号 / 姓名 / 昵称..." [ref=f2e87]: zzz-nomatch-member
+          - button "录入成员" [ref=f2e90] [cursor=pointer]
+        - generic [ref=f2e96]:
+          - table [ref=f2e98]:
+            - rowgroup [ref=f2e110]:
+              - row [ref=f2e111]:
+                - columnheader "ID" [ref=f2e112]
+                - columnheader "手机号" [ref=f2e114]
+                - columnheader "姓名" [ref=f2e116]
+                - columnheader "昵称" [ref=f2e118]
+                - columnheader "性别" [ref=f2e120]
+                - columnheader "年龄" [ref=f2e122]
+                - columnheader "职业" [ref=f2e124]
+                - columnheader "角色" [ref=f2e126]
+                - columnheader "状态" [ref=f2e128]
+                - columnheader "操作" [ref=f2e130]
+          - generic [ref=f2e135]:
+            - table:
+              - rowgroup
+            - generic [ref=f2e195]: 暂无数据
+        - generic [ref=f2e183]:
+          - generic [ref=f2e184]: 共 0 条
+          - button "上一页" [disabled] [ref=f2e185]
+          - list [ref=f2e186]:
+            - listitem "第 1 页" [ref=f2e187]: "1"
+          - button "下一页" [disabled] [ref=f2e188]
+        - dialog "录入成员" [ref=f2e198]:
+          - generic [active] [ref=f2e199]:
+            - generic [ref=f2e200]:
+              - heading "录入成员" [level=2] [ref=f2e201]
+              - button "关闭此对话框" [ref=f2e202] [cursor=pointer]
+            - generic [ref=f2e207]:
+              - generic [ref=f2e208]:
+                - generic [ref=f2e209]: "* 手机号"
+                - textbox "* 手机号" [ref=f2e213]:
+                  - /placeholder: 11 位手机号（录入必填）
+              - generic [ref=f2e214]:
+                - generic [ref=f2e215]: 姓名
+                - textbox "姓名" [ref=f2e219]:
+                  - /placeholder: 成员展示名
+              - generic [ref=f2e220]:
+                - generic [ref=f2e221]: 角色
+                - generic [ref=f2e224] [cursor=pointer]:
+                  - generic:
+                    - combobox "角色" [ref=f2e226]
+                    - generic [ref=f2e227]: 成员
+              - generic [ref=f2e232]:
+                - generic [ref=f2e233]: 昵称
+                - textbox "昵称" [ref=f2e237]:
+                  - /placeholder: 选填
+              - generic [ref=f2e238]:
+                - generic [ref=f2e239]: 邮箱
+                - textbox "邮箱" [ref=f2e243]:
+                  - /placeholder: 选填
+              - generic [ref=f2e244]:
+                - generic [ref=f2e245]: 职业
+                - textbox "职业" [ref=f2e249]:
+                  - /placeholder: 选填
+              - generic [ref=f2e250]:
+                - generic [ref=f2e251]: 年龄
+                - generic [ref=f2e253]:
+                  - button "减少数值" [ref=f2e254] [cursor=pointer]
+                  - button "增加数值" [ref=f2e258] [cursor=pointer]
+                  - spinbutton "年龄" [ref=f2e264]
+              - generic [ref=f2e265]:
+                - generic [ref=f2e266]: 性别
+                - generic [ref=f2e269] [cursor=pointer]:
+                  - generic:
+                    - combobox "性别" [ref=f2e271]
+                    - generic [ref=f2e272]: 请选择
+              - generic [ref=f2e277]:
+                - generic [ref=f2e278]: 简介
+                - textbox "简介" [ref=f2e281]:
+                  - /placeholder: 选填，个人简介
+              - generic [ref=f2e282]:
+                - generic [ref=f2e283]: 状态
+                - radiogroup "状态" [ref=f2e285]:
+                  - generic [ref=f2e286] [cursor=pointer]:
+                    - radio "启用" [checked] [ref=f2e288]
+                    - generic [ref=f2e290]: 启用
+                  - generic [ref=f2e291] [cursor=pointer]:
+                    - radio "禁用" [ref=f2e293]
+                    - generic [ref=f2e295]: 禁用
+            - generic [ref=f2e297]:
+              - button "取消" [ref=f2e298] [cursor=pointer]
+              - button "保存" [ref=f2e300] [cursor=pointer]

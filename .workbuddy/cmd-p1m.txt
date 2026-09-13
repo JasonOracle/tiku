@@ -1,0 +1,14 @@
+# 阶段一 · 步骤M：展开「角色」下拉，采集可选项
+open|http://127.0.0.1/admin/
+sleep|2500
+state-load|.workbuddy/auth-god-wb6.json
+sleep|500
+reload
+sleep|3000
+goto|http://127.0.0.1/admin/members
+sleep|3000
+click|f2e203
+sleep|2200
+click|f2e245
+sleep|1500
+snapshot|--filename=p1m-role-options.yaml
