@@ -47,6 +47,7 @@ export interface ChatMessage {
   arguments?: any;
   riskLevel?: string;
   actionResolved?: boolean;
+  executeNonce?: number;
   ragSources?: RagSource[];
   createdAt?: string;
 }

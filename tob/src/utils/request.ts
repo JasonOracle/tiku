@@ -56,9 +56,10 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response: AxiosResponse) => {
     const res = response.data;
+    const silent = (response.config as any)?.silent === true;
     if (res && typeof res.code === 'number') {
       if (res.code !== 200 && res.code !== 201) {
-        ElMessage.error(res.message || '请求处理失败');
+        if (!silent) ElMessage.error(res.message || '请求处理失败');
         return Promise.reject(new Error(res.message || 'Error'));
       }
       return res.data;
@@ -66,6 +67,7 @@ request.interceptors.response.use(
     return res;
   },
   (error) => {
+    const silent = (error?.config as any)?.silent === true;
     const detail = error.response?.data?.detail || '';
     const msg = detail || '网络开小差了，请稍后再试';
     if (error.response?.status === 401) {
@@ -77,7 +79,7 @@ request.interceptors.response.use(
     if (detail.includes('X-Tenant-ID') || detail.includes('视察企业')) {
       return Promise.reject(error);
     }
-    ElMessage.error(msg);
+    if (!silent) ElMessage.error(msg);
     return Promise.reject(error);
   }
 );

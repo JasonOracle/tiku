@@ -1,5 +1,9 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 列表操作列移除原AI分析按钮，实现单胶囊聚焦「进入批阅」；2. 抽屉标题右侧新增「AI 帮我分析」按钮，采用SVG矢量图标与柔和微光按钮规范，点击后实时调用AI分析并就地更新抽屉内AI建议及底部分数；3. 核验定分区域展示客观题已得分基准提醒，优化定分表单必填校验]
+ * [变更日志]
  * 修改时间：2026-09-11
  * AI模型：Gemini 系列
  * 修改内容：[彻底根除图3记录ID被截断为“纪...”的问题：调整单元格内边距至紧凑规范 padding: 12px 10px，并将记录ID设置为弹性自适应 min-width="95"，杜绝文字省略号溢出]
@@ -82,12 +86,9 @@
           <span v-else class="muted-gray-text">未触发 AI 预评</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right" align="center">
+      <el-table-column label="操作" width="130" fixed="right" align="center">
         <template #default="{ row }">
-          <div class="action-btn-group">
-            <el-button type="warning" link class="action-link-btn orange" :loading="aiLoading === row.record_id" @click="triggerAi(row)">
-              ✨ AI 助考分析
-            </el-button>
+          <div class="action-btn-group" style="justify-content: center;">
             <button class="action-pill-btn pill-urgent" @click="openDrawer(row)">
               进入批阅
             </button>
@@ -97,7 +98,30 @@
     </el-table>
 
     <!-- 可视化人工批改抽屉 Drawer -->
-    <el-drawer v-model="drawerVisible" size="700px" destroy-on-close title="人工阅卷批改与核验">
+    <el-drawer v-model="drawerVisible" size="700px" destroy-on-close>
+      <template #header>
+        <div class="drawer-custom-header">
+          <span class="drawer-header-title">人工阅卷批改与核验</span>
+          <button 
+            type="button"
+            class="ai-analyze-btn" 
+            :disabled="aiLoading === detailData?.record_id"
+            @click="triggerAiInDrawer"
+          >
+            <svg class="ai-sparkle-icon" viewBox="0 0 24 24" width="15" height="15" fill="none">
+              <path d="M12 2L14.3 9.7L22 12L14.3 14.3L12 22L9.7 14.3L2 12L9.7 9.7L12 2Z" fill="url(#sparkle-gradient)"/>
+              <defs>
+                <linearGradient id="sparkle-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#f59e0b" />
+                  <stop offset="1" stop-color="#ea580c" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <span>{{ aiLoading === detailData?.record_id ? 'AI 正在分析中...' : 'AI 帮我分析' }}</span>
+          </button>
+        </div>
+      </template>
+
       <div v-loading="drawerLoading" class="drawer-content" v-if="detailData">
         <!-- 考生与试卷基础信息 -->
         <div class="exam-header-card">
@@ -166,10 +190,21 @@
         <!-- 定分表单区域 -->
         <div class="confirm-footer-box">
           <el-divider content-position="left"><strong>核验定分录入</strong></el-divider>
-          <el-form label-width="100px">
+          <el-form label-width="110px">
             <el-form-item label="核验最终得分" required>
-              <el-input-number v-model="confirmForm.final_score" :min="0" :max="500" style="width: 180px" />
-              <span style="margin-left: 10px; color: #64748b; font-size: 13px">分</span>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <el-input-number 
+                  v-model="confirmForm.final_score" 
+                  :min="0" 
+                  :max="500" 
+                  placeholder="请输入总分"
+                  style="width: 160px" 
+                />
+                <span style="color: #64748b; font-size: 13px">分</span>
+                <span v-if="detailData?.score !== undefined && detailData?.score !== null" class="score-baseline-tip">
+                  (已得客观题基准分: <strong>{{ detailData.score }}</strong> 分)
+                </span>
+              </div>
             </el-form-item>
             <el-form-item label="主考官评语">
               <el-input v-model="confirmForm.comments" type="textarea" :rows="3" placeholder="请输入主考官核验意见或批改评语..." />
@@ -204,7 +239,10 @@ const drawerVisible = ref(false);
 const drawerLoading = ref(false);
 const detailData = ref<any>(null);
 const showAllTypes = ref(false);
-const confirmForm = reactive({ final_score: 0, comments: '' });
+const confirmForm = reactive<{ final_score: number | null; comments: string }>({ 
+  final_score: null, 
+  comments: '' 
+});
 
 const allQuestions = computed(() => {
   if (!detailData.value?.items) return [];
@@ -235,12 +273,33 @@ const loadRecords = async () => {
   }
 };
 
-const triggerAi = async (row: any) => {
-  aiLoading.value = row.record_id;
+const triggerAiInDrawer = async () => {
+  if (!detailData.value?.record_id) return;
+  const recordId = detailData.value.record_id;
+  aiLoading.value = recordId;
   try {
-    const res: any = await request.post(`/api/v1/admin/ai/verify/${row.record_id}`);
-    ElMessage.success(res.message || 'AI 助考分析完成');
+    const res: any = await request.post(`/api/v1/admin/ai/verify/${recordId}`);
+    ElMessage.success(res.message || 'AI 帮我分析完成！');
+    // 重新获取最新详情以同步最新 ai_result
+    const detailRes: any = await request.get(`/api/v1/admin/verifications/${recordId}`);
+    detailData.value = {
+      ...detailData.value,
+      ...detailRes,
+      task_title: detailRes.task_title || detailData.value.task_title,
+      nickname: detailRes.nickname || detailData.value.nickname,
+      username: detailRes.username || detailData.value.username,
+      submit_time: detailRes.submit_time || detailData.value.submit_time
+    };
+    // 若此前尚未人工输入过分数，智能带入 AI 建议得分
+    if (detailRes.ai_result?.suggested_score !== undefined) {
+      confirmForm.final_score = detailRes.ai_result.suggested_score;
+      if (detailRes.ai_result.comments && !confirmForm.comments) {
+        confirmForm.comments = `【采纳AI意见】${detailRes.ai_result.comments}`;
+      }
+    }
     loadRecords();
+  } catch (e) {
+    ElMessage.error('AI 助考分析失败，请稍后重试');
   } finally {
     aiLoading.value = null;
   }
@@ -260,7 +319,7 @@ const openDrawer = async (row: any) => {
       username: res.username || row.username,
       submit_time: res.submit_time || row.submit_time
     };
-    confirmForm.final_score = res.ai_result?.suggested_score ?? (res.score || 0);
+    confirmForm.final_score = res.ai_result?.suggested_score ?? (res.score ?? null);
     confirmForm.comments = res.comments || res.ai_result?.comments || '';
   } catch (e) {
     ElMessage.error('加载试卷作答详情失败');
@@ -281,6 +340,10 @@ const applyAiScore = () => {
 
 const doConfirm = async () => {
   if (!detailData.value) return;
+  if (confirmForm.final_score === null || confirmForm.final_score === undefined) {
+    ElMessage.warning('请填写核验最终得分后再保存！');
+    return;
+  }
   saving.value = true;
   try {
     await request.post(`/api/v1/admin/verifications/${detailData.value.record_id}/confirm`, {
@@ -525,5 +588,62 @@ onMounted(loadRecords);
 
 .confirm-footer-box {
   margin-top: 20px;
+}
+
+.drawer-custom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-right: 28px;
+}
+
+.drawer-header-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ai-analyze-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-flex(135deg, #fffbeb, #fef3c7);
+  background-color: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #b45309;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.12);
+}
+
+.ai-analyze-btn:hover:not(:disabled) {
+  background-color: #fef3c7;
+  border-color: #f59e0b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(245, 158, 11, 0.2);
+}
+
+.ai-analyze-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ai-sparkle-icon {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.score-baseline-tip {
+  font-size: 13px;
+  color: #0284c7;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 3px 8px;
+  border-radius: 6px;
 }
 </style>

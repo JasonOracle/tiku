@@ -303,6 +303,7 @@ def chat_completion_stream(
             "model": provider["model"],
             "messages": messages,
             "temperature": temperature,
+            "max_tokens": 5000,
             "stream": True,
         }
         if tools:

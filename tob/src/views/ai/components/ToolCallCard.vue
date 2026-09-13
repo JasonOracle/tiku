@@ -39,12 +39,27 @@
       </div>
 
       <!-- 组卷确认卡 -->
-      <div v-if="toolName === 'create_exam_draft'" class="exam-draft-card">
+      <div v-if="toolName === 'create_exam_draft'" class="exam-draft-card" style="position: relative;">
+        <AiGeneratingOverlay
+          :visible="fetchingExam"
+          title="AI 正在生成试卷题目…"
+          detail="大模型全量出题约需10~20秒"
+          :elapsed="fetchExamElapsed"
+          @cancel="cancelExamFetch"
+          @retry="fetchExamFallback"
+        />
+        <AiGeneratingOverlay
+          :visible="confirming"
+          title="正在创建试卷入库…"
+          detail="入库完成前卡片不可操作"
+          :elapsed="execElapsed"
+          :cancelable="false"
+        />
         <div class="exam-draft-title">AI 智能组卷确认</div>
         <div class="exam-draft-summary">{{ examTypeSummary }}</div>
-        <el-collapse v-if="questions.length > 0">
+        <el-collapse v-if="examDisplayQuestions.length > 0">
           <el-collapse-item
-            v-for="(q, qi) in questions"
+            v-for="(q, qi) in examDisplayQuestions"
             :key="qi"
             :name="qi"
           >
@@ -86,6 +101,10 @@
 
           </el-collapse-item>
         </el-collapse>
+        <div v-if="examDisplayQuestions.length === 0 && !actionResolved && !fetchingExam && fetchExamError" class="tool-card__desc" style="color: #b91c1c;">
+          {{ fetchExamError }}
+          <el-button size="small" type="primary" plain style="margin-left: 8px;" @click="fetchExamFallback">重新生成</el-button>
+        </div>
         <el-form label-width="90px" size="small" style="margin-top: 12px">
           <el-form-item label="试卷分类">
             <el-select v-model="examForm.category_id" placeholder="选择试卷分类" style="width: 100%">
@@ -122,42 +141,77 @@
           </el-form-item>
         </el-form>
         <div v-if="!actionResolved" class="action-footer">
-          <button class="btn-confirm-medium" @click="handleConfirm">确认创建试卷</button>
-          <button class="btn-cancel" @click="$emit('cancel', message)">取消</button>
+          <button class="btn-confirm-medium" :disabled="fetchingExam || confirming" :style="(fetchingExam || confirming) ? { opacity: 0.5, cursor: 'not-allowed' } : {}" @click="handleConfirm">{{ confirming ? '正在入库…请稍候' : (fetchingExam ? '题目生成中…' : '确认创建试卷') }}</button>
+          <button class="btn-cancel" :disabled="confirming" @click="$emit('cancel', message)">取消</button>
         </div>
         <div v-else class="tool-card__desc">
           试卷草稿已创建，可前往<a class="exam-link" href="#/tasks">试卷管理</a>查看
         </div>
       </div>
 
-      <!-- 批量/单道出题确认卡 (create_question_draft) -->
-      <div v-else-if="toolName === 'create_question_draft'" class="exam-draft-card">
+      <!-- 批量/单道出题确认卡 (create_question_draft)：一步明细预览 + 复选批量删 + 题干可改 -->
+      <div v-else-if="toolName === 'create_question_draft'" class="exam-draft-card" style="position: relative;">
+        <AiGeneratingOverlay
+          :visible="fetchingQuestions"
+          :title="countIsSingle ? 'AI 正在生成题目…' : 'AI 正在批量生成题目…'"
+          :detail="`大模型全量出题约需10~20秒（计划${plannedCount}道）`"
+          :elapsed="fetchElapsed"
+          @cancel="cancelFetch"
+          @retry="fetchQuestionsFallback"
+        />
+        <AiGeneratingOverlay
+          :visible="confirming"
+          :title="`正在入库 ${remainingCount} 道题目…`"
+          detail="入库完成前题目不可删改"
+          :elapsed="execElapsed"
+          :cancelable="false"
+        />
         <div class="exam-draft-title" style="color: #0284c7; display: flex; align-items: center; justify-content: space-between;">
           <div style="display: flex; align-items: center; gap: 6px;">
             <el-icon><MagicStick /></el-icon>
             <span>AI 批量出题确认</span>
           </div>
-          <el-tag size="small" type="primary" effect="plain">{{ questionDraftSummary.totalCount }} 道题目</el-tag>
+          <el-tag size="small" type="primary" effect="plain">
+            <template v-if="hasServerQuestions">{{ remainingCount }} 道题目<span v-if="deletedCount > 0" style="opacity: 0.7">（共{{ originalTotal }}，已删{{ deletedCount }}）</span></template>
+            <template v-else>题目生成中…（计划{{ plannedCount }}道）</template>
+          </el-tag>
         </div>
 
-        <!-- 场景A：若参数中已包含完整题目草稿列表 (questions 数组) -->
-        <template v-if="questions.length > 0">
-          <div class="exam-draft-summary">{{ examTypeSummary }}</div>
+        <!-- 场景A：明细预览（必现，后端已保障首包含 questions） -->
+        <template v-if="editableQuestions.length > 0">
+          <div class="exam-draft-summary">{{ editableExamTypeSummary }}</div>
+          <div v-if="!actionResolved" class="draft-toolbar">
+            <el-checkbox v-model="allChecked" :indeterminate="isIndeterminate" @change="toggleAll">全选</el-checkbox>
+            <el-button size="small" type="danger" plain :disabled="checkedCount === 0" @click="batchDelete">批量删除({{ checkedCount }})</el-button>
+            <el-button v-if="deletedCount > 0" size="small" plain @click="restoreAll">恢复全部</el-button>
+            <span class="toolbar-hint">勾选后可批量删，题干可直接改</span>
+          </div>
           <el-collapse>
             <el-collapse-item
-              v-for="(q, qi) in questions"
+              v-for="(q, qi) in editableQuestions"
               :key="qi"
               :name="qi"
             >
               <template #title>
                 <div class="collapse-title-wrap">
-                  <div class="title-text">第 {{ qi + 1 }} 题 · {{ q.title || '（未命题干）' }}</div>
+                  <div class="title-text" style="display: flex; align-items: center; gap: 8px;">
+                    <el-checkbox v-if="!actionResolved" :model-value="checked[qi]" @click.stop @change="onCheck(qi, $event)" />
+                    <span>第 {{ qi + 1 }} 题 · {{ (q.title || '（未命题干）').slice(0, 40) }}</span>
+                    <el-button v-if="!actionResolved" size="small" type="danger" text @click.stop="removeQuestion(qi)">删除</el-button>
+                  </div>
                   <div class="draft-meta title-meta">
                     <el-tag size="small" type="primary">{{ formatQuestion(q).typeLabel }}</el-tag>
                     <span class="score-badge">{{ formatQuestion(q).score }} 分</span>
                   </div>
                 </div>
               </template>
+              <div v-if="!actionResolved" style="margin-bottom: 8px;">
+                <div class="draft-label" style="margin-bottom: 4px;">题干（可直接修改）：</div>
+                <el-input v-model="editableQuestions[qi].title" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="请输入题干" @click.stop />
+              </div>
+              <div v-else class="draft-row" style="margin-bottom: 8px;">
+                <span class="draft-label">题干:</span> {{ q.title }}
+              </div>
               <div v-if="formatQuestion(q).options.length" class="draft-opts">
                 <div
                   v-for="(opt, oi) in formatQuestion(q).options"
@@ -173,16 +227,29 @@
               <div class="draft-row">
                 <span class="draft-label">正确答案:</span> {{ formatQuestion(q).answerText }}
               </div>
+              <div v-if="q.explanation" class="draft-row draft-explanation" style="margin-top: 6px">
+                <span class="draft-label">解析:</span> {{ q.explanation }}
+              </div>
             </el-collapse-item>
           </el-collapse>
+          <div class="toolbar-hint" style="margin-top: 8px;">刷新后按服务端原始还原，删改态不持久化；确认后仅入库剩余 {{ remainingCount }} 道。</div>
         </template>
 
-        <!-- 场景B：若参数为批量出题指令（包含材料、题型、数量、难度等出题参数） -->
+        <!-- 场景B降级：后端未返回明细时显示，不再误报“已删” -->
         <template v-else>
-          <div class="draft-meta" style="margin-top: 8px; margin-bottom: 12px;">
+          <div v-if="!actionResolved" class="draft-meta" style="margin-top: 8px; margin-bottom: 12px;">
             <el-tag v-for="t in questionDraftSummary.typeLabels" :key="t" size="small" type="primary">{{ t }}</el-tag>
             <el-tag size="small" type="warning">难度: {{ questionDraftSummary.difficultyLabel }}</el-tag>
-            <span style="font-size: 12px; color: #64748b;">计划生成 {{ questionDraftSummary.totalCount }} 道题目</span>
+            <span v-if="fetchingQuestions" style="font-size: 12px; color: #0284c7;">题目生成中…（计划{{ plannedCount }}道）</span>
+            <span v-else-if="hasServerQuestions" style="font-size: 12px; color: #64748b;">{{ `已删除全部 ${originalTotal} 道题目，可恢复后重新选择` }}</span>
+            <span v-else-if="fetchError" style="font-size: 12px; color: #dc2626;">{{ fetchError }}</span>
+            <span v-else style="font-size: 12px; color: #64748b;">题目明细尚未生成，点击下方按钮重新生成（历史消息默认不自动生成）</span>
+          </div>
+          <div v-if="hasServerQuestions && !actionResolved" style="margin-bottom: 12px;">
+            <el-button size="small" plain @click="restoreAll">恢复全部 {{ originalTotal }} 道题目</el-button>
+          </div>
+          <div v-if="!hasServerQuestions && !actionResolved && !fetchingQuestions" style="margin-bottom: 12px;">
+            <el-button size="small" type="primary" plain @click="fetchQuestionsFallback">重新生成题目明细</el-button>
           </div>
 
           <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px;">
@@ -213,8 +280,8 @@
         </el-form>
 
         <div v-if="!actionResolved" class="action-footer" style="margin-top: 8px;">
-          <button class="btn-confirm-medium" @click="handleConfirmQuestionDraft">确认生成题目并入库</button>
-          <button class="btn-cancel" @click="$emit('cancel', message)">取消</button>
+          <button class="btn-confirm-medium" :disabled="remainingCount === 0 || fetchingQuestions || confirming" :style="(remainingCount === 0 || fetchingQuestions || confirming) ? { opacity: 0.5, cursor: 'not-allowed' } : {}" @click="handleConfirmQuestionDraft">{{ confirming ? '正在入库…请稍候' : (fetchingQuestions ? `题目生成中…（已等待${fetchElapsed}s，可取消）` : `确认生成 ${remainingCount} 道题目并入库`) }}</button>
+          <button class="btn-cancel" :disabled="confirming" @click="$emit('cancel', message)">取消</button>
         </div>
         <div v-else class="tool-card__desc" style="margin-top: 8px;">
           已确认批量出题，题目生成后将自动归档至题库。
@@ -279,9 +346,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 import { MagicStick, Delete } from '@element-plus/icons-vue';
 import request from '../../../utils/request';
+import AiGeneratingOverlay from './AiGeneratingOverlay.vue';
 
 export interface ToolCallMessage {
   role: 'assistant';
@@ -291,6 +360,7 @@ export interface ToolCallMessage {
   arguments?: any;
   riskLevel?: string;
   actionResolved?: boolean;
+  executeNonce?: number;
   content?: string;
   id?: number | string;
 }
@@ -308,6 +378,181 @@ const emit = defineEmits<{
 
 const categories = ref<any[]>(props.categories || []);
 const resourceCategories = ref<any[]>([]);
+const fetchingQuestions = ref(false);
+const fetchError = ref('');
+const fetchElapsed = ref(0);
+let fetchTimer: number | null = null;
+let fetchController: AbortController | null = null;
+
+const startElapsed = () => {
+  stopElapsed();
+  fetchElapsed.value = 0;
+  fetchTimer = window.setInterval(() => {
+    fetchElapsed.value += 1;
+  }, 1000);
+};
+const stopElapsed = () => {
+  if (fetchTimer !== null) {
+    window.clearInterval(fetchTimer);
+    fetchTimer = null;
+  }
+};
+onUnmounted(() => {
+  stopElapsed();
+  fetchController?.abort();
+});
+
+const cancelFetch = () => {
+  fetchController?.abort();
+};
+
+// 预览缓存 + 新旧卡片闸门：历史还原的卡片默认不自动生成，只留重试按钮
+const cardCacheKey = (suffix = '') => {
+  const id = props.message.id ?? props.message.toolCallId ?? '';
+  if (id === '' || id === null || id === undefined) return '';
+  return `tiku:ai:qpreview:${props.message.toolName || 'q'}:${id}${suffix}`;
+};
+const isFreshCard = () => {
+  try {
+    const ids = JSON.parse(sessionStorage.getItem('tiku_ai_fresh_cards') || '[]');
+    const cur = props.message.toolCallId || '';
+    return !!cur && Array.isArray(ids) && ids.includes(cur);
+  } catch (e) {
+    return false;
+  }
+};
+const loadCachedPreview = (suffix = ''): any[] | null => {
+  try {
+    const k = cardCacheKey(suffix);
+    if (!k) return null;
+    const raw = localStorage.getItem(k);
+    if (!raw) return null;
+    const list = JSON.parse(raw);
+    return Array.isArray(list) && list.length > 0 ? list : null;
+  } catch (e) {
+    return null;
+  }
+};
+const saveCachedPreview = (list: any[], suffix = '') => {
+  try {
+    const k = cardCacheKey(suffix);
+    if (!k) return;
+    localStorage.setItem(k, JSON.stringify(list.slice(0, 20)));
+  } catch (e) { /* 配额不足时忽略 */ }
+};
+const clearCachedPreview = (suffix = '') => {
+  try {
+    const k = cardCacheKey(suffix);
+    if (k) localStorage.removeItem(k);
+  } catch (e) { /* 忽略 */ }
+};
+
+const fetchQuestionsFallback = async () => {
+  if (toolName.value !== 'create_question_draft') return;
+  if (actionResolved.value) return;
+  if (originalQuestions.value.length > 0 || fetchingQuestions.value) return;
+  const material = String((toolArgs.value as any)?.material || (toolArgs.value as any)?.description || '').trim();
+  if (!material) return;
+  let count = Number((toolArgs.value as any)?.count || 5);
+  if (!Number.isFinite(count)) count = 5;
+  count = Math.max(1, Math.min(count, 10));
+  fetchController?.abort();
+  fetchController = new AbortController();
+  fetchingQuestions.value = true;
+  fetchError.value = '';
+  startElapsed();
+  try {
+    const res: any = await request.post('/api/v1/admin/ai/questions/generate', {
+      material,
+      count,
+      types: (toolArgs.value as any)?.types || ['single'],
+      difficulty: (toolArgs.value as any)?.difficulty || 'medium'
+    }, { timeout: 120000, signal: fetchController.signal, silent: true } as any);
+    const list = res?.questions || res?.data?.questions || [];
+    if (Array.isArray(list) && list.length > 0) {
+      originalQuestions.value = cloneQuestions(list);
+      editableQuestions.value = cloneQuestions(list);
+      checked.value = editableQuestions.value.map(() => true);
+      saveCachedPreview(list);
+    } else {
+      fetchError.value = '题目生成返回为空，请重试';
+    }
+  } catch (e: any) {
+    if (e?.code === 'ERR_CANCELED' || String(e?.message || '').toLowerCase().includes('canceled')) {
+      fetchError.value = '已取消生成，可重新生成或直接取消本操作';
+    } else {
+      fetchError.value = e?.response?.data?.detail || e?.message || '题目生成失败，请重试';
+    }
+  } finally {
+    fetchingQuestions.value = false;
+    stopElapsed();
+  }
+};
+
+// 组卷卡兜底：SSE 首包无 questions 时，用题库出题接口按 specs 总量拉预览（仅预览，确认仍走 execute_tool 建卷）
+const fetchingExam = ref(false);
+const fetchExamError = ref('');
+const fetchExamElapsed = ref(0);
+const examEditableQuestions = ref<any[]>([]);
+let examTimer: number | null = null;
+let examController: AbortController | null = null;
+onUnmounted(() => {
+  if (examTimer !== null) window.clearInterval(examTimer);
+  examController?.abort();
+});
+const examDisplayQuestions = computed(() => examEditableQuestions.value.length > 0 ? examEditableQuestions.value : (toolArgs.value?.questions || []));
+const cancelExamFetch = () => {
+  examController?.abort();
+};
+const fetchExamFallback = async () => {
+  if (toolName.value !== 'create_exam_draft') return;
+  if (actionResolved.value) return;
+  if (fetchingExam.value) return;
+  const serverQs = Array.isArray((toolArgs.value as any)?.questions) ? (toolArgs.value as any).questions : [];
+  if (serverQs.length > 0 || examEditableQuestions.value.length > 0) return;
+  const specs = Array.isArray((toolArgs.value as any)?.specs) ? (toolArgs.value as any).specs : [];
+  const total = specs.reduce((s: number, sp: any) => s + (Number(sp?.count) || 0), 0) || 5;
+  const material = String((toolArgs.value as any)?.title || (toolArgs.value as any)?.description || '').trim();
+  if (!material) return;
+  examController?.abort();
+  examController = new AbortController();
+  fetchingExam.value = true;
+  fetchExamError.value = '';
+  fetchExamElapsed.value = 0;
+  if (examTimer !== null) window.clearInterval(examTimer);
+  examTimer = window.setInterval(() => {
+    fetchExamElapsed.value += 1;
+  }, 1000);
+  try {
+    const res: any = await request.post('/api/v1/admin/ai/questions/generate', {
+      material: `${material}（组卷预览）`,
+      count: Math.max(1, Math.min(total, 10)),
+      difficulty: 'medium'
+    }, { timeout: 120000, signal: examController.signal, silent: true } as any);
+    const list = res?.questions || res?.data?.questions || [];
+    if (Array.isArray(list) && list.length > 0) {
+      examEditableQuestions.value = cloneQuestions(list);
+      try {
+        const k = cardCacheKey(':exam');
+        if (k) localStorage.setItem(k, JSON.stringify(list.slice(0, 20)));
+      } catch (e) { /* 忽略 */ }
+    } else {
+      fetchExamError.value = '试卷题目生成返回为空，请重试';
+    }
+  } catch (e: any) {
+    if (e?.code === 'ERR_CANCELED' || String(e?.message || '').toLowerCase().includes('canceled')) {
+      fetchExamError.value = '已取消生成，可重新生成或直接取消本操作';
+    } else {
+      fetchExamError.value = e?.response?.data?.detail || e?.message || '试卷题目生成失败，请重试';
+    }
+  } finally {
+    fetchingExam.value = false;
+    if (examTimer !== null) {
+      window.clearInterval(examTimer);
+      examTimer = null;
+    }
+  }
+};
 
 onMounted(async () => {
   if (categories.value.length === 0) {
@@ -331,6 +576,24 @@ onMounted(async () => {
     }
   } catch (e) {
     resourceCategories.value = [];
+  }
+  // 挂载顺序：服务端明细 > 本地缓存秒恢复 > 本页新卡自动生成 > 历史卡片仅留重试按钮
+  const cachedQs = loadCachedPreview();
+  if (cachedQs && originalQuestions.value.length === 0) {
+    originalQuestions.value = cloneQuestions(cachedQs);
+    editableQuestions.value = cloneQuestions(cachedQs);
+    checked.value = editableQuestions.value.map(() => true);
+  }
+  try {
+    const examCached = loadCachedPreview(':exam');
+    if (examCached && examEditableQuestions.value.length === 0) {
+      examEditableQuestions.value = cloneQuestions(examCached);
+    }
+  } catch (e) { /* 忽略 */ }
+  // v1.3/v1.4 回归兜底：仅本页新出的卡自动拉真实明细，历史还原卡片默认不烧 token
+  if (isFreshCard()) {
+    fetchQuestionsFallback();
+    fetchExamFallback();
   }
 });
 
@@ -402,9 +665,169 @@ const questionForm = ref({
   category_id: toolArgs.value?.category_id || null as number | null
 });
 
+// 一步明细卡本地可编辑态：复选批量删 + 题干可改（只改题干，选项/答案只读）
+const cloneQuestions = (list: any[]) => {
+  try {
+    return JSON.parse(JSON.stringify(list || []));
+  } catch (e) {
+    return [...(list || [])];
+  }
+};
+const originalQuestions = ref<any[]>(cloneQuestions(toolArgs.value?.questions || []));
+const editableQuestions = ref<any[]>(cloneQuestions(toolArgs.value?.questions || []));
+const checked = ref<boolean[]>((toolArgs.value?.questions || []).map(() => true));
+const syncEditableFromArgs = () => {
+  originalQuestions.value = cloneQuestions(toolArgs.value?.questions || []);
+  editableQuestions.value = cloneQuestions(toolArgs.value?.questions || []);
+  checked.value = editableQuestions.value.map(() => true);
+};
+watch(
+  () => (toolArgs.value as any)?.questions,
+  (nv) => {
+    if (actionResolved.value) return;
+    if (Array.isArray(nv) && nv.length > 0 && originalQuestions.value.length === 0) {
+      syncEditableFromArgs();
+    } else if (originalQuestions.value.length === 0 && !fetchingQuestions.value && isFreshCard()) {
+      fetchQuestionsFallback();
+    }
+  },
+  { deep: true }
+);
+// 确认/取消后清理本地预览缓存，避免 stale 占用
+watch(
+  () => actionResolved.value,
+  (v) => {
+    if (v) {
+      clearCachedPreview();
+      clearCachedPreview(':exam');
+    }
+  }
+);
+const plannedCount = computed(() => questionDraftSummary.value.totalCount || 0);
+const countIsSingle = computed(() => plannedCount.value <= 1);
+const originalTotal = computed(() => originalQuestions.value.length);
+const remainingCount = computed(() => editableQuestions.value.length);
+const deletedCount = computed(() => Math.max(0, originalTotal.value - remainingCount.value));
+const hasServerQuestions = computed(() => originalTotal.value > 0);
+const checkedCount = computed(() => checked.value.filter(Boolean).length);
+const isIndeterminate = computed(() => checkedCount.value > 0 && checkedCount.value < remainingCount.value);
+const allChecked = computed({
+  get: () => remainingCount.value > 0 && checkedCount.value === remainingCount.value,
+  set: (v: boolean) => {
+    checked.value = editableQuestions.value.map(() => !!v);
+  }
+});
+const toggleAll = (v: boolean) => {
+  checked.value = editableQuestions.value.map(() => !!v);
+};
+const onCheck = (idx: number, v: boolean) => {
+  checked.value[idx] = !!v;
+};
+const removeQuestion = (idx: number) => {
+  if (actionResolved.value) return;
+  editableQuestions.value.splice(idx, 1);
+  checked.value.splice(idx, 1);
+};
+const batchDelete = () => {
+  if (actionResolved.value) return;
+  const keep: any[] = [];
+  const keepChecked: boolean[] = [];
+  editableQuestions.value.forEach((q: any, i: number) => {
+    if (!checked.value[i]) {
+      keep.push(q);
+      keepChecked.push(false);
+    }
+  });
+  const removed = editableQuestions.value.length - keep.length;
+  editableQuestions.value = keep;
+  checked.value = keepChecked.length ? keepChecked.map(() => false) : [];
+  // 批量删后默认全不选，避免误删
+  if (removed > 0) ElMessage.success(`已移除 ${removed} 道题目`);
+};
+const restoreAll = () => {
+  if (actionResolved.value) return;
+  syncEditableFromArgs();
+  ElMessage.success(`已恢复全部 ${originalTotal.value} 道题目`);
+};
+const editableExamTypeSummary = computed(() => {
+  const qs = editableQuestions.value;
+  if (!qs || qs.length === 0) return `已删除全部题目，可恢复后重新选择`;
+  const label: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', fill: '填空', short: '简答' };
+  const counts: Record<string, number> = {};
+  for (const q of qs) counts[String(q?.type)] = (counts[String(q?.type)] || 0) + 1;
+  const parts = Object.entries(counts).map(([t, n]) => `${n}题${label[t] || t}`);
+  return `共 ${qs.length} 题 · ` + parts.join(' + ');
+});
+
+// 确认入库即时态：一点就禁用防连点，父级成功（actionResolved）或失败（executeNonce）时复位
+const confirming = ref(false);
+const execElapsed = ref(0);
+let execTimer: number | null = null;
+const startExecElapsed = () => {
+  stopExecElapsed();
+  execElapsed.value = 0;
+  execTimer = window.setInterval(() => {
+    execElapsed.value += 1;
+  }, 1000);
+};
+const stopExecElapsed = () => {
+  if (execTimer !== null) {
+    window.clearInterval(execTimer);
+    execTimer = null;
+  }
+};
+let confirmTimer: number | null = null;
+const armConfirmReset = () => {
+  if (confirmTimer !== null) window.clearTimeout(confirmTimer);
+  confirmTimer = window.setTimeout(() => {
+    confirming.value = false;
+    confirmTimer = null;
+  }, 60000);
+};
+watch(
+  () => actionResolved.value,
+  (v) => {
+    if (v) {
+      confirming.value = false;
+      stopExecElapsed();
+      if (confirmTimer !== null) {
+        window.clearTimeout(confirmTimer);
+        confirmTimer = null;
+      }
+    }
+  }
+);
+watch(
+  () => props.message.executeNonce,
+  (v) => {
+    if (v) {
+      confirming.value = false;
+      stopExecElapsed();
+    }
+  }
+);
+onUnmounted(() => {
+  if (confirmTimer !== null) window.clearTimeout(confirmTimer);
+  stopExecElapsed();
+});
+
 const handleConfirmQuestionDraft = () => {
+  if (confirming.value || fetchingQuestions.value || actionResolved.value) return;
+  const remaining = editableQuestions.value
+    .map((q: any) => ({ ...q, title: String(q?.title || '').trim() }))
+    .filter((q: any) => q.title);
+  if (remaining.length === 0) {
+    ElMessage.warning('请至少保留1道题目后再确认入库');
+    return;
+  }
+  confirming.value = true;
+  startExecElapsed();
+  armConfirmReset();
   const mergedArguments = {
     ...toolArgs.value,
+    questions: remaining,
+    count: remaining.length,
+    deleted_count: deletedCount.value,
     category_id: questionForm.value.category_id
   };
   emit('confirm', {
@@ -439,7 +862,7 @@ const singleQuestionPreview = computed(() => formatQuestion(toolArgs.value));
 
 const questions = computed(() => toolArgs.value?.questions || []);
 const examTypeSummary = computed(() => {
-  const qs = questions.value;
+  const qs = (examDisplayQuestions.value.length > 0 ? examDisplayQuestions.value : questions.value) as any[];
   if (!qs || qs.length === 0) {
     const specs = toolArgs.value?.specs || [];
     const label: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', fill: '填空', short: '简答' };
@@ -454,7 +877,7 @@ const examTypeSummary = computed(() => {
 });
 
 const hasShortQuestion = computed(() =>
-  questions.value.some((q: any) =>
+  examDisplayQuestions.value.some((q: any) =>
     ['short', 'essay', 'subjective', 'qa'].includes(String(q?.type || '').toLowerCase())
   )
 );
@@ -468,7 +891,11 @@ const examForm = ref({
 });
 
 const handleConfirm = () => {
-  const mergedArguments = {
+  if (confirming.value || fetchingExam.value || actionResolved.value) return;
+  confirming.value = true;
+  startExecElapsed();
+  armConfirmReset();
+  const mergedArguments: any = {
     ...toolArgs.value,
     category_id: examForm.value.category_id,
     is_timed: examForm.value.is_timed,
@@ -477,6 +904,10 @@ const handleConfirm = () => {
     start_time: examForm.value.timeRange?.[0] || null,
     deadline: examForm.value.timeRange?.[1] || null
   };
+  // 组卷兜底预览的题目一并带上，后端优先入库该明细
+  if (examEditableQuestions.value.length > 0) {
+    mergedArguments.questions = cloneQuestions(examEditableQuestions.value);
+  }
   emit('confirm', {
     ...props.message,
     arguments: mergedArguments
@@ -500,6 +931,23 @@ const handleConfirm = () => {
   font-weight: 600;
   color: #1e293b;
   word-break: break-word;
+}
+
+.draft-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0 10px;
+}
+
+.toolbar-hint {
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 .title-meta {

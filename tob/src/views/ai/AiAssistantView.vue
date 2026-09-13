@@ -67,7 +67,7 @@
             <MessageBubble
               :role="item.role"
               :content="item.content"
-              :username="userStore.username"
+              :username="displayName"
               :is-streaming="item.isStreaming"
             />
           </div>
@@ -156,6 +156,7 @@ import { ElMessage } from 'element-plus';
 import { MagicStick } from '@element-plus/icons-vue';
 import { useUserStore } from '../../store/user';
 import request from '../../utils/request';
+import { downloadTaskExport } from '../../utils/download';
 import SessionSidebar from './components/SessionSidebar.vue';
 import MessageBubble from './components/MessageBubble.vue';
 import ToolCallCard from './components/ToolCallCard.vue';
@@ -172,6 +173,8 @@ interface CloudSession {
 }
 
 const userStore = useUserStore();
+// 用户行显示名：姓名 > 昵称 > 账号（手机号兜底），头像与名字都用它
+const displayName = computed(() => userStore.name || userStore.nickname || userStore.username || '');
 const input = ref('');
 const sending = ref(false);
 const messagesWrapRef = ref<HTMLElement | null>(null);
@@ -576,6 +579,15 @@ const send = async (customText?: string): Promise<void> => {
           const actionType = actionTypeMap[toolName] || 'sensitive_operation';
           const riskLevel = riskLevelMap[ev.risk_level] || 'medium';
           const toolCnName = toolLabelMap[toolName] || toolName;
+          // 本页新卡标记（tab级）：刷新后历史卡片不再自动触发题目明细生成，只留重试按钮
+          try {
+            const freshIds = JSON.parse(sessionStorage.getItem('tiku_ai_fresh_cards') || '[]');
+            const curId = ev.tool_call_id || `action_${Date.now()}`;
+            if (!freshIds.includes(curId)) {
+              freshIds.push(curId);
+              sessionStorage.setItem('tiku_ai_fresh_cards', JSON.stringify(freshIds.slice(-50)));
+            }
+          } catch (e) { /* 忽略存储异常 */ }
 
           // 根据工具名构建 displayFields
           let displayFields: Array<{ label: string; value: string | number }> = [];
@@ -700,8 +712,48 @@ const toToolCallMessage = (msg: ChatMessage): any => {
     arguments: args,
     riskLevel: msg.riskLevel || msg.actionCard?.riskLevel || 'medium',
     actionResolved: msg.actionResolved || msg.actionCard?.status === 'confirmed',
+    executeNonce: (msg as any).executeNonce,
     content: msg.content || msg.actionCard?.summary || ''
   };
+};
+
+const toolCnLabel = (toolName: string): string => {
+  const map: Record<string, string> = {
+    create_exam_draft: '智能组卷',
+    create_exam: '智能组卷',
+    create_question_draft: 'AI 批量出题',
+    batch_questions: 'AI 批量出题',
+    delete_exam: '删除试卷',
+    delete_question: '删除题目'
+  };
+  return map[toolName] || toolName;
+};
+
+// 执行结果 ack 文案：只给人话（数量/标题/耗时），内部 ID 与原始 JSON 不进聊天界面
+const formatLatency = (ms: any): string => {
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n < 0) return '';
+  return n >= 1000 ? `${(n / 1000).toFixed(1)} 秒` : `${Math.round(n)} 毫秒`;
+};
+const buildAckText = (toolName: string, data: any): string => {
+  const label = toolCnLabel(toolName);
+  const secs = formatLatency(data?.latency_ms);
+  const cost = secs ? `，耗时 ${secs}` : '';
+  if ((toolName === 'create_question_draft' || toolName === 'batch_questions') && typeof data?.count === 'number') {
+    return `已执行【${label}】：成功入库 ${data.count} 道题目${cost}。`;
+  }
+  if ((toolName === 'create_exam_draft' || toolName === 'create_exam') && (data?.exam_id || data?.task_id)) {
+    const title = data?.title ? `《${data.title}》` : '';
+    const count = typeof data?.question_count === 'number' ? `，共 ${data.question_count} 题` : '';
+    return `已执行【${label}】：已创建试卷${title}${count}${cost}。`;
+  }
+  if (toolName === 'delete_exam' && (data?.deleted_id || data?.title)) {
+    return `已执行【${label}】：已删除试卷${data?.title ? `《${data.title}》` : ''}。`;
+  }
+  if (toolName === 'delete_question' && data?.deleted_question_id) {
+    return `已执行【${label}】：已删除题目。`;
+  }
+  return `已执行【${label}】${cost ? `（${cost}）` : ''}。`;
 };
 
 const handleToolConfirm = async (toolMsg: any): Promise<void> => {
@@ -735,10 +787,14 @@ const handleToolConfirm = async (toolMsg: any): Promise<void> => {
       ElMessage.success('操作已执行');
     }
 
-    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${toolName}，后端返回的结果是：${JSON.stringify(res.data || res)}`;
-    await send(systemMsg);
+    // 本地 ack（零等待）：只展示人性化一句话，原始数据进控制台
+    console.debug('[ai] execute_tool result:', res?.data || res);
+    messages.value.push({ role: 'assistant', content: buildAckText(toolName, res?.data || {}) } as ChatMessage);
+    followScroll();
+    await refreshSessions();
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '执行失败');
+    if (targetMsg) (targetMsg as any).executeNonce = Date.now();
   } finally {
     sending.value = false;
   }
@@ -751,8 +807,8 @@ const handleToolCancel = async (toolMsg: any): Promise<void> => {
     if (targetMsg.actionCard) targetMsg.actionCard.status = 'cancelled';
   }
   const toolName = toolMsg.toolName || '未知操作';
-  const systemMsg = `[系统消息]: 我拒绝了操作 ${toolName} 的执行。`;
-  await send(systemMsg);
+  messages.value.push({ role: 'assistant', content: `已取消【${toolCnLabel(toolName)}】操作。` } as ChatMessage);
+  followScroll();
 };
 
 const confirmToolCall = async (msg: ChatMessage): Promise<void> => {
@@ -779,11 +835,15 @@ const confirmToolCall = async (msg: ChatMessage): Promise<void> => {
       ElMessage.success('操作已执行');
     }
 
-    const systemMsg = `[系统消息]: 我已批准并执行了操作 ${toolName}，后端返回的结果是：${JSON.stringify(res.data || res)}`;
-    await send(systemMsg);
+    // 本地 ack（零等待）：只展示人性化一句话，原始数据进控制台
+    console.debug('[ai] execute_tool result:', res?.data || res);
+    messages.value.push({ role: 'assistant', content: buildAckText(toolName, res?.data || {}) } as ChatMessage);
+    followScroll();
+    await refreshSessions();
 
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '执行失败');
+    (msg as any).executeNonce = Date.now();
   } finally {
     sending.value = false;
   }
@@ -792,8 +852,8 @@ const confirmToolCall = async (msg: ChatMessage): Promise<void> => {
 const cancelToolCall = async (msg: ChatMessage): Promise<void> => {
   if (msg.actionCard) msg.actionCard.status = 'cancelled';
   const toolName = msg.actionCard?.actionType || '未知操作';
-  const systemMsg = `[系统消息]: 我拒绝了操作 ${toolName} 的执行。`;
-  await send(systemMsg);
+  messages.value.push({ role: 'assistant', content: `已取消【${toolCnLabel(toolName)}】操作。` } as ChatMessage);
+  followScroll();
 };
 
 // 新的统一处理器（替代旧的 confirmToolCall / cancelToolCall）
@@ -811,38 +871,9 @@ const handleActionCancel = (card: ActionCardPayload): void => {
 
 const downloadExamCard = async (card: ExamCardData): Promise<void> => {
   try {
-    const token = localStorage.getItem('tiku_tob_token') || '';
-    const res = await fetch(card.downloadUrl, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!res.ok) throw new Error('下载失败');
-
-    let finalFileName = `${card.title || '试卷'}.docx`;
-    const disposition = res.headers.get('Content-Disposition') || '';
-    if (disposition) {
-      const fnMatchStar = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-      if (fnMatchStar && fnMatchStar[1]) {
-        try {
-          finalFileName = decodeURIComponent(fnMatchStar[1]);
-        } catch (e) { /* 保留默认 */ }
-      } else {
-        const fnMatch = disposition.match(/filename="?([^";]+)"?/i);
-        if (fnMatch && fnMatch[1]) {
-          finalFileName = fnMatch[1];
-        }
-      }
-    }
-
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = finalFileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-    ElMessage.success(`《${card.title}》已成功下载为 Word 试卷文档`);
+    // 下载地址由 exam_id 在前端拼接（不信任模型输出的 URL，防幻觉链接）
+    const examId = (card as any).exam_id ?? (card as any).examId;
+    await downloadTaskExport(examId, card.title);
   } catch (e: any) {
     ElMessage.error(e?.message || '试卷导出失败，请重试');
   }

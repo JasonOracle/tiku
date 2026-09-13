@@ -56,8 +56,8 @@
       <el-table-column prop="created_at" label="时间" width="170" />
       <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="row.link" type="primary" text size="small" @click="goLink(row)">前往处理</el-button>
-          <el-button v-if="!row.is_read" text size="small" @click="markRead(row)">标为已读</el-button>
+          <el-button v-if="row.link" type="primary" text size="small" @click.stop="goLink(row)">前往处理</el-button>
+          <el-button v-if="!row.is_read" text size="small" @click.stop="markRead(row)">标为已读</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -113,12 +113,19 @@ const markAllRead = async () => {
 };
 
 const goLink = async (row: any) => {
-  if (!row.is_read) {
-    row.is_read = true; // Optimistic update
-    await request.post('/api/v1/admin/notifications/read', { ids: [row.id] });
+  try {
+    if (!row.is_read) {
+      row.is_read = true; // Optimistic update
+      await request.post('/api/v1/admin/notifications/read', { ids: [row.id] });
+    }
+  } catch (e) {
+    /* 标已读失败不阻塞跳转 */
   }
-  if (row.link && row.link.startsWith('/admin/')) {
-    const target = row.link.replace('/admin', '') || '/dashboard';
+  if (row.link) {
+    // 兼容新旧两种 link 格式：/admin/verification（新）与 /verification（历史存量）
+    const target = row.link.startsWith('/admin/')
+      ? (row.link.replace('/admin', '') || '/dashboard')
+      : row.link;
     // 越权链接直接 Toast 拦截，不跳转
     const needRole: Record<string, string[]> = {
       '/users': ['super_admin', 'admin'],
@@ -133,7 +140,9 @@ const goLink = async (row: any) => {
       loadList();
       return;
     }
-    router.push(target);
+    router.push(target).catch(() => {
+      ElMessage.error('页面跳转失败，请重试');
+    });
   }
   loadList();
 };

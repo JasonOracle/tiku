@@ -28,9 +28,9 @@
 | **皓石集团** (Tenant ID: 2) | 企业集团合规 | 跨部门合规教育、安全生产考卷、技能等级认证 | 账号: `13800000012`<br>密码: `123456` | 账号: `13900000006` 到 `13900000010`<br>密码: `123456` |
 
 > **💻 系统访问入口（本地开发默认端口）**：
-> - **C端 学员答题端 (toc-new)**: `http://localhost:5173` (H5 调试)
-> - **B端 机构管理台 (tob)**: `http://localhost:3000` (或 5174/8080，基于 Vite)
-> - **后端 API 服务 (backend)**: `http://localhost:8000`
+> - **C端 学员答题端 (toc-new)**: `http://localhost:5174` (H5 开发模式) / 线上直达
+> - **B端 机构管理台 (tob)**: `http://localhost:5173` (Vite 开发) / 生产网关: `http://localhost/admin/`
+> - **后端 API 服务 (backend)**: `http://localhost:8000` (或备用 `8001`) / 文档: `/docs`
 
 ---
 

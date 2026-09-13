@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => {
   // .env.production(VITE_BASE_URL=/admin/) > shell 环境变量 > 默认 '/'
   const fileEnv = loadEnv(mode, process.cwd(), '');
   const base = process.env.VITE_BASE_URL || process.env.BASE_URL || fileEnv.VITE_BASE_URL || fileEnv.BASE_URL || '/';
+  // 本机 8000 端口若被占用（如安全软件拦截），可用 BACKEND_PORT 指定后端端口，默认 8000
+  const backendPort = process.env.BACKEND_PORT || fileEnv.BACKEND_PORT || '8000';
+  const backendTarget = `http://127.0.0.1:${backendPort}`;
   return {
     plugins: [vue()],
     // 独立域名（如 Cloudflare Pages/Vercel）下使用 '/'，Nginx 子路径下使用 '/admin/'
@@ -25,8 +28,8 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       host: '0.0.0.0',
       proxy: {
-        '/api': 'http://127.0.0.1:8000',
-        '/uploads': 'http://127.0.0.1:8000'
+        '/api': backendTarget,
+        '/uploads': backendTarget
       }
     }
   };

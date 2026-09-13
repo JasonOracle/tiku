@@ -16,9 +16,9 @@
 <template>
   <div class="message-bubble" :class="[role, { 'is-streaming': isStreaming }]">
     <div class="avatar-col">
-      <div v-if="role === 'user'" class="user-avatar">
-        <template v-if="username && username.trim()">
-          {{ username.trim().substring(0, 1).toUpperCase() }}
+      <div v-if="role === 'user'" class="user-avatar" :class="avatarSizeClass">
+        <template v-if="avatarText">
+          {{ avatarText }}
         </template>
         <el-icon v-else><UserFilled /></el-icon>
       </div>
@@ -115,6 +115,18 @@ const renderedContent = computed(() => {
   return marked.parse(props.content) as string;
 });
 
+// 用户头像文案：显示名取前 4 个字居中（如“林敏”），过长自动缩小字号
+const avatarText = computed(() => {
+  const t = (props.username || '').trim().slice(0, 4);
+  return t;
+});
+const avatarSizeClass = computed(() => {
+  const len = avatarText.value.length;
+  if (len <= 1) return 'avatar-xs';
+  if (len === 2) return 'avatar-sm';
+  return 'avatar-md';
+});
+
 const copyContent = async () => {
   try {
     await navigator.clipboard.writeText(props.content);
@@ -145,8 +157,8 @@ const submitFeedback = (rating: 'up' | 'down') => {
 }
 
 .user-avatar {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: #0284c7;
   color: white;
@@ -154,6 +166,22 @@ const submitFeedback = (rating: 'up' | 'down') => {
   align-items: center;
   justify-content: center;
   font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+  padding: 2px;
+  word-break: break-all;
+}
+
+.user-avatar.avatar-xs {
+  font-size: 18px;
+}
+
+.user-avatar.avatar-sm {
+  font-size: 15px;
+}
+
+.user-avatar.avatar-md {
+  font-size: 11px;
 }
 
 .ai-avatar {
@@ -178,6 +206,18 @@ const submitFeedback = (rating: 'up' | 'down') => {
   font-weight: 700;
   color: #64748b;
   margin-bottom: 4px;
+}
+
+.message-bubble.user .sender-name {
+  text-align: right;
+}
+
+.message-bubble.user .quote-bar {
+  border-left: none;
+  border-right: 3px solid #bae6fd;
+  padding-left: 0;
+  padding-right: 8px;
+  text-align: right;
 }
 
 .bubble-content {

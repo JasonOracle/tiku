@@ -220,6 +220,9 @@
             <el-button type="primary" link class="action-link-btn" @click="openViewDialog(row)">
               <el-icon><View /></el-icon> 详情
             </el-button>
+            <el-button type="primary" link class="action-link-btn" :loading="exportingId === row.id" @click="handleExport(row)">
+              <el-icon><Download /></el-icon> 导出
+            </el-button>
           </div>
         </template>
       </el-table-column>
@@ -1027,9 +1030,10 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   Plus, Delete, View, Search, RefreshRight, Document, PieChart, Reading,
   Aim, Files, CircleCheck, EditPen, Notebook, CollectionTag, Check,
-  UserFilled, TrendCharts, Trophy, Finished, DataLine, List
+  UserFilled, TrendCharts, Trophy, Finished, DataLine, List, Download
 } from '@element-plus/icons-vue';
 import request from '../../utils/request';
+import { downloadTaskExport } from '../../utils/download';
 import VerifyDrawer from './components/VerifyDrawer.vue';
 import TaskVerifyDialog from './components/TaskVerifyDialog.vue';
 import ResourcePreview from './components/ResourcePreview.vue';
@@ -1574,6 +1578,20 @@ const handleDelete = (id: number) => {
     ElMessage.success('试卷删除成功');
     loadExams();
   });
+};
+
+// 行级导出：标准 Word 试卷下载（与 AI 下载卡同源），按行 loading 防连点
+const exportingId = ref<number | null>(null);
+const handleExport = async (row: any) => {
+  if (exportingId.value !== null) return;
+  exportingId.value = row.id;
+  try {
+    await downloadTaskExport(row.id, row.title);
+  } catch (e: any) {
+    ElMessage.error(e?.message || '试卷导出失败，请重试');
+  } finally {
+    exportingId.value = null;
+  }
 };
 
 // ---- v1.2 Step3: 行内待办 → 核验抽屉 ----

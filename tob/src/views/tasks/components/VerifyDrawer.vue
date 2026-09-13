@@ -1,5 +1,13 @@
 <!--
  * [变更日志]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 「试卷人工批阅」升级为独立专业微光Tag徽章展示，层次分明；2. 「AI 帮我分析」重构为鲜明实体高亮操作按钮，强化可点击质感与hover微动画]
+ * [变更日志]
+ * 修改时间：2026-09-13
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 抽屉标题由“任务核验”统一修正为“试卷人工批阅 — {试卷名称}”；2. 在抽屉标题栏右侧集成「AI 帮我分析」按钮，支持当前作答实时触发 AI 评阅并无缝刷新建议分与理由]
+ * [变更日志]
  * 修改时间：2026-09-09
  * AI模型：Muse Spark
  * 修改内容：[彻底清洗重写：任务核验抽屉，旧主观题批阅/grades体系已删除]
@@ -7,11 +15,31 @@
 <template>
   <el-drawer
     :model-value="visible"
-    :title="`任务核验 — ${taskTitle || ''}`"
     size="640px"
     destroy-on-close
     @close="handleClose"
   >
+    <template #header>
+      <div class="drawer-custom-header">
+        <div class="drawer-title-left">
+          <span class="drawer-module-tag">试卷人工批阅</span>
+          <span class="drawer-exam-name" :title="taskTitle">{{ taskTitle || '' }}</span>
+        </div>
+        <button 
+          v-if="detail"
+          type="button"
+          class="ai-action-btn" 
+          :disabled="retrying"
+          @click="retryAi"
+        >
+          <svg class="ai-sparkle-icon" viewBox="0 0 24 24" width="15" height="15" fill="none">
+            <path d="M12 2L14.3 9.7L22 12L14.3 14.3L12 22L9.7 14.3L2 12L9.7 9.7L12 2Z" fill="white"/>
+          </svg>
+          <span>{{ retrying ? 'AI 深度分析中...' : '✨ AI 帮我分析' }}</span>
+        </button>
+      </div>
+    </template>
+
     <div v-loading="loading" class="drawer-body">
       <div v-if="total > 0" class="progress-bar">
         <span class="progress-text">第 {{ currentIndex + 1 }} / {{ total }} 份</span>
@@ -19,18 +47,18 @@
       </div>
 
       <el-alert v-if="detail?.ai_result?.error" type="error" :closable="false" show-icon style="margin-bottom: 12px"
-                :title="`AI 核验异常：${detail.ai_result.error}`" description="可人工定分确认，或点击「重新触发 AI」。">
+                :title="`AI 批阅异常：${detail.ai_result.error}`" description="可人工定分确认，或点击右上角「AI 帮我分析」。">
         <template #default />
       </el-alert>
 
       <div v-if="detail" class="objective-summary">
         <span>成员ID：<strong>{{ detail.user_id }}</strong></span>
-        <span style="margin-left: 16px">任务：{{ detail.task_title }}</span>
+        <span style="margin-left: 16px">试卷：{{ detail.task_title }}</span>
         <span style="margin-left: 16px">提交：{{ submitTime }}</span>
       </div>
 
       <div v-if="detail?.ai_result?.suggested_score != null" class="ai-suggest">
-        🤖 AI 核验建议分：{{ detail.ai_result.suggested_score }} 分
+        🤖 AI 建议得分：{{ detail.ai_result.suggested_score }} 分
         <span v-if="detail.ai_result.comments"> | 理由：{{ detail.ai_result.comments }}</span>
         <el-button text size="small" type="primary" @click="applyAi">采用 AI 分</el-button>
       </div>
@@ -52,20 +80,11 @@
         <el-input-number v-model="finalScore" :min="0" :max="1000" size="small" />
       </div>
 
-      <el-empty v-if="!loading && total === 0" description="该任务暂无待核验提交" />
+      <el-empty v-if="!loading && total === 0" description="该试卷暂无待批阅提交" />
     </div>
 
     <template #footer>
       <div class="drawer-footer">
-        <el-button
-          v-if="detail"
-          type="warning"
-          plain
-          :loading="retrying"
-          @click="retryAi"
-        >
-          重新触发 AI
-        </el-button>
         <el-button type="primary" size="large" :loading="publishing" :disabled="!detail" @click="publishAndNext">
           ✔ 确认定分
         </el-button>
@@ -178,13 +197,11 @@ const retryAi = async (): Promise<void> => {
   if (!detail.value) return;
   retrying.value = true;
   try {
-    await request.post(`/api/v1/admin/ai/verify/${detail.value.record_id}`);
-    ElMessage.success('已重新触发 AI 核验，请稍后刷新查看');
-    setTimeout(async () => {
-      try {
-        await loadDetail(detail.value.record_id);
-      } catch (e) { /* 拦截器已提示 */ }
-    }, 1500);
+    const res: any = await request.post(`/api/v1/admin/ai/verify/${detail.value.record_id}`);
+    ElMessage.success(res.message || 'AI 帮我分析完成！');
+    await loadDetail(detail.value.record_id);
+  } catch (e) {
+    ElMessage.error('AI 分析失败，请稍后重试');
   } finally {
     retrying.value = false;
   }
@@ -292,5 +309,82 @@ watch(
   justify-content: flex-end;
   gap: 10px;
   padding: 12px 0 4px;
+}
+
+.drawer-custom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-right: 24px;
+}
+
+.drawer-title-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  max-width: 440px;
+}
+
+.drawer-module-tag {
+  display: inline-flex;
+  align-items: center;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+.drawer-exam-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  border: none;
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.28);
+}
+
+.ai-action-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d97706, #c2410c);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.4);
+}
+
+.ai-action-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(234, 88, 12, 0.2);
+}
+
+.ai-action-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ai-sparkle-icon {
+  display: inline-block;
+  flex-shrink: 0;
 }
 </style>

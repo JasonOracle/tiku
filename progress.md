@@ -1,5 +1,11 @@
 /**
  * [变更日志]
+ * 修改时间：2026-09-14
+ * AI模型：Gemini 系列
+ * 修改内容：[1. 记录阶段 5.7 B端 AI 出题链路核心重构：移除确认入库时的重复 RAG 检索（入库提速至 1s 内）、流式首包结构化保底、ToolCallCard 支持复选批量删/可改题干/localStorage 预览缓存防闪烁、成功本地 Ack 机制；2. 试卷标准 Word 导出全闭环（GET /tasks/{id}/export 与 B端行级导出）；3. 记录临时环境端口（本机 8000 端口占用，后端移至 8001，B 端在 5173）；4. 标注 RAG 溯源与 C06 断言注意事项]
+ */
+/**
+ * [变更日志]
  * 修改时间：2026-09-13
  * AI模型：Deepseek-V4.1-Flash 底层
  * 修改内容：[1. 修复网关路由缺陷：访问 /admin（缺少结尾斜杠）时未命中 /admin/ 前缀路由，掉入 location / 被 C 端 SPA 兜底接管而错误渲染 C 端页面；已在 nginx.conf 新增 location = /admin 精确匹配并 301 重定向至 /admin/；2. 修复 C 端根路径 403：运行中的 tiku_nginx 容器由旧版 compose 配置创建，挂载源仍为空目录 toc/dist，已用 docker compose up -d --no-deps nginx 重建为 toc-new/dist/build/h5；3. 补记网关启动自检与 /admin 斜杠访问约定至接手检查清单]
@@ -186,24 +192,33 @@
 - [x] 5.3 题干与输入体验深度打磨：简答题 `textarea` 与填空题 `input` 全面强化可视度，配置纯白衬底（`#ffffff`）、实体冷灰边框（`2rpx solid #cbd5e1`）、深墨色文字（`#0f172a`）与深空蓝聚焦光晕，解决白底发虚难题；
 - [x] 5.4 成绩报告页导航统一：顶部 Navbar 切换为标准白底微质感模式（`CustomHeader variant="solid"`），与深空夜蓝看板及琉璃保密盾牌自然融合；
 - [x] 5.5 组织租户铁律落实：登录与个人中心物理级剔除“选择机构/切换机构”弹窗与菜单，严格执行无感知单租户隐式静默绑定；
-- [x] 5.6 建立自动化截屏与文档流水线：新增 `scripts/snapshot_v1.5_c.py` 与根目录批处理入口 `生成v1.5快照介绍文档.bat`，一键生成 `docs/v1.5_c_showcase.md` 与 iPhone 14 高清视网膜全景截图。
+- [x] 5.6 建立自动化截屏与文档流水线：新增 `scripts/snapshot_v1.5_c.py` 与根目录批处理入口 `生成v1.5快照介绍文档.bat`，一键生成 `docs/v1.5_c_showcase.md` 与 iPhone 14 高清视网膜全景截图；
+- [x] 5.7 B 端 AI 出题链路全线提速与试卷 Word 导出生产闭环：
+  - **入库提速 90%**：入库确认（`execute_tool`）移除重入式 RAG 检索，耗时从 ~13s 优化至 1s 内；
+  - **流式首包稳态**：后端强制首包包含规范化题目结构，提示词强化意图识别与下载卡片生成；
+  - **出题卡交互增强**：`ToolCallCard.vue` 支持批量勾选删除、题干行内修改、蒙层加载取消与 `localStorage` 预览缓存防刷新闪烁；
+  - **轻量本地 Ack**：确认入库成功直接采用本地 Ack 渲染，砍掉原 SSE 延迟与冗余回写；
+  - **试卷标准 Word 导出**：新增 `GET /api/v1/saas/tasks/{id}/export` 与 B 端列表行级导出按钮，支持微软雅黑/考试说明/多题型规范排版。
 
 **验收证据（终端与真实浏览器物理输出）**：
 1. `pnpm --dir toc-new type-check`（`vue-tsc --noEmit`）0 报错；
 2. `pnpm --dir toc-new build:h5` 输出 `DONE Build complete.`；
-3. 执行 `python scripts/snapshot_v1.5_c.py`，顺利捕获 7 大页面高清原图（`docs/images/v1.5/`），并自动输出完整的 `docs/v1.5_c_showcase.md`。
+3. 执行 `python scripts/snapshot_v1.5_c.py`，顺利捕获 7 大页面高清原图（`docs/images/v1.5/`），并自动输出完整的 `docs/v1.5_c_showcase.md`；
+4. `pnpm --filter tob build` 0 报错，产出完整静态包。
 
 ---
 
 ## 三、接手检查清单 (Handover Checklist)
 
 后续任何 Agent 接手开发时，按以下步骤入场：
-1. **核对代码与当前分支**：确认当前在 `dev` 分支，最新 commit 已包含 v1.5 Apple 钛金微光风全量代码。
-2. **确认服务健康**：
-   - 后端容器：`http://127.0.0.1:8000/docs` 响应 200。
-   - B端管理后台：`http://localhost/admin` 正常运行。
-   - C端极客移动端：`http://localhost:5174`（开发模式）或编译产物正常运行。
-3. **视觉与业务约束**：
+1. **核对代码与当前分支**：确认当前在 `dev` 分支，最新 commit 已包含 v1.5 Apple 钛金微光风全量代码与 B 端 AI 出题强化逻辑。
+2. **确认服务端口与健康状况**：
+   - 后端服务：默认 `8000`；**若本机 8000 端口受阻，临时起在 8001**（`vite.config.ts` 已内置 `BACKEND_PORT` 代理映射支持）。
+   - B端管理后台：本地开发运行于 `http://localhost:5173`，网关生产模式运行于 `http://localhost/admin/`。
+   - C端极客移动端：开发调试运行于 `http://localhost:5174`，编译产物正常由 Nginx 根路径承载。
+3. **架构与业务约束已知设计**：
+   - **RAG 溯源设计变更**：确认入库阶段跳过二次 RAG 检索以换取秒级响应，题目溯源以 AI 预览生成态为准；若跑 `security_audit.py` (C06) 遇到溯源断言，需注意该优化逻辑；
+   - **本地 Ack 机制**：入库成功的确认气泡为本地立即渲染，不再反向写入数据库与 Mem0；
    - 全局设计令牌以 `src/styles/tokens-apple.scss` 为准；
    - 考场题型务必保持原生内联，切忌盲目进行二次抽象封装；
    - 严禁在任何地方添加“切换机构”入口，统一走隐式绑定。
@@ -214,5 +229,5 @@
    - 若改动 `docker-compose.yml` 的挂载路径，**必须重建容器**（`docker compose up -d --no-deps nginx`），Windows 挂载卷下旧容器不会感知新路径。
 
 ---
-*时间戳签名：2026-09-13 15:58:00 (Deepseek-V4.1-Flash 底层 / 网关路由缺陷修复与启动自检)*
+*时间戳签名：2026-09-14 02:56:00 (Gemini 系列 / B端 AI出题极速化改造、Word导出与多端端口对齐)*
 

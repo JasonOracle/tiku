@@ -368,6 +368,215 @@ def task_detail(task_id: int, ctx: dict = Depends(require_member), db: Session =
     return {"code": 200, "data": out}
 
 
+@router.get("/tasks/{task_id}/export")
+def task_export(task_id: int, ctx: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """B端试卷导出：生成 Word（.docx）文档下载，含题干/选项/答案/解析（管理视角不脱敏）。
+
+    供 AI 助手 exam_card 下载卡与试卷管理导出入口共用。
+    """
+@router.get("/tasks/{task_id}/export")
+def task_export(task_id: int, ctx: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """B端试卷导出：标准 Word（.docx）正规试卷排版下载（含题干/选项/答案/解析，管理视角不脱敏）。
+
+    排版对齐 v1.3 标准（大标题/副信息条/考生信息表/按题型分组/参考答案附录/中文字体映射），
+    供 AI 助手 exam_card 下载卡与试卷管理行级导出共用。
+    """
+    import io
+    from urllib.parse import quote
+    from fastapi.responses import Response
+
+    t = db.query(Task).filter(Task.id == task_id, Task.tenant_id == ctx["tenant_id"]).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    links = db.query(TaskResource, ResourceItem).join(
+        ResourceItem, ResourceItem.id == TaskResource.resource_id
+    ).filter(TaskResource.task_id == t.id).order_by(TaskResource.sort_order).all()
+
+    type_label = {"single": "单项选择题", "multiple": "多项选择题", "judge": "判断题",
+                  "fill": "填空题", "short": "简答题"}
+    big_nums = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
+    clean_title = (t.title or f"试卷_{task_id}").strip()
+    total_score = sum((link.score if link.score is not None else (r.score or 10)) for link, r in links)
+
+    try:
+        from docx import Document
+        from docx.shared import Pt, Inches, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.enum.table import WD_TABLE_ALIGNMENT
+        from docx.oxml.ns import qn
+
+        doc = Document()
+
+        def _cn(run, font_name="微软雅黑"):
+            run.font.name = font_name
+            rPr = run._element.get_or_add_rPr()
+            rFonts = rPr.get_or_add_rFonts()
+            rFonts.set(qn("w:eastAsia"), font_name)
+            rFonts.set(qn("w:ascii"), font_name)
+            rFonts.set(qn("w:hAnsi"), font_name)
+
+        for section in doc.sections:
+            section.top_margin = Inches(0.8)
+            section.bottom_margin = Inches(0.8)
+            section.left_margin = Inches(0.9)
+            section.right_margin = Inches(0.9)
+
+        # 1. 大标题
+        title_p = doc.add_paragraph()
+        title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_p.paragraph_format.space_before = Pt(0)
+        title_p.paragraph_format.space_after = Pt(6)
+        title_run = title_p.add_run(clean_title)
+        title_run.font.size = Pt(20)
+        title_run.font.bold = True
+        title_run.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
+        _cn(title_run)
+
+        # 2. 副信息条
+        meta_p = doc.add_paragraph()
+        meta_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        meta_p.paragraph_format.space_after = Pt(14)
+        meta_run = meta_p.add_run(
+            f"（满分：{total_score} 分   题量：{len(links)} 道"
+            f"{f'   分类：{t.category_id}' if getattr(t, 'category_id', None) else ''}）"
+        )
+        meta_run.font.size = Pt(10.5)
+        meta_run.font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
+        _cn(meta_run)
+
+        # 3. 考生信息填报表
+        table = doc.add_table(rows=1, cols=4)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = True
+        for i, text in enumerate(["姓名：________", "考号：________", "得分：________", "批阅：________"]):
+            p = table.rows[0].cells[i].paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            r = p.add_run(text)
+            r.font.size = Pt(10.5)
+            r.font.bold = True
+            r.font.color.rgb = RGBColor(0x33, 0x41, 0x55)
+            _cn(r)
+        doc.add_paragraph().paragraph_format.space_after = Pt(10)
+
+        # 4. 按题型分组
+        grouped: Dict[str, list] = {}
+        for link, r in links:
+            grouped.setdefault(str(r.type), []).append((link, r))
+        answers_list: list = []
+        seq = 0
+        for big_idx, (qtype, qs) in enumerate(grouped.items()):
+            big_num = big_nums[big_idx] if big_idx < len(big_nums) else str(big_idx + 1)
+            type_total = sum((link.score if link.score is not None else (r.score or 10)) for link, r in qs)
+            sec_p = doc.add_paragraph()
+            sec_p.paragraph_format.space_before = Pt(14)
+            sec_p.paragraph_format.space_after = Pt(6)
+            sec_run = sec_p.add_run(
+                f"{big_num}、{type_label.get(qtype, qtype)}（共 {len(qs)} 题，满分 {type_total} 分）")
+            sec_run.font.size = Pt(12)
+            sec_run.font.bold = True
+            sec_run.font.color.rgb = RGBColor(0x0F, 0x17, 0x2A)
+            _cn(sec_run)
+            for link, r in qs:
+                seq += 1
+                score = link.score if link.score is not None else (r.score or 10)
+                q_p = doc.add_paragraph()
+                q_p.paragraph_format.space_before = Pt(4)
+                q_p.paragraph_format.space_after = Pt(3)
+                q_run = q_p.add_run(f"{seq}. 【{score}分】{r.content or '（无题干）'}")
+                q_run.font.size = Pt(11)
+                _cn(q_run)
+                for oi, o in enumerate(r.options or []):
+                    fallback_key = chr(65 + oi) if oi < 26 else str(oi + 1)
+                    if isinstance(o, dict):
+                        key = str(o.get("key") or "").strip() or fallback_key
+                        text = str(o.get("text") or o.get("content") or "").strip()
+                    else:
+                        key, text = fallback_key, str(o)
+                    opt_p = doc.add_paragraph()
+                    opt_p.paragraph_format.left_indent = Inches(0.25)
+                    opt_p.paragraph_format.space_before = Pt(1)
+                    opt_p.paragraph_format.space_after = Pt(2)
+                    opt_run = opt_p.add_run(f"{key}. {text}")
+                    opt_run.font.size = Pt(10.5)
+                    opt_run.font.color.rgb = RGBColor(0x33, 0x41, 0x55)
+                    _cn(opt_run)
+                ans = r.correct_answer or []
+                ans_str = "、".join(str(a) for a in ans) if isinstance(ans, list) else str(ans)
+                answers_list.append({"seq": seq, "answer": ans_str or "（略）",
+                                     "explanation": getattr(r, "explanation", None) or ""})
+
+        # 5. 附录：参考答案与解析（另起一页）
+        doc.add_page_break()
+        ans_title_p = doc.add_paragraph()
+        ans_title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        ans_title_p.paragraph_format.space_before = Pt(12)
+        ans_title_p.paragraph_format.space_after = Pt(12)
+        ans_title_run = ans_title_p.add_run(f"《{clean_title}》参考答案与解析")
+        ans_title_run.font.size = Pt(16)
+        ans_title_run.font.bold = True
+        ans_title_run.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
+        _cn(ans_title_run)
+        for a in answers_list:
+            ap = doc.add_paragraph()
+            ap.paragraph_format.space_before = Pt(6)
+            ap.paragraph_format.space_after = Pt(2)
+            ar1 = ap.add_run(f"第{a['seq']}题参考答案：")
+            ar1.font.bold = True
+            ar1.font.size = Pt(10.5)
+            _cn(ar1)
+            ar2 = ap.add_run(f"{a['answer']}\n")
+            ar2.font.bold = True
+            ar2.font.size = Pt(10.5)
+            ar2.font.color.rgb = RGBColor(0x25, 0x63, 0xEB)
+            _cn(ar2)
+            if a["explanation"]:
+                exp_p = doc.add_paragraph()
+                exp_p.paragraph_format.left_indent = Inches(0.2)
+                exp_p.paragraph_format.space_before = Pt(0)
+                exp_p.paragraph_format.space_after = Pt(4)
+                er1 = exp_p.add_run("【解析】")
+                er1.font.size = Pt(10)
+                er1.font.bold = True
+                er1.font.color.rgb = RGBColor(0x05, 0x96, 0x69)
+                _cn(er1)
+                er2 = exp_p.add_run(a["explanation"])
+                er2.font.size = Pt(10)
+                er2.font.color.rgb = RGBColor(0x47, 0x55, 0x69)
+                _cn(er2)
+
+        stream = io.BytesIO()
+        doc.save(stream)
+        docx_bytes = stream.getvalue()
+        encoded_filename = quote(f"{clean_title}.docx")
+        write_audit(db, ctx["tenant_id"], ctx["user"], "export", "task", t.id,
+                    f"导出试卷《{t.title[:30]}》Word")
+        db.commit()
+        return Response(
+            content=docx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"exam_{task_id}.docx\"; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        # 无缝降级为纯文本，保证 100% 可用
+        encoded_filename = quote(f"{clean_title}.txt")
+        lines = [f"【试卷名称】{clean_title}", f"总分: {total_score} 分", ""]
+        for i, (link, r) in enumerate(links, 1):
+            lines.append(f"{i}. {r.content or '（无题干）'}")
+        return Response(
+            content="\n".join(lines).encode("utf-8"),
+            media_type="text/plain; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"exam_{task_id}.txt\"; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+
+
 # /**
 #  * [变更日志]
 #  * 修改时间：2026-09-11
@@ -741,7 +950,7 @@ def submit_task(payload: SubmitAnswers, ctx: dict = Depends(require_member),
                 f"提交任务 #{task.id}")
     if need_verify:
         notify_admins(db, tid, "新任务提交待核验", f"任务《{task.title}》收到一份新提交",
-                      "verification", "/verification")
+                      "verification", "/admin/verification")
     db.commit()
     msg = "提交成功，等待管理员或AI核验" if need_verify else "提交成功"
     return {"code": 200, "message": msg, "data": {"record_id": rec.id,

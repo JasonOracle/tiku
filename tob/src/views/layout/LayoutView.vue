@@ -247,11 +247,21 @@ onMounted(() => {
   userStore.loadProfile();
   loadUnread();
   loadTenants();
-  pollTimer = window.setInterval(loadUnread, 30000);
+  pollTimer = window.setInterval(() => {
+    // 后台 tab 暂停轮询，切回来补一次，减少无意义的 unread-count 请求
+    if (document.hidden) return;
+    loadUnread();
+  }, 30000);
+  document.addEventListener('visibilitychange', handleVisibility);
 });
+
+const handleVisibility = () => {
+  if (!document.hidden) loadUnread();
+};
 
 onUnmounted(() => {
   if (pollTimer) window.clearInterval(pollTimer);
+  document.removeEventListener('visibilitychange', handleVisibility);
 });
 </script>
 
