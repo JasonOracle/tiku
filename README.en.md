@@ -1,69 +1,85 @@
 # TiKu — Enterprise Multi-Tenant Smart Quiz & Online Assessment System
 
-A modern, lightweight AI-Native assessment and examination platform: **B-end SaaS Management Console** (Question Assets, Intelligent Exam Assembly, Grading Center, AI Question-Generation Assistant, Multi-tenant Isolation) + **C-end Mobile Examinee App** (Quiz, Timed Exams, Answer Sheet Drawer, Anti-leakage Reports, Favorites) + **FastAPI Core Backend**.
+A modern, lightweight AI-Native assessment and examination platform. This project is not just a full-stack open-source product, but a deep engineering practice showcasing how a **frontend engineer can leverage AI to independently deliver a complete enterprise SaaS system**.
+
+The system includes: **B-End SaaS Management Console** (Multi-tenant isolation, Intelligent Exam Assembly, AI Question-Generation Assistant) + **C-End Examinee Mobile App** (uni-app cross-platform, Anti-leakage Reports, Smart Grading) + **FastAPI Core Backend**.
 
 - **GitHub Repository**: [https://github.com/JasonOracle/tiku](https://github.com/JasonOracle/tiku)
 - **Gitee Mirror**: [https://gitee.com/jason-oracle/tiku](https://gitee.com/jason-oracle/tiku)
 - **Chinese Documentation**: [README.md](./README.md)
-- 📱 **Live C-End Mobile App**: [TiKu Examinee WebApp (Cloudflare Pages)](https://tiku-toc-new.pages.dev/#/)
-- ⚡ **Cloud OpenAPI Docs**: [https://tiku-api.vercel.app/docs](https://tiku-api.vercel.app/docs)
 - 🎨 **v1.5 C-End Showcase Guide**: [docs/v1.5_c_showcase.md](./docs/v1.5_c_showcase.md)
 - 🖥️ **v1.4 B-End Showcase Guide**: [docs/v1.4_showcase.md](./docs/v1.4_showcase.md)
+- 📖 **Zero-Cost Cloud Deployment Guide**: [docs/deploy-free-cloud.md](./docs/deploy-free-cloud.md)
 
 ---
 
-## 🌐 Public & Local Service Access
+## 🌐 Public Live Demo
 
-| Service / App | URL Entry | Demo Credentials | Role Description |
+Both the C-End and B-End of this system are fully deployed to the cloud (Cloudflare Pages + Vercel Serverless + TiDB Cloud). **No local setup required, click to experience**:
+
+| Service / App | Public URL Entry | Demo Credentials | Description |
 | :--- | :--- | :--- | :--- |
-| **📱 C-End Mobile (Public Live)** | [https://tiku-toc-new.pages.dev](https://tiku-toc-new.pages.dev/#/) | `13900000001` / `123456` | Cloudflare Pages hosted, connected to cloud TiDB |
-| **💻 B-End Admin Console (Local)** | `http://localhost/admin` | `13800000012` / `123456` | Haoshi Group Enterprise Admin |
-| **👑 B-End Super Admin (Local)** | `http://localhost/admin` | `13800000000` / `123456` | Platform Super Administrator |
-| **⚡ FastAPI Interactive Docs** | `https://tiku-api.vercel.app/docs` | — | OpenAPI / Swagger interactive schema |
+| **📱 C-End Mobile (Examinee)** | [https://tiku-toc-new.pages.dev](https://tiku-toc-new.pages.dev/#/) | `13900000001` / `123456` | Cloudflare hosted, native uni-app cross-platform |
+| **💻 B-End Admin Console** | [https://tiku-tob.pages.dev/dashboard](https://tiku-tob.pages.dev/dashboard) | `13800000012` / `123456` | Haoshi Group Enterprise Admin (SaaS tenant) |
+| **⚡ FastAPI Cloud API** | [https://tiku-api.vercel.app/docs](https://tiku-api.vercel.app/docs) | — | Vercel hosted, OpenAPI / Swagger interactive schema |
 
 ---
 
-## 📈 Milestones & Progressive Evolution
+## 💡 Engineering Highlights & Architecture
 
-This project strictly adheres to an **agile, progressive development** lifecycle, ensuring every iteration delivers verifiable software artifacts and frozen snapshots:
+```mermaid
+graph TD
+    subgraph Client Layer
+        C[C-End Mobile <br> uni-app / Vue3]
+        B[B-End Admin <br> Vue3 / Element Plus]
+    end
 
+    subgraph API Gateway Layer
+        Nginx[Nginx Reverse Proxy <br> JWT Dual-domain Auth]
+    end
+
+    subgraph Core Backend Layer
+        FastAPI[FastAPI Core <br> State Machine / Multi-tenancy]
+    end
+
+    subgraph AI & Data Layer
+        LLM[LLM API <br> Conversational Generation]
+        RAG[Knowledge Base RAG <br> Private Doc Slicing]
+        TiDB[(TiDB Cloud Distributed DB)]
+    end
+
+    C <--> Nginx
+    B <--> Nginx
+    Nginx <--> FastAPI
+    FastAPI <--> LLM
+    FastAPI <--> RAG
+    FastAPI <--> TiDB
 ```
-┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐
-│  v1.0 MVP │──>│ v1.1 Data │──>│v1.2 AI Grd│──>│v1.3 KB RAG│──>│v1.4 SaaS  │──>│v1.5 Titani│
-│Objective  │   │Lock & Safe│   │Fill/Essay │   │Source-text│   │Multi-tenan│   │Uni-app OS │
-└───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘
-  Archived(v1.0)  Archived(v1.1)  Archived(v1.2)  Archived(v1.3)  Archived(v1.4)  Delivered(1.5)
-```
 
-- **v1.0 (MVP Closed Loop)**:
-  - Completed single/multiple choice and true/false questions, exam assembly, PC/H5 test-taking, and automated instant scoring.
-- **v1.1 (Data Governance & Exam Lock)**:
-  - **Exam Locking & Immutability**: Introduced "published locking" to prevent modifying questions during ongoing tests, with rounded pass percentage calculations;
-  - **Category & Question Safeguards**: Snapshotting `category_name` and deletion reference checks to prevent orphaned exam items;
-  - **C-End Experience**: Profile center with SVG avatars, submission history, exam exit prevention modals, and pure SVG rendering standards.
-- **v1.2 (AI-Native Upgrade)**:
-  - Added fill-in-the-blank and essay questions; integrated SenseNova LLM for automated essay pre-grading; introduced instructor isolation and audit logs.
-- **v1.3 (Private Knowledge Base RAG & State Machine Governance)**:
-  - **RAG-Driven Question Generation**: Integrated vector retrieval over private document chunks, automatically highlighting source text in drawer overlays;
-  - **Strict Asset Lifecycle**: Formalized the immutable `draft → published → archived` exam lifecycle;
-  - **Server-Authoritative Anti-Cheating**: Exam timer locked server-side upon first entry to prevent client clock manipulation.
-- **v1.4 (SaaS Multi-Tenancy & Agent Interaction Revolution)**:
-  - **Strict Multi-Tenant Isolation**: Complete logical data isolation between educational institutions (e.g., Xingya Education) and enterprise compliance training (e.g., Haoshi Group);
-  - **Deep AI Agent Integration**: Conversational batch question generation, dynamic drafting cards, anti-leakage guards, and full history persistence (`action_card_data`);
-  - **Automated Snapshot Engineering**: Built-in Playwright automated headless screenshot and Markdown generation engine (`scripts/snapshot_showcase.py`).
-- **v1.5 (Cross-Platform Geek Remodel · Apple Light-Titanium Design - Latest Delivered)**:
-  - **Apple Light-Titanium Glassmorphism**: High-transparency `#fbfbfd` titanium background with dual-temperature subtle diffuse micro-glow;
-  - **Core Engine Rebuild**: Transitioned from legacy H5 to `uni-app` (Vue 3.5 + TypeScript + Vite + Pinia) cross-platform native codebase;
-  - **Zero-Glue Native Layout**: Native inline rendering for single/multiple choice, dual-capsule boolean, fill-in-the-blank, and essay textareas, eliminating white screen glitches;
-  - **Physical Anti-Leakage Defense**: Completely blocks rendering of standard answers and question explanations in the DOM while under verification (`pending_verification`);
-  - **Serverless Production Delivery**: Front-end deployed on Cloudflare Pages (`https://tiku-toc-new.pages.dev`), back-end on Vercel Serverless, linked to TiDB Cloud distributed database.
+This project focuses on solving three major engineering pain points in online assessment systems:
+
+### 1. 🤖 AI-Native Engineering & Control Boundaries
+As the core architect of this project, I clearly defined the boundaries of AI capabilities. Instead of blindly pursuing low-level algorithm fine-tuning, I focused on **"Engineering the integration of AI with frontend workflows"**:
+- **Conversational Smart Question & Exam Generation**: Breaking away from traditional form inputs, I designed an LLM-based conversational UI. Through strict structural Prompt contracts, it automatically generates single/multiple choice, fill-in-the-blank, and even entire exams based on job roles or specific knowledge points, drastically reducing manual effort.
+- **AI Action Cards (Risk Control)**: To keep LLM outputs within strict, controllable business boundaries, I conceptualized the interactive "Action Card" mechanism. The AI does *not* write directly to the database. Instead, it renders a "mimic drafting card" containing the question details. Administrators must manually approve (adopt/discard) this card, ensuring deterministic, system-level risk control.
+- **AI Long-Term Memory & State Persistence**: For complex exam generation scenarios requiring multi-turn context, I bridged the AI session state with the B-end workflow. By persisting conversation history and action card data (`action_card_data`) deeply into TiDB, the smart assistant gains long-term memory and coherent context, allowing the AI to trace back previous modification intents at any time.
+
+### 2. 🚀 Frontend Cross-Platform Rebuild & SaaS Multi-Tenancy
+- **C-End Native De-abstraction**: In v1.5, I abandoned heavy, multi-layered black-box abstractions and performed a cross-platform native rebuild using `uni-app` (Vue 3.5 + Vite). All question types utilize a straightforward, flattened rendering strategy, completely eliminating white screen glitches and layout miscalculations on mobile devices.
+- **SaaS Logical Isolation**: With the combination of Vue3/Pinia and FastAPI, a true multi-tenant environment was realized. Whether for corporate compliance (e.g., Haoshi Group) or educational training (e.g., Xingya Education), perfect physical and logical data isolation is achieved on a single platform instance.
+- **Apple Light-Titanium Design Language**: The system fully adopts a highly transparent `#fbfbfd` titanium background with dual-temperature subtle diffuse micro-glow, balancing a geeky feel with premium aesthetics.
+
+### 3. 🛡️ Strict Security & Anti-Cheating Defenses
+- **DOM-Level Physical Anti-Leakage**: To combat "packet sniffing" and "inspect element" cheating, I implemented a dual-end interception mechanism. When an exam is in an unverified state (`pending_verification`), the server completely strips answer nodes and blocks the delivery of explanations. On the frontend, these elements do not exist in the DOM at a physical level.
+- **Robust Clock Synchronization & State Machine Locks**:
+  - Exam countdowns are strictly anchored to the server's start timestamp, rendering client-side local clock manipulation useless.
+  - Exams follow a strict one-way state machine: `draft → published → archived`. Once an exam is published and locked, all database modification actions are frozen, eliminating any possibility of "tampering with questions mid-exam".
 
 ---
 
 ## 📸 System Snapshots (Showcase)
 
 ### I. v1.5 C-End Examinee Mobile Client (Apple Light-Titanium)
-
 > For the comprehensive visual specification guide, see 👉 **[v1.5 C-End Showcase & Visual Spec Guide](./docs/v1.5_c_showcase.md)**
 
 | Twilight Login | Assessment Lobby (Home) | Immersive Exam Room |
@@ -77,7 +93,6 @@ This project strictly adheres to an **agile, progressive development** lifecycle
 ---
 
 ### II. v1.4 B-End SaaS Admin Console (Desktop PC)
-
 > For the comprehensive snapshot guide, see 👉 **[v1.4 Showcase & System Architecture](./docs/v1.4_showcase.md)**
 
 | Dashboard | Question Bank Assets |
@@ -94,18 +109,12 @@ This project strictly adheres to an **agile, progressive development** lifecycle
 
 ```
 tiku/
-├── backend/                  # FastAPI core (SaaS multi-tenancy, JWT, AI engine)
+├── backend/                  # FastAPI core (State machine, Multi-tenancy, AI Gateway)
 ├── tob/                      # B-end admin console (Vue 3.5 + Element Plus + Pinia)
-├── toc-new/                  # [v1.5 Latest] C-end uni-app + Vue 3.5 + TS cross-platform app
+├── toc-new/                  # [v1.5 Latest] C-end cross-platform native app (uni-app)
 ├── docs/                     # Public showcase & deployment guides
-│   ├── v1.5_c_showcase.md    # v1.5 C-end Apple Light-Titanium walkthrough
-│   ├── v1.4_showcase.md      # v1.4 B-end walkthrough report
-│   ├── deploy-free-cloud.md  # Zero-cost cloud deployment guide (TiDB + Vercel + Cloudflare)
-│   └── images/               # High-resolution screenshots for docs & README
-├── history/                  # Historical specification archives (contains v1.3, v1.4, improveUI specs)
-├── scripts/                  # Automation & headless screenshot engine
-│   ├── snapshot_v1.5_c.py    # v1.5 C-end Playwright screenshot generator
-│   └── snapshot_showcase.py  # v1.4 B-end automated capture script
+├── history/                  # Historical specification archives
+├── scripts/                  # Automated testing & Playwright snapshot engine
 ├── nginx.conf                # Unified reverse proxy
 └── docker-compose.yml        # Docker container orchestration
 ```
@@ -115,7 +124,6 @@ tiku/
 ## 🚀 Quick Start
 
 ### Docker Compose (Recommended for Local Full-Stack)
-
 ```bash
 # Start MySQL 8.0, FastAPI backend, and Nginx reverse proxy
 docker compose up -d
@@ -124,24 +132,57 @@ docker compose up -d
 docker exec tiku_nginx nginx -s reload
 ```
 
+### Local Split-Environment Development
+```bash
+# 1. Start Backend (FastAPI)
+cd backend && python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# 2. Start B-End Admin (Vue 3 + Vite)
+cd ../tob && pnpm install && pnpm dev
+
+# 3. Start C-End Examinee App (uni-app + Vite)
+cd ../toc-new && pnpm install && pnpm dev:h5
+```
+
 ---
 
-## 🤖 AI-Native Engineering Paradigm
+## 📝 Developer's Note
 
-This project serves as an **AI-Native Software Engineering (AI-Driven Development) benchmark**:
+As an engineer with a frontend development background, navigating the current challenging industry cycle, this project represents my deep dive into **AI-Driven Development**.
 
-1. **Strict Constitutional Guardrails**: Standardized through root [`agent.md`](./agent.md), ensuring zero context degradation, explicit multi-tenant isolation, and transparent changes.
-2. **Milestone Snapshots & Immutability**: Implementing frozen requirements -> architecture review -> snapshot archiving lifecycle to maintain strict auditability.
-3. **Automated Documentation**: Self-documenting architecture via Playwright headless screenshot engines (`scripts/snapshot_v1.5_c.py`).
+Throughout the entire R&D lifecycle, I not only independently managed the frontend cross-platform rebuild from H5 to uni-app, overcoming mobile rendering performance bottlenecks and complex multi-tenant state management (via Pinia), but I also served as the project's **"Architect and Orchestrator"**. I clearly delineated the engineering boundaries between business requirements and AI capabilities. By leveraging Large Language Models to bridge the language barriers of backend and database technologies, I successfully built the full-stack closed loop of the FastAPI core service and the TiDB distributed foundation from 0 to 1.
+
+This project reinforces my belief that a modern developer's core competitive moat is no longer confined to the syntax details of a single language. Instead, it is the **ability to holistically control complex systems, maintain a clear sense of business boundaries, and execute the translation of AI capabilities into tangible engineering productivity**. This has always been my development philosophy, driving my relentless hunger and continuous learning for new technologies.
+
+---
+
+## 📈 Milestones & Progressive Evolution
+
+This project strictly adheres to an **agile, progressive development** lifecycle, ensuring every iteration delivers verifiable software artifacts and frozen snapshots:
+
+```
+┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐
+│  v1.0 MVP │──>│ v1.1 Data │──>│v1.2 AI Grd│──>│v1.3 KB RAG│──>│v1.4 SaaS  │──>│v1.5 Titani│
+│Objective  │   │Lock & Safe│   │Fill/Essay │   │Source-text│   │Multi-tenan│   │Uni-app OS │
+└───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘
+  Archived(v1.0)  Archived(v1.1)  Archived(v1.2)  Archived(v1.3)  Archived(v1.4)  Delivered(1.5)
+```
+
+- **v1.0 (MVP Closed Loop)**: Completed objective questions, exam assembly, and instant scoring.
+- **v1.1 (Data Governance & Exam Lock)**: Introduced "published locking" and deletion reference checks.
+- **v1.2 (AI-Native Upgrade)**: Integrated LLM for essay pre-grading and tenant audit logs.
+- **v1.3 (KB RAG & State Machine)**: Integrated RAG for source highlighting; formalized the `draft → published → archived` state machine.
+- **v1.4 (SaaS Multi-Tenancy & Agent)**: Realized true multi-tenant logic isolation and conversational drafting cards.
+- **v1.5 (Cross-Platform Remodel)**: Apple Light-Titanium design language; rebuilt with `uni-app` to eliminate DOM abstractions; implemented physical anti-leakage defenses.
 
 ---
 
 ## 📚 Specifications Directory
-
-- **[`agent.md`](./agent.md)** — **Highest Priority!** AI Agent rules of engagement and code ethics.
+- **[`agent.md`](./agent.md)** — **Highest Priority!** Establishes the core engineering code of conduct.
 - **[`progress.md`](./progress.md)** — Project source of truth, roadmap, and operational guidelines.
 - **[`product.md`](./product.md)** — Current Product Requirements Document (PRD).
 - **[`tech-spec.md`](./tech-spec.md)** — Technical specification and architecture whitepaper.
 - **[`api-contract.md`](./api-contract.md)** — Dual-end API contract and data privacy specifications.
-- **[`docs/`](./docs/)** — Showcase and deployment documentation center.
-- **[`history/`](./history/)** — Historical archives and previous version draft specifications.
