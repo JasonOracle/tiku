@@ -21,7 +21,7 @@
 | :--- | :--- | :--- | :--- |
 | **📱 C 端移动端 (考生版)** | [https://tiku-toc-new.pages.dev](https://tiku-toc-new.pages.dev/#/) | `13900000001` / `123456` | Cloudflare 托管，uni-app 跨端原生重塑 |
 | **💻 B 端管理台 (机构版)** | [https://tiku-tob.pages.dev/dashboard](https://tiku-tob.pages.dev/dashboard) | `13800000012` / `123456` | 皓石集团企业管理员 (SaaS 租户隔离) |
-| **⚡ FastAPI 云端接口** | [https://tiku-api.vercel.app/docs](https://tiku-api.vercel.app/docs) | — | Vercel 托管，OpenAPI / Swagger 交互式文档 |
+| **⚡ FastAPI 云端接口** | [https://tiku-tob.pages.dev/docs.html](https://tiku-tob.pages.dev/docs.html) | — | Cloudflare 托管静态 Swagger，国内公网直连秒开（备用直连：[Vercel Docs](https://tiku-api.vercel.app/docs)） |
 
 ---
 

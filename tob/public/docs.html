@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智题库 (TiKu) 接口文档 - Swagger UI</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    body {
+      margin: 0;
+      background: #fafafa;
+    }
+    .top-banner {
+      background: #1890ff;
+      color: #fff;
+      padding: 10px 20px;
+      font-size: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    .top-banner a {
+      color: #fff;
+      text-decoration: underline;
+      margin-left: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-banner">
+    <span>💡 提示：本页面由 Cloudflare Pages 全球 CDN 加速直连托管，国内网络秒开。</span>
+    <div>
+      <a href="/dashboard">进入 B 端管理台</a>
+      <a href="https://tiku-toc-new.pages.dev" target="_blank">进入 C 端考场</a>
+    </div>
+  </div>
+  <div id="swagger-ui"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.min.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: './openapi.json',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        layout: "BaseLayout"
+      });
+    };
+  </script>
+</body>
+</html>

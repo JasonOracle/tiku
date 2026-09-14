@@ -21,7 +21,7 @@ Both the C-End and B-End of this system are fully deployed to the cloud (Cloudfl
 | :--- | :--- | :--- | :--- |
 | **📱 C-End Mobile (Examinee)** | [https://tiku-toc-new.pages.dev](https://tiku-toc-new.pages.dev/#/) | `13900000001` / `123456` | Cloudflare hosted, native uni-app cross-platform |
 | **💻 B-End Admin Console** | [https://tiku-tob.pages.dev/dashboard](https://tiku-tob.pages.dev/dashboard) | `13800000012` / `123456` | Haoshi Group Enterprise Admin (SaaS tenant) |
-| **⚡ FastAPI Cloud API** | [https://tiku-api.vercel.app/docs](https://tiku-api.vercel.app/docs) | — | Vercel hosted, OpenAPI / Swagger interactive schema |
+| **⚡ FastAPI Cloud API** | [https://tiku-tob.pages.dev/docs.html](https://tiku-tob.pages.dev/docs.html) | — | Cloudflare hosted static Swagger schema, accessible globally (Backup: [Vercel Docs](https://tiku-api.vercel.app/docs)) |
 
 ---
 
