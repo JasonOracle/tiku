@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "docs:gen": "python ../scripts/generate_static_docs.py",
+    "build": "pnpm run docs:gen && vue-tsc --noEmit && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
