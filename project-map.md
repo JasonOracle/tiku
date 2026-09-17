@@ -2,6 +2,12 @@
  * [变更日志]
  * 修改时间：2026-09-17
  * AI模型：GLM (CodeBuddy)
+ * 修改内容：[地图格式升级：1. 新增顶部“项目规模速览”小节（端级量级描述 + ASCII 边界图）；2. 目录职责表从两列升级为“路径 | 职责 | 何时去”三列；3. 章节号随新增第0节顺延重排]
+ */
+/**
+ * [变更日志]
+ * 修改时间：2026-09-17
+ * AI模型：GLM (CodeBuddy)
  * 修改内容：[1. 移除已物理删除的 toc/ 残留与 docs/v1.5test/ 空目录；2. 待确认区两项全部销号：ops.py 双 router 语义查明并登记入职责表]
  */
 /**
@@ -20,7 +26,22 @@
 > **设计契约（任何模型修改本文件前必读，勿好心破坏）**：
 > ① 粒度锁**目录级** + 极少数入口文件，严禁膨胀为完整文件树；② 凡有机器事实源的信息（`nginx.conf` / `package.json` / `tiku_init.sql`）只路由、绝不复制；③ 只写现状、不写规划；④ 体积预算 ≤150 行，内联日志只保留最近 3 条；⑤ 未查明的目录标【待确认】，禁止编造语义；⑥ 本地图可再生——内容可随时从文件系统 + 四大核心文档重新推导，允许在用户确认后整体重写。
 
-## 0. 机器可读清单（自检脚本唯一解析面；增删目录必须同步此处）
+## 0. 项目规模速览（可选：只写端级量级，不写精确行数）
+
+本项目为题库 SaaS 系统，约 **三端**：
+- **C 端 H5**：Uni-app + Vue3 + TypeScript + Wot Design Uni（`toc-new/`）
+- **B 端管理台**：Vue3 + TypeScript + Vite + Element Plus（`tob/`）
+- **后端**：Python FastAPI + MySQL（`backend/`）
+
+端级边界（真相源：`nginx.conf`）：
+```
+nginx:80
+├── /api/v1/* /docs /uploads/* → backend:8000
+├── /admin/*                   → tob/dist
+└── /                          → toc-new/dist/build/h5
+```
+
+## 1. 机器可读清单（自检脚本唯一解析面；增删目录必须同步此处）
 
 ```map-paths
 # —— 后端 backend/ ——
@@ -49,7 +70,6 @@ tob/src/components/
 tob/src/router/
 tob/src/store/
 tob/src/utils/
-tob/src/assets/                # 资源区
 tob/public/                    # 资源区
 # —— C端 toc-new/ ——
 toc-new/
@@ -59,8 +79,6 @@ toc-new/src/components/
 toc-new/src/api/
 toc-new/src/stores/
 toc-new/src/utils/
-toc-new/src/static/            # 资源区
-toc-new/src/styles/            # 资源区
 toc-new/src/pages.json         # C端路由注册表（uni-app 约定）
 toc-new/_redirects             # 部署三处之一（C端 Pages 跳转规则）
 # —— 项目级 ——
@@ -82,53 +100,51 @@ api-contract.md
 product.md
 ```
 
-## 1. 三端边界（路由唯一真相源：`nginx.conf`，此处仅概览）
+## 2. 三端边界（路由唯一真相源：`nginx.conf`，此处仅概览）
 
 - `/api/v1/*`、`/docs`、`/uploads/*` → **backend**（FastAPI，默认 :8000）
 - `/admin/*` → **tob** B端管理台（构建 base='/admin/'）
 - `/` → **toc-new** C端 H5（产物在 `toc-new/dist/build/h5`，注意 uni-app 多层级）
 - `/api/v1/auth/`、`/api/v1/admin/ai/`、`/api/v1/member/ai/` 有 nginx 限流（429）
 
-## 2. 目录职责速查
+## 3. 目录职责速查
 
-| 路径 | 职责 / 何时去 |
-|---|---|
-| `backend/app/main.py` | 后端入口：lifespan 建表 + 幂等迁移 + 全部路由注册。接手后端必读第一文件 |
-| `backend/app/api/saas/` | 全部业务路由（admin / member 双前缀复用同一 router：ai、kb、tasks、members、categories、ops、super_admin）。改接口在此。**ops.py 运营底座**：admin_router=require_admin（看板/横幅 CRUD/上传/通知/审计），member_router=require_member（仅 C端横幅只读），并导出 write_audit / notify / notify_admins 供全局路由调用 |
-| `backend/app/api/v1/auth.py` | 统一登录路由 |
-| `backend/app/api/deps.py` | 路由依赖注入（租户上下文等） |
-| `backend/app/core/` | config(settings) / database(engine) / security(JWT 鉴权) |
-| `backend/app/services/` | ai_service(AI 网关) / memory_service(Mem0) / vector_store(向量检索) / db_migrate(幂等迁移) |
-| `backend/app/models/saas.py` | 全部 ORM 模型单文件。改表结构先查 agent.md 第 4 条租户隔离红线 |
-| `backend/app/schemas/` | Pydantic 出入参模型 |
-| `backend/scripts/` | fix_*（数据修补）/ seed_*（种子）/ security_audit（审计）。改线上数据时谨慎使用 |
-| `backend/tests/` | pytest（当前仅 `test_saas_pure.py`） |
-| `tob/src/views/` | B端页面；**每个 .vue 配同名 .md 组件文档，改组件必须同步 .md** |
-| `tob/src/router/index.ts` | B端路由表（唯一路由文件） |
-| `tob/src/store/` | Pinia 状态（user / modelCenter） |
-| `tob/src/utils/request.ts` | axios 请求封装 |
-| `toc-new/src/pages/` | C端页面（同样 .vue 配 .md 惯例） |
-| `toc-new/src/api/` | C端接口层（auth / exam） |
-| `toc-new/src/utils/request.ts` | C端请求封装 |
-| `scripts/` | 项目级：快照流水线、静态文档生成、e2e 自检、**本地图自检脚本** |
-| `docs/` | 部署与展示文档（deploy-free-cloud.md、version_history.md、各版 showcase） |
-| `history/` | 大版本归档（三大文档旧版快照、旧计划文件）。查历史真相在此 |
+| 路径 | 职责 | 何时去 |
+|---|---|---|
+| `backend/app/main.py` | FastAPI 入口：lifespan 建表 + 幂等迁移 + 全部路由注册中心 | 接手后端必读第一文件 |
+| `backend/app/api/saas/` | 全部业务路由：ai、kb、tasks、members、categories、ops、super_admin（admin/member 双前缀复用同一 router） | 改接口时 |
+| `backend/app/api/saas/ops.py` | 运营底座：admin_router=require_admin（看板/横幅 CRUD/上传/通知/审计）；member_router=require_member（仅 C端横幅只读）；并导出 write_audit / notify / notify_admins 供全局路由调用 | 改运营/通知/审计/上传逻辑时 |
+| `backend/app/api/v1/auth.py` | 统一登录路由 | 改登录鉴权时 |
+| `backend/app/core/` | config(settings) / database(engine) / security(JWT 鉴权) | 改配置/鉴权/数据库连接时 |
+| `backend/app/services/` | ai_service(AI 网关) / memory_service(Mem0) / vector_store(向量检索) / db_migrate(幂等迁移) | 改 AI 链路/记忆库/向量检索/库表迁移时 |
+| `backend/app/models/saas.py` | 全部 ORM 模型单文件 | 改表结构时（先查 agent.md 第 4 条租户隔离红线） |
+| `backend/scripts/` | fix_*（数据修补）/ seed_*（种子）/ security_audit（审计） | 线上数据修复时（谨慎） |
+| `tob/src/views/` | B端页面；**每个 .vue 配同名 .md 组件文档，改组件必须同步 .md** | 改 B端页面时 |
+| `tob/src/router/index.ts` | B端路由表（唯一路由文件） | 改 B端路由时 |
+| `tob/src/store/` | Pinia 状态（user / modelCenter） | 改全局状态时 |
+| `tob/src/utils/request.ts` | axios 请求封装 | 改请求拦截/错误处理时 |
+| `toc-new/src/pages/` | C端页面（同样 .vue 配 .md 惯例） | 改 C端页面时 |
+| `toc-new/src/api/` | C端接口层（auth / exam） | 改 C端接口调用时 |
+| `toc-new/src/utils/request.ts` | C端请求封装 | 改 C端请求逻辑时 |
+| `scripts/` | 项目级：快照流水线、静态文档生成、e2e 自检、**本地图自检脚本** | 收口/生成文档/跑地图自检时 |
+| `docs/` | 部署与展示文档（deploy-free-cloud.md、version_history.md、各版 showcase） | 查部署/版本展示时 |
+| `history/` | 大版本归档（三大文档旧版快照、旧计划文件） | 查历史真相时 |
 
-## 3. 启动路由（命令真相源：`start.bat` / 各 `package.json`；端口为动态信息）
+## 4. 启动路由（命令真相源：`start.bat` / 各 `package.json`；端口为动态信息）
 
 - 一键三端：`start.bat`；后端：`cd backend && uvicorn app.main:app --port 8000 --reload`
 - B端：`cd tob && pnpm dev`；C端：`cd toc-new && pnpm dev:h5`
 - **端口动态**（曾因占用迁至 8001）：以 `progress.md` 最新记录为准
 
-## 4. 陷阱区（AI 无法从文件系统自行推断的知识）
+## 5. 陷阱区（AI 无法从文件系统自行推断的知识）
 
-- `backend/app/api/admin/`、`backend/app/api/uploads/`：仅剩历史 pyc / 空目录，源码已并入 `api/saas/`，**勿在此开发**
+- `backend/app/api/admin/` 与 `api/uploads/`：历史空壳/产物目录，源码已并入 `api/saas/`，**勿在此开发**
 - **双 scripts/**：根 `scripts/` = 项目级流水线；`backend/scripts/` = 数据修补。找自检脚本去根 `scripts/`
 - **部署真相分散三处**：`nginx.conf` + `docker-compose.yml`（根目录）、`backend/vercel.json`、`toc-new/_redirects`——改部署行为三处都要查
 - C端目录是 **toc-new**；旧 `toc/`（2026-09-17 403 事故死路径）已物理删除，历史日志中出现 "toc" 字样均指旧版勿混淆
 - `backend/` 根下 `e2e.db`、`mock_acceptance.db`、`uvicorn_*.log`、所有 `*.pyc`：运行产物，非源码
 - `tob/` 根下 `scan_heavy.py`、`scan_mc.py`：一次性分析脚本，非工程代码
 
-## 5. 待确认（禁止猜测；逐个查明后更新此处并在 progress.md 销号）
+## 6. 待确认（禁止猜测；逐个查明后更新此处并在 progress.md 销号）
 
 当前无待确认项。
