@@ -40,3 +40,9 @@ __pycache__/
 backend/app/data/mem0/
 mem0_backup.zip
 *.zip
+.agents/
+.joycode/
+.playwright-cli/
+.pytest_cache/
+.workbuddy/
+.zcode/
